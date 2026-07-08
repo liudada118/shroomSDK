@@ -1,0 +1,35 @@
+{
+  "name": "shroom-backend-sdk",
+  "version": "0.2.0",
+  "description": "Standalone SDK for Shroom backend HTTP/WebSocket integration and local serial sensor experiments.",
+  "main": "index.js",
+  "type": "commonjs",
+  "files": [
+    "index.js",
+    "src",
+    "examples",
+    "docs",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "node -e \"require('./index'); console.log('SDK loaded')\"",
+    "sdk:demo": "node examples/backend-sdk-demo.js",
+    "sdk:serial-demo": "node examples/serial-chain-demo.js",
+    "demo:backend": "node examples/backend-sdk-demo.js",
+    "demo:serial": "node examples/serial-chain-demo.js",
+    "docs:dev": "vitepress dev docs --host 127.0.0.1",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@serialport/parser-delimiter": "^13.0.0",
+    "better-sqlite3": "^11.10.0",
+    "csv-writer": "^1.6.0",
+    "serialport": "^12.0.0",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}
