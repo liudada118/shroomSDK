@@ -96,3 +96,9 @@ Build static docs:
 ```powershell
 npm run docs:build
 ```
+
+Preview the generated static site:
+
+```powershell
+npm run docs:preview
+```

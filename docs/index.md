@@ -1,45 +1,43 @@
----
-layout: home
+# Shroom SDK 总览
 
-hero:
-  name: Shroom SDK
-  text: 独立传感器 SDK 文档
-  tagline: 用于产品实验室、最小 demo、后端 HTTP/WS 集成和本地串口读取实验。
-  actions:
-    - theme: brand
-      text: 快速开始
-      link: /SDK_GUIDE
-    - theme: alt
-      text: API Reference
-      link: /API_REFERENCE
+Shroom SDK 是一个面向压力传感器项目的 Node.js 后端 SDK。它可以连接正在运行的主项目后端，也可以在实验室环境中直接读取本地串口，用于验证采集、解析、存储、回放和导出链路。
 
-features:
-  - title: 连接主项目后端
-    details: 通过 BackendSdkClient 读取 /api/sdk/contract、打开串口、订阅实时数据、启动采集和读取 Display Systems metadata。
-  - title: 本地直连串口
-    details: 通过 ShroomSensorSDK 直接读取物理串口，走 SerialPort、DelimiterParser、ProtocolRegistry、ZeroCalibrator 和 CaptureStore。
-  - title: 产品实验室友好
-    details: 实验项目可以 npm install file:E:\shroomSDK，不需要 import E:\shroom1 内部模块。
-  - title: 可运行 Demo
-    details: 提供 sdk:demo 和 sdk:serial-demo，分别验证后端链路和本地串口链路。
----
+## 两种使用方式
 
-## 功能入口
+| 方式 | 入口 | 适合场景 |
+| --- | --- | --- |
+| 连接主项目后端 | `BackendSdkClient` | 主项目已经运行，需要通过 HTTP/WebSocket 控制串口、订阅实时帧、启动采集 |
+| 本地直接读串口 | `ShroomSensorSDK` | 不启动主项目，只验证硬件、协议、线序、采集和导出 |
 
-| 想验证什么 | 入口 |
-| :--- | :--- |
-| 连接后端、打开串口、订阅实时数据 | [后端连接链路](./BACKEND_CLIENT.md) |
-| SDK 自己直接读取串口 | [本地串口链路](./SERIAL_CHAIN.md) |
-| 所有 API 方法 | [API Reference](./API_REFERENCE.md) |
-| 安装和实验室目录建议 | [使用文档](./SDK_GUIDE.md) |
+## 当前能力
 
-## 常用命令
+- 串口枚举、打开、关闭和多通道绑定。
+- Delimiter 协议分帧和 profile 化解析。
+- 内置常见传感器 profile：手套、1024 点矩阵、小床垫、4096 点床垫等。
+- 自定义 profile 和自定义线序函数。
+- 清零基线、实时 frame 统计、SQLite/内存采集存储。
+- 历史回放 timeline 和 CSV 导出。
+- 连接主项目 HTTP/WebSocket 的 `BackendSdkClient`。
+- 后端命令兼容路由、授权、路径、报告服务适配。
 
-```powershell
-cd E:\shroomSDK
-npm run docs:dev
-npm run sdk:demo
-npm run sdk:serial-demo -- --mock
+## 推荐阅读顺序
+
+1. [快速开始](/getting-started)
+2. [核心概念](/concepts)
+3. [连接主项目后端](/guides/backend-client)
+4. [本地串口链路](/guides/local-serial)
+5. [API Reference](/api/backend-sdk-client)
+
+## 包入口
+
+```js
+const {
+  BackendSdkClient,
+  ShroomSensorSDK,
+  MemoryCaptureStore,
+  CaptureStore,
+  CsvExporter,
+  ReplayService,
+  LineOrderRegistry,
+} = require('shroom-backend-sdk');
 ```
-
-文档开发服务默认可在命令行输出的本地地址访问。
