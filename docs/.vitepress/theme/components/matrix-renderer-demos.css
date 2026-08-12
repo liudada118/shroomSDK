@@ -1,0 +1,187 @@
+.matrix-renderer-demo {
+  color: #e7edf3;
+  background: #071018;
+}
+
+.matrix-params-editor {
+  padding: 12px;
+  border-bottom: 1px solid #293743;
+  background: #0b141b;
+}
+
+.matrix-params-editor__header,
+.matrix-params-editor__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.matrix-params-editor__header {
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: #f4f7f9;
+  font-size: 13px;
+}
+
+.matrix-params-editor__header span {
+  color: #8fa2b1;
+  font-size: 12px;
+}
+
+.matrix-params-editor textarea {
+  display: block;
+  width: 100%;
+  min-height: 280px;
+  max-height: 520px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid #364957;
+  border-radius: 5px;
+  outline: none;
+  color: #d8e3ea;
+  background: #050a0e;
+  font: 12px/1.5 Consolas, "Courier New", monospace;
+  tab-size: 2;
+}
+
+.matrix-params-editor textarea:focus {
+  border-color: #58a6ff;
+}
+
+.matrix-params-editor__actions {
+  min-height: 42px;
+  padding-top: 8px;
+}
+
+.matrix-params-apply {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid #2f81f7;
+  border-radius: 5px;
+  color: #fff;
+  background: #1f6feb;
+  cursor: pointer;
+}
+
+.matrix-params-editor__error {
+  min-width: 0;
+  color: #ffb4aa;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.matrix-renderer-toolbar {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid #293743;
+  background: #111b23;
+}
+
+.matrix-renderer-field {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+  color: #c8d2da;
+  font-size: 13px;
+}
+
+.matrix-renderer-field select {
+  min-width: 116px;
+  height: 32px;
+  padding: 0 30px 0 10px;
+  border: 1px solid #435564;
+  border-radius: 5px;
+  color: #f4f7f9;
+  background: #1a2731;
+}
+
+.matrix-renderer-field--range input {
+  width: 220px;
+}
+
+.matrix-renderer-field output {
+  min-width: 38px;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.matrix-renderer-icon-button {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #435564;
+  border-radius: 5px;
+  color: #f4f7f9;
+  background: #1a2731;
+  cursor: pointer;
+}
+
+.matrix-renderer-icon-button:hover {
+  border-color: #58a6ff;
+  color: #58a6ff;
+}
+
+.matrix-renderer-stage {
+  position: relative;
+  width: 100%;
+  height: 480px;
+  min-height: 320px;
+  overflow: hidden;
+  isolation: isolate;
+  background: #071018;
+}
+
+.matrix-renderer-stage > div,
+.matrix-renderer-stage > div > div,
+.matrix-renderer-stage .canvasNum {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 320px;
+}
+
+.matrix-renderer-stage canvas {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.matrix-renderer-stage .maxNum {
+  position: absolute !important;
+  z-index: 2;
+}
+
+.matrix-renderer-fallback {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: #ffb4aa;
+  background: #171c20;
+}
+
+@media (max-width: 640px) {
+  .matrix-params-editor textarea {
+    min-height: 220px;
+  }
+
+  .matrix-params-editor__header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .matrix-renderer-stage {
+    height: 360px;
+  }
+
+  .matrix-renderer-field--range input {
+    width: 150px;
+  }
+}

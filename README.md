@@ -7,7 +7,7 @@ This folder is intended to be installed by lab/demo projects without importing `
 ## Install In A Lab Project
 
 ```powershell
-npm install file:E:\shroomSDK
+pnpm add file:E:\ShroomSDK
 ```
 
 Use it:
@@ -24,8 +24,8 @@ const {
 Use this when the main Shroom app/backend is running.
 
 ```powershell
-cd E:\shroomSDK
-npm run sdk:demo
+cd E:\ShroomSDK
+pnpm sdk:demo
 ```
 
 The default backend demo:
@@ -39,10 +39,10 @@ The default backend demo:
 Examples:
 
 ```powershell
-npm run sdk:demo -- --channels sit,back --duration 15000
-npm run sdk:demo -- --sensor hand0205
-npm run sdk:demo -- --open sit=COM3
-npm run sdk:demo -- --start-collection sdk_demo
+pnpm sdk:demo -- --channels sit,back --duration 15000
+pnpm sdk:demo -- --sensor hand0205
+pnpm sdk:demo -- --open sit=COM3
+pnpm sdk:demo -- --start-collection sdk_demo
 ```
 
 ## Local Serial Chain Demo
@@ -50,9 +50,9 @@ npm run sdk:demo -- --start-collection sdk_demo
 Use this when the SDK itself should read a physical serial port.
 
 ```powershell
-cd E:\shroomSDK
-npm run sdk:serial-demo -- --list-ports
-npm run sdk:serial-demo -- --sensor hand0205 --channel sit --port COM3
+cd E:\ShroomSDK
+pnpm sdk:serial-demo -- --list-ports
+pnpm sdk:serial-demo -- --sensor hand0205 --channel sit --port COM3
 ```
 
 The chain is:
@@ -64,7 +64,7 @@ SerialPort -> DelimiterParser -> ProtocolRegistry.parse -> ZeroCalibrator -> fra
 No hardware smoke test:
 
 ```powershell
-npm run sdk:serial-demo -- --mock
+pnpm sdk:serial-demo -- --mock
 ```
 
 ## Main Exports
@@ -75,6 +75,23 @@ npm run sdk:serial-demo -- --mock
 - `CaptureStore`: SQLite-backed capture store.
 - `ProtocolRegistry`: sensor profile and parser registry.
 - `ZeroCalibrator`: baseline capture and zero subtraction helper.
+
+## Frontend UI Components
+
+React UI source components are exported from `UI/qxui`:
+
+```jsx
+import { DynamicReportCard, ComparePlay } from 'shroom-backend-sdk/UI/qxui';
+import { ChartPanel, MetricValue } from 'shroom-backend-sdk/UI/shroomui';
+import { TerrainMap } from 'shroom-backend-sdk/UI/render';
+```
+
+Install UI peer dependencies in the frontend project when using these components:
+
+```powershell
+pnpm add react react-dom antd @ant-design/icons mobx mobx-react react-i18next styled-components sass
+pnpm add three @react-three/fiber @react-three/drei
+```
 
 ## Version
 
@@ -87,12 +104,12 @@ See `CHANGELOG.md` for update history.
 Run the local documentation site:
 
 ```powershell
-cd E:\shroomSDK
-npm run docs:dev
+cd E:\ShroomSDK
+pnpm docs:dev
 ```
 
 Build static docs:
 
 ```powershell
-npm run docs:build
+pnpm docs:build
 ```

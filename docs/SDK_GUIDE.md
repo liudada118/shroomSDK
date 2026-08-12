@@ -1,13 +1,13 @@
 # Shroom SDK 使用文档
 
-这份文档说明 `E:\shroomSDK` 这个独立 SDK 怎么在产品实验室、最小 demo 或第三方项目里使用。
+这份文档说明 `E:\ShroomSDK` 这个独立 SDK 怎么在产品实验室、最小 demo 或第三方项目里使用。
 
 ## 1. 安装
 
 在你的实验项目里执行：
 
 ```powershell
-npm install file:E:\shroomSDK
+pnpm add file:E:\ShroomSDK
 ```
 
 使用：
@@ -18,6 +18,12 @@ const {
   ShroomSensorSDK,
   MemoryCaptureStore,
 } = require('shroom-backend-sdk');
+```
+
+前端 UI 组件在 React 项目中使用：
+
+```jsx
+import { DynamicReportCard } from 'shroom-backend-sdk/UI/qxui';
 ```
 
 ## 2. 两种使用方式
@@ -70,38 +76,67 @@ SerialPort -> DelimiterParser -> ProtocolRegistry.parse -> ZeroCalibrator -> fra
 ### 后端连接 demo
 
 ```powershell
-cd E:\shroomSDK
-npm run sdk:demo
+cd E:\ShroomSDK
+pnpm sdk:demo
 ```
 
 可选：
 
 ```powershell
-npm run sdk:demo -- --channels sit,back --duration 15000
-npm run sdk:demo -- --sensor hand0205
-npm run sdk:demo -- --open sit=COM3
-npm run sdk:demo -- --start-collection sdk_demo
+pnpm sdk:demo -- --channels sit,back --duration 15000
+pnpm sdk:demo -- --sensor hand0205
+pnpm sdk:demo -- --open sit=COM3
+pnpm sdk:demo -- --start-collection sdk_demo
 ```
 
 ### 本地串口链路 demo
 
 ```powershell
-cd E:\shroomSDK
-npm run sdk:serial-demo -- --list-ports
-npm run sdk:serial-demo -- --sensor hand0205 --channel sit --port COM3
+cd E:\ShroomSDK
+pnpm sdk:serial-demo -- --list-ports
+pnpm sdk:serial-demo -- --sensor hand0205 --channel sit --port COM3
 ```
 
 没有硬件时先跑：
 
 ```powershell
-npm run sdk:serial-demo -- --mock
+pnpm sdk:serial-demo -- --mock
 ```
+
+### 前端 UI 组件
+
+```powershell
+pnpm add file:E:\ShroomSDK
+pnpm add react react-dom antd @ant-design/icons mobx mobx-react react-i18next styled-components sass
+pnpm add three @react-three/fiber @react-three/drei
+```
+
+```jsx
+import { DynamicReportCard } from 'shroom-backend-sdk/UI/qxui';
+import { ChartPanel, MetricValue } from 'shroom-backend-sdk/UI/shroomui';
+import { TerrainMap } from 'shroom-backend-sdk/UI/render';
+```
+
+更多组件和 props 见 [UI Components](./UI_COMPONENTS.md)。
+
+#### 矩阵渲染器
+
+内置矩阵渲染器可以通过注册表按需发现，也可以直接深路径导入组件：
+
+```jsx
+import { MatrixRenderers } from 'shroom-backend-sdk/UI'
+import NumMatrixRenderer from 'shroom-backend-sdk/UI/frontend/renderers/numMatrix/react/NumMatrixRenderer.jsx'
+
+MatrixRenderers.registerBuiltinRenderers()
+```
+
+渲染器只接收 normalized matrix。串口协议解析、线序转换和清零必须先在 `SerialManager` 或数据处理层完成；实时显示与回放应把相同结构传给渲染器。
 
 ## 4. 推荐实验室目录结构
 
 ```text
 E:\shroom1       主项目
-E:\shroomSDK     独立 SDK
+E:\ShroomSDK     独立 SDK
 E:\shroomLab     产品实验室项目
 ```
 
@@ -119,8 +154,8 @@ E:\shroomLab     产品实验室项目
 每次更新至少做：
 
 ```powershell
-cd E:\shroomSDK
-npm test
-npm run sdk:serial-demo -- --mock
-npm pack --dry-run
+cd E:\ShroomSDK
+pnpm test
+pnpm sdk:serial-demo -- --mock
+pnpm pack --dry-run
 ```

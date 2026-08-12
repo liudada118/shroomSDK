@@ -1,0 +1,68 @@
+.ui-setting-control {
+    display: flex;
+    align-items: baseline;
+    margin-bottom: 2.8rem;
+    color: #e6ebf0;
+    font-size: 1rem;
+
+    &--with-switch {
+        flex-wrap: wrap;
+    }
+
+    &__label {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        min-width: 5.8rem;
+        padding-right: 5px;
+
+        em {
+            color: #9aa8b7;
+            font-size: 0.72rem;
+            font-style: normal;
+            white-space: nowrap;
+        }
+    }
+
+    &__slider {
+        flex: 1;
+        min-width: 0;
+    }
+
+    &__input.ant-input-number {
+        width: 4.2rem;
+        margin: 0 16px;
+        border: 1px solid #4e565f;
+        background-color: #000;
+        color: #e6ebf0;
+
+        .ant-input-number-input {
+            color: #e6ebf0;
+            background-color: #141414;
+        }
+    }
+
+    &__switch {
+        display: flex;
+        flex-basis: 100%;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 0.55rem;
+        margin-left: 5.8rem;
+        color: #aeb8c4;
+        font-size: 0.75rem;
+    }
+
+    .ant-slider-handle::after {
+        background-color: #000 !important;
+        box-shadow: 0 0 0 2px #6c7784 !important;
+    }
+
+    .ant-slider-rail {
+        background: rgba(255, 255, 255, 0.08) !important;
+    }
+
+    .ant-slider-track {
+        background-color: #6c7784 !important;
+    }
+}

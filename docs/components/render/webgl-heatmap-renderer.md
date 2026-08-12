@@ -1,0 +1,66 @@
+---
+aside: false
+---
+
+# WebglHeatmapRenderer
+
+使用 WebGL 生成高密度斑点热力图，再合成到 Canvas，适合 32×32、64×64 等连续压力场的实时展示。
+
+## 实时示例
+
+示例默认输入 32×32 的 `[1, 2, ..., 1024]`，可直接编辑 `params` JSON；色阶上限滑块直接调用组件的 `sitValue` 命令。
+
+<UiComponentDemo name="WebglHeatmapRenderer" />
+
+## 最小用法
+
+```jsx
+import { useEffect, useRef } from 'react'
+import WebglHeatmapRenderer from 'shroom-backend-sdk/UI/frontend/renderers/webglHeatmap/react/WebglHeatmapRenderer.jsx'
+
+export function PressureHeatmap({ matrix }) {
+  const rendererRef = useRef(null)
+
+  useEffect(() => {
+    rendererRef.current?.sitData({ wsPointData: matrix }, false)
+  }, [matrix])
+
+  return (
+    <WebglHeatmapRenderer
+      ref={rendererRef}
+      params={{ dataWidth: 32, dataHeight: 32, minFrameLength: 1024, displaySize: '480px' }}
+    />
+  )
+}
+```
+
+## 输入数据
+
+- `dataWidth × dataHeight` 决定矩阵长度；32×32 对应 1024 项，按行展开。
+- `minFrameLength` 会拒绝长度不足的帧，建议与完整矩阵长度一致。
+- 输入应是协议解析、线序转换和清零后的 normalized matrix；实时和回放使用同一数组结构。
+
+## 关键参数
+
+| 参数 | 类型 | 默认值 | 作用 |
+| :--- | :--- | :--- | :--- |
+| `dataWidth` / `dataHeight` | `number` | `64` | 输入矩阵列数和行数 |
+| `canvasWidth` / `canvasHeight` | `number` | `1024` | 内部绘制分辨率 |
+| `radius` | `number` | `24` | 热点半径 |
+| `max` | `number` | 预设值 | 色阶上限 |
+| `edgeClear` | `{ keepFrom, keepTo } \| null` | 预设值 | 边缘清零窗口 |
+| `mirrorX` | `boolean` | `true` | 是否水平镜像每一行 |
+| `displaySize` | `string` | `'80vh'` | 页面显示尺寸 |
+
+## 公开命令
+
+| ref 方法 | 参数 | 作用 |
+| :--- | :--- | :--- |
+| `sitData` | `{ wsPointData, local? }` | 提交一帧矩阵 |
+| `sitValue` | `{ valuej?, valuef? }` | 更新最大值和过滤阈值 |
+| `changeColor` | `{ max?, filter?, size? }` | 更新色阶、过滤和半径 |
+| `bthClickHandle` | `number[]` | 同步绘制并返回 Canvas，供导出使用 |
+
+## 依赖
+
+需要 React 和 React DOM，浏览器必须支持 WebGL 与 Canvas 2D。该组件不依赖 Three.js 场景。

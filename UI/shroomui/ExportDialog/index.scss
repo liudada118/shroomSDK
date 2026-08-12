@@ -1,0 +1,145 @@
+.ui-export-dialog {
+    &__hint {
+        margin-bottom: 12px;
+        color: #666;
+        font-size: 0.85rem;
+    }
+
+    &__path-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .ant-input {
+            min-width: 0;
+            flex: 1;
+        }
+    }
+
+    &__section {
+        margin-top: 16px;
+    }
+
+    &__section-title {
+        margin-bottom: 8px;
+        font-weight: 600;
+
+        span {
+            margin-left: 8px;
+            color: #999;
+            font-weight: 400;
+        }
+    }
+
+    &__fields-header,
+    &__field-actions {
+        display: flex;
+        align-items: center;
+    }
+
+    &__fields-header {
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    &__field-actions {
+        gap: 8px;
+    }
+
+    &__fields {
+        min-height: 120px;
+        max-height: 220px;
+        overflow: auto;
+        padding: 8px 10px;
+        border: 1px solid #d9d9d9;
+        border-radius: 6px;
+
+        .ant-checkbox-group {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px 12px;
+            width: 100%;
+        }
+
+        .ant-checkbox-wrapper,
+        .ant-checkbox-wrapper span:last-child {
+            min-width: 0;
+        }
+
+        .ant-checkbox-wrapper span:last-child span {
+            display: inline-block;
+            max-width: 170px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+    }
+
+    &__muted,
+    &__footer-note {
+        color: #999;
+    }
+
+    &__footer-note {
+        margin-top: 12px;
+        font-size: 0.8rem;
+    }
+}
+
+.ui-export-progress {
+    padding: 16px 0;
+    text-align: center;
+
+    &__hint {
+        margin-top: 12px;
+        color: #666;
+        font-size: 0.85rem;
+    }
+
+    &__files {
+        margin-top: 16px;
+        text-align: left;
+    }
+
+    &__files-title {
+        margin-bottom: 8px;
+        color: #333;
+        font-size: 0.85rem;
+        font-weight: 700;
+    }
+
+    &__file {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+        padding: 6px 8px;
+        border: 1px solid #b7eb8f;
+        border-radius: 4px;
+        background-color: #f6ffed;
+
+        > span {
+            min-width: 0;
+            flex: 1;
+            overflow: hidden;
+            color: #333;
+            font-size: 0.8rem;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        button {
+            flex: 0 0 auto;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: #1890ff;
+            cursor: pointer;
+            font: inherit;
+            font-size: 0.8rem;
+            text-decoration: underline;
+            white-space: nowrap;
+        }
+    }
+}

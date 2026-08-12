@@ -1,0 +1,40 @@
+{
+  "name": "@shroom/frontend",
+  "version": "0.2.0",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./core": "./core/index.js",
+    "./core/*": "./core/*",
+    "./core/numMatrix": "./renderers/numMatrix/core/index.js",
+    "./core/numMatrix/*": "./renderers/numMatrix/core/*",
+    "./core/pointGrid": "./renderers/pointGrid/core/index.js",
+    "./core/pointGrid/*": "./renderers/pointGrid/core/*",
+    "./core/handPoints": "./renderers/handPoints/core/index.js",
+    "./core/handPoints/*": "./renderers/handPoints/core/*",
+    "./core/webglHeatmap": "./renderers/webglHeatmap/core/index.js",
+    "./core/webglHeatmap/*": "./renderers/webglHeatmap/core/*",
+    "./core/blobHeatmap": "./renderers/blobHeatmap/core/index.js",
+    "./core/blobHeatmap/*": "./renderers/blobHeatmap/core/*",
+    "./renderers": "./renderers/index.js",
+    "./renderers/*": "./renderers/*",
+    "./renderers/numMatrix/core": "./renderers/numMatrix/core/index.js",
+    "./renderers/pointGrid/core": "./renderers/pointGrid/core/index.js",
+    "./renderers/handPoints/core": "./renderers/handPoints/core/index.js",
+    "./renderers/webglHeatmap/core": "./renderers/webglHeatmap/core/index.js",
+    "./renderers/blobHeatmap/core": "./renderers/blobHeatmap/core/index.js",
+    "./react/numMatrix/*": "./renderers/numMatrix/react/*",
+    "./react/pointGrid/*": "./renderers/pointGrid/react/*",
+    "./react/handPoints/*": "./renderers/handPoints/react/*",
+    "./react/webglHeatmap/*": "./renderers/webglHeatmap/react/*",
+    "./react/blobHeatmap/*": "./renderers/blobHeatmap/react/*",
+    "./react/three/*": "./renderers/shared/three/*",
+    "./react/webgl/*": "./renderers/shared/webgl/*"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "three": ">=0.152.0"
+  }
+}

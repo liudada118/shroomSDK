@@ -1,0 +1,57 @@
+.drawerContent {
+    position: fixed;
+    top: calc(4.5rem);
+    height: calc(100vh - 4.3rem - 4px);
+    width: 18%;
+    right: 0;
+    background: #141414;
+    border: 1px solid #292D32;
+    border-right: 0px;
+    transition: all 0.5s ease-in-out;
+    padding: 1rem 1.2rem;
+    box-sizing: border-box;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+
+    .iconfont {
+        font-size: 0.875rem;
+    }
+
+    .drawerTitle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+        padding-bottom: 0.5rem;
+
+        .titleInfo {
+            color: #E6EBF0;
+            font-size: 1.125rem;
+        }
+    }
+
+    .drawerInside {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding-top: 0.5rem;
+        min-height: 0;
+    }
+
+    .drawerInside::-webkit-scrollbar {
+        display: none;
+        /* Chrome, Safari, Opera */
+    }
+
+    .asideClose {
+        background-color: #292D32;
+        color: #0072EF;
+        position: absolute;
+        right: 100%;
+        top: 50%;
+        transform: translate(0, -50%);
+    }
+}

@@ -1,0 +1,40 @@
+.iconContent {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 5.2rem;
+    border-radius: 8px;
+    box-sizing: border-box;
+    outline: none;
+
+
+    .iconInfo {
+        text-align: center;
+        margin-top: 0.4rem;
+    }
+
+
+}
+
+.unclickContent:hover {
+    background-color: #3E444C;
+
+}
+
+.onclickContent {
+    color: #fff;
+    background-color: #0072EF;
+}
+
+.disable {
+    color: #606A76;
+
+    .iconfont {
+        color: #606A76 !important;
+    }
+}
+
+.iconContent:focus-visible {
+    box-shadow: 0 0 0 2px #8fc5ff;
+}

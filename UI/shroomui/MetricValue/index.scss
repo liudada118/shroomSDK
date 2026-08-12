@@ -1,0 +1,61 @@
+.ui-metric-value {
+    display: flex;
+    min-width: 0;
+    color: inherit;
+
+    &--inline {
+        align-items: baseline;
+        gap: 0.5rem;
+    }
+
+    &--stacked {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    &--start {
+        justify-content: flex-start;
+    }
+
+    &--end {
+        justify-content: flex-end;
+    }
+
+    &__label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__content {
+        display: inline-flex;
+        align-items: baseline;
+        justify-content: flex-end;
+        gap: 0.25rem;
+        min-width: 0;
+        white-space: nowrap;
+    }
+
+    &__indicator {
+        align-self: center;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex: 0 0 6px;
+    }
+
+    &__number {
+        min-width: 2.8rem;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    &__unit {
+        min-width: 1.6rem;
+        flex: 0 0 auto;
+        text-align: left;
+        white-space: nowrap;
+    }
+}

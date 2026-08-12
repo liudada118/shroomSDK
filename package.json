@@ -7,13 +7,33 @@
   "files": [
     "index.js",
     "src",
+    "UI/index.js",
+    "UI/package.json",
+    "UI/qxui",
+    "UI/render",
+    "UI/shroomui",
+    "UI/frontend/index.js",
+    "UI/frontend/package.json",
+    "UI/frontend/core",
+    "UI/frontend/renderers",
+    "UI/frontend/styles",
     "examples",
-    "docs",
+    "!UI/render/prototypes",
+    "!UI/**/node_modules",
+    "!UI/**/node_modules/**",
+    "!UI/**/dist",
+    "!UI/**/dist/**",
+    "!UI/**/.vite",
+    "!UI/**/.vite/**",
+    "!UI/**/*.test.js",
+    "!UI/frontend/docs",
     "README.md",
     "CHANGELOG.md"
   ],
   "scripts": {
-    "test": "node -e \"require('./index'); console.log('SDK loaded')\"",
+    "test": "node --test tests/*.test.mjs && pnpm test:types && pnpm test:renderers && node -e \"require('./index'); console.log('SDK loaded')\"",
+    "test:renderers": "vitest run UI/frontend/core UI/frontend/renderers",
+    "test:types": "tsc --noEmit --jsx react-jsx --esModuleInterop --allowSyntheticDefaultImports --moduleResolution bundler --module preserve --target ES2020 --skipLibCheck UI/render/TerrainMapPage.tsx tests/render-public-types.ts",
     "sdk:demo": "node examples/backend-sdk-demo.js",
     "sdk:serial-demo": "node examples/serial-chain-demo.js",
     "demo:backend": "node examples/backend-sdk-demo.js",
@@ -29,7 +49,81 @@
     "serialport": "^12.0.0",
     "ws": "^8.14.2"
   },
+  "peerDependencies": {
+    "@ant-design/icons": "^5.0.0",
+    "@react-three/drei": "^9.0.0 || ^10.0.0",
+    "@react-three/fiber": "^8.0.0 || ^9.0.0",
+    "antd": "^5.0.0",
+    "i18next": "^24.0.0 || ^25.0.0 || ^26.0.0",
+    "mobx": "^6.0.0",
+    "mobx-react": "^9.0.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "react-i18next": "^14.0.0 || ^15.0.0",
+    "sass": "^1.0.0",
+    "styled-components": "^6.0.0",
+    "three": ">=0.152.0"
+  },
+  "peerDependenciesMeta": {
+    "@ant-design/icons": {
+      "optional": true
+    },
+    "antd": {
+      "optional": true
+    },
+    "mobx": {
+      "optional": true
+    },
+    "mobx-react": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "react-i18next": {
+      "optional": true
+    },
+    "i18next": {
+      "optional": true
+    },
+    "sass": {
+      "optional": true
+    },
+    "styled-components": {
+      "optional": true
+    },
+    "@react-three/drei": {
+      "optional": true
+    },
+    "@react-three/fiber": {
+      "optional": true
+    },
+    "three": {
+      "optional": true
+    }
+  },
   "devDependencies": {
-    "vitepress": "^1.6.4"
+    "@ant-design/icons": "^5.6.1",
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@types/three": "^0.170.0",
+    "antd": "^5.29.3",
+    "i18next": "^24.2.3",
+    "mobx": "^6.16.1",
+    "mobx-react": "^9.2.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-i18next": "^15.7.4",
+    "sass": "^1.102.0",
+    "styled-components": "^6.5.1",
+    "three": "^0.170.0",
+    "typescript": "^5.9.3",
+    "vitepress": "^1.6.4",
+    "vitest": "^2.1.9"
   }
 }
