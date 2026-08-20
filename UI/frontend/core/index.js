@@ -80,6 +80,10 @@ export {
   toRaw256,
 } from './sceneFrame.js';
 
+// 声明式 `frame` prop 的入参归一化。铺到顶层是因为它同时服务三处：五个 React
+// 渲染器的 `useDeclarativeFrame`、回放通路，以及使用方自己校验一帧是否可画。
+export { toFramePayload } from './framePayload.js';
+
 /* ── 配色 ───────────────────────────────────────────────────────── */
 export {
   COLORMAPS,

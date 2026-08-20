@@ -138,7 +138,8 @@ describe('applyFloor', () => {
 });
 
 describe('prepareFrame 与原实现逐点一致', () => {
-  const params = normalizeWebglHeatmapParams(LEGACY_PRESETS.bed4096);
+  // 旧实现的镜像已不再是 SDK 默认方向；这里显式打开，只用于验证兼容开关。
+  const params = { ...normalizeWebglHeatmapParams(LEGACY_PRESETS.bed4096), mirrorX: true };
 
   it.each([0, 1, 40, 200])('filter = %i 时结果相同', (filter) => {
     const raw = makeFrame();

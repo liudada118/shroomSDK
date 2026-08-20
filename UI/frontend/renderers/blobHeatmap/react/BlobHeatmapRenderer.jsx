@@ -20,11 +20,14 @@
  * 4. **`new Array(1024).fill(0)`** 写死 1024，与 `carCol` 的 10×9=90 对不上 ——
  *    它属于第 3 条那段死码，一起走了。
  *
- * ## 一处**行为修正**（明说）
+ * ## 两处**行为修正**（明说）
  *
  * 原件每帧 `new Intensity()`，也就是每帧新建一张 256×1 画布、画一遍渐变、
  * `getImageData` 读回来。这里调色板只建一次。像素完全相同（同一组色标、同一条
  * `createLinearGradient`），差别只在不再每帧重算。
+ *
+ * 原件铺点时把行下标用于 X、列下标用于 Y，非方阵会转置并越界。SDK 改为
+ * `x = column`、`y = row`，与其他常规矩阵渲染器共享 row-major 显示方向。
  *
  * ## ⚠️ 那四个滑块本来就不起作用
  *
@@ -47,6 +50,7 @@ import {
   frameStats,
   groupByAlpha,
 } from '../core/pipeline.js';
+import { useDeclarativeFrame } from '../../shared/react/useDeclarativeFrame.js';
 
 /**
  * 画一个带阴影的圆，返回离屏画布。
@@ -266,6 +270,12 @@ const BlobHeatmapRenderer = React.forwardRef(function BlobHeatmapRenderer(props,
     sitValue,
     bthClickHandle,
   }), [sitData, sitValue, bthClickHandle]);
+
+  // 声明式帧入口。按内容取键而非按 `params` 引用，否则调用方传内联字面量时
+  // 每渲染一次就重画一帧。这里的 resetKey 还顺带补上一个缺口：换配色 / 换
+  // `max` 之后，声明式通路会用新参数把当前帧重画一遍（命令式通路要等下一帧）。
+  const paramsKey = useMemo(() => JSON.stringify(params), [params]);
+  useDeclarativeFrame(props.frame, sitData, paramsKey);
 
   return (
     <div

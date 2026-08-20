@@ -98,6 +98,7 @@ import {
 import { interpCentered, interpRamp } from '../core/pipeline.js';
 import { createQuaternionTracker } from '../core/quaternion.js';
 import { deriveGridSize, normalizeHandPointsParams } from '../core/params.js';
+import { useDeclarativeFrame } from '../../shared/react/useDeclarativeFrame.js';
 import circleUrl from '../../shared/three/circle.png';
 
 const ALT_KEY = 18;
@@ -776,6 +777,12 @@ const HandPointsRenderer = React.forwardRef((props, refs) => {
     changeBox: (...a) => stateRef.current.api?.changeBox(...a),
     cancelSelect: (...a) => stateRef.current.api?.cancelSelect(...a),
   }), []);
+
+  // 声明式帧入口。`pointSprite` 在 `normalizeHandPointsParams` 的返回里，
+  // 所以 `paramsKey` 已经覆盖了 `spriteUrl`，不必像 pointGrid 那样再拼一层。
+  useDeclarativeFrame(props.frame, (payload) => {
+    stateRef.current.api?.sitData(payload);
+  }, paramsKey);
 
   return (
     <div style={{ width: '100%', height: '100%', minHeight: 320 }}>

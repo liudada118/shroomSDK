@@ -210,8 +210,8 @@ export function registerBuiltinRenderers() {
         'bthClickHandle',
       ],
       normalizeParams: normalizeWebglHeatmapParams,
-      // `bed4096` 是唯一的迁移预设（逐字等于 `Canvas4096WebGL` 的现有行为，
-      // 主应用两个渲染点都用它）；`plain` 不对应任何原实现，是给二开的起点。
+      // `bed4096` 保留 `Canvas4096WebGL` 的尺寸和阈值，但方向统一为 row-major；
+      // `plain` 不对应任何原实现，是给二开的起点。
       presets: WEBGL_HEATMAP_PRESETS,
     }),
     registerRenderer({
@@ -232,8 +232,8 @@ export function registerBuiltinRenderers() {
       normalizeParams: normalizeBlobHeatmapParams,
       // 两条，就是原件那句 `if (props.matrixName == 'carCol')` 的两边。
       // ⚠️ 原件的分支改的是**模块级**对象，挂过一次 carCol 之后同一次会话里后面
-      // 所有实例都跟着串味 —— 参数每实例化之后这个 bug 没了，是本轮唯一一处
-      // 不逐像素等同的差异。
+      // 所有实例都跟着串味 —— 参数每实例化之后这个 bug 没了。另一个明确修正是
+      // 非方阵坐标统一为 row-major，避免旧公式把行列转置。
       presets: BLOB_HEATMAP_PRESETS,
     }),
   ];

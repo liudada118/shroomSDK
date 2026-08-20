@@ -19,6 +19,7 @@ import {
   LEGACY_PRESETS,
   deriveGrid,
   normalizeNumMatrixParams,
+  resolveNumMatrixTuning,
 } from './params.js';
 import {
   applyFloorFilter,
@@ -36,6 +37,7 @@ import {
   quantizeFrame,
   resolveCanvasSize,
 } from './pipeline.js';
+import { prepareCanvas2dFrame } from '../react/backends/canvas2d.js';
 
 // 浮点代数等价的比对精度。三份公式化简后同解，但乘除次序不同，
 // 末位可能差一个 ulp（~1e-17）。世界坐标范围是 [-1, 1]，1e-12 已远低于
@@ -384,6 +386,27 @@ describe('参数归一化', () => {
 });
 
 describe('canvas2d 后端参数', () => {
+  it('显式 filterMin=0 时保留矩阵中的最小值', () => {
+    const legacy = { valuef1: 2, valuej1: 200 };
+    const params = normalizeNumMatrixParams({ filterMin: 0 });
+
+    expect(params.filterMin).toBe(0);
+    expect(resolveNumMatrixTuning(legacy, params)).toEqual({ valuef1: 0, valuej1: 200 });
+    expect(resolveNumMatrixTuning(legacy, normalizeNumMatrixParams({}))).toEqual(legacy);
+  });
+
+  it('常规矩阵帧保持 row-major 顺序，不旋转或镜像', () => {
+    const frame = [
+      1, 2, 3, 4,
+      5, 6, 7, 8,
+      9, 10, 11, 12,
+      13, 14, 15, 16,
+    ];
+
+    expect(prepareCanvas2dFrame(frame, 4, 4, 0)).toBe(frame);
+    expect(prepareCanvas2dFrame(frame, 4, 4, 1)).not.toEqual(frame);
+  });
+
   it('两条 num3D 预设复现 NumWs.jsx 的常量', () => {
     const def = normalizeNumMatrixParams(LEGACY_PRESETS.num3dDefault);
     expect(def.backend).toBe('canvas2d');
@@ -398,10 +421,8 @@ describe('canvas2d 后端参数', () => {
 
     const carCol = normalizeNumMatrixParams(LEGACY_PRESETS.num3dCarCol);
     expect(deriveGrid(carCol)).toEqual({ gridWidth: 10, gridHeight: 9, count: 90 });
-    // ⚠️ 网格是 10×9，但 rotate90CW 的行列仍是 32 —— 原实现写死 32，carCol 走的
-    // 也是它。这条断言锁的是"保留原样"，不是"这样是对的"；要修改这两项即可。
-    expect(carCol.canvas2d.rotateHeight).toBe(32);
-    expect(carCol.canvas2d.rotateWidth).toBe(32);
+    expect(carCol.canvas2d).not.toHaveProperty('rotateHeight');
+    expect(carCol.canvas2d).not.toHaveProperty('rotateWidth');
   });
 
   it('canvas2d 这一段恒定存在，走 sprite3d 时也算', () => {
@@ -422,7 +443,7 @@ describe('canvas2d 后端参数', () => {
       textHeight: 3,
       textColorMax: 30,
       colorValueScale: 5,
-      blurSigma: 1.6,
+      blurSigma: 0,
       baseTiltDeg: 20,
     });
 

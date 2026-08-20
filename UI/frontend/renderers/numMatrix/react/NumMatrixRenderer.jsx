@@ -68,8 +68,13 @@ import { bed4096numParams } from '../../../core/bed4096numParams.js';
 import { buildCoordinateWorldLayout } from '../../../core/coordinatePointLayout.js';
 import { DUAL_CHANNEL_DEFAULTS, createThresholdState } from '../../../core/displayThresholds.js';
 import { findMax } from '../../../core/frameMath.js';
-import { deriveGrid, normalizeNumMatrixParams } from '../core/params.js';
+import {
+  deriveGrid,
+  normalizeNumMatrixParams,
+  resolveNumMatrixTuning,
+} from '../core/params.js';
 import { applyFloorFilter, computeFrameStats, createRollingWindow } from '../core/pipeline.js';
+import { useDeclarativeFrame } from '../../shared/react/useDeclarativeFrame.js';
 import { createCanvas2dMatrixBackend } from './backends/canvas2d.js';
 import { createSpriteMatrixBackend } from './backends/sprite3d.js';
 import { createWebglMatrixBackend } from './backends/webgl.js';
@@ -165,6 +170,8 @@ const NumMatrixRenderer = React.forwardRef((props, refs) => {
 
     const grid = deriveGrid(config);
     const createBackend = BACKEND_FACTORIES[config.backend] || createSpriteMatrixBackend;
+
+    state.tuning = resolveNumMatrixTuning(state.tuning, config);
 
     state.totalWindow = createRollingWindow(config.chartWindow);
     state.pointWindow = createRollingWindow(config.chartWindow);
@@ -327,6 +334,13 @@ const NumMatrixRenderer = React.forwardRef((props, refs) => {
       (name) => [name, (...args) => stateRef.current.api?.[name]?.(...args)],
     ));
   }, [config.backend]);
+
+  // 声明式帧入口。走 `state.api` 而非闭包，理由同上面的命令式接口；`paramsKey`
+  // 作为 resetKey 是必须的 —— 参数变化会整场重建并把 `state.api` 置空，
+  // 不重推的话"改完参数"到"下一帧到达"之间画面是空的。
+  useDeclarativeFrame(props.frame, (payload) => {
+    stateRef.current.api?.sitData(payload, propsRef.current.local);
+  }, paramsKey);
 
   return (
     <>

@@ -17,6 +17,7 @@ export {
   deriveGridSize,
   normalizePointGridParams,
   paramsFromManifest,
+  resolvePointGridTuning,
 } from './params.js';
 
 export {

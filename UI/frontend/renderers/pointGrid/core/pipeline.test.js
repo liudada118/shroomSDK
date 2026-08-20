@@ -12,7 +12,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { addSide, gaussBlur_1, interpSmall } from '../../../core/frameMath.js';
-import { deriveGridSize, LEGACY_PRESETS, normalizePointGridParams } from './params.js';
+import {
+  deriveGridSize,
+  LEGACY_PRESETS,
+  normalizePointGridParams,
+  resolvePointGridTuning,
+} from './params.js';
 import {
   buildPointGridBasePositions,
   createPointGridPipeline,
@@ -100,6 +105,23 @@ function makeFrame(length, seed) {
 }
 
 describe('点阵管线与原场景组件逐帧一致', () => {
+  it('规则矩阵保持 row-major 行列方向', () => {
+    const positions = buildPointGridBasePositions({
+      amountX: 2,
+      amountY: 3,
+      separation: 10,
+    });
+
+    expect(Array.from(positions)).toEqual([
+      -10, 0, -5,
+      0, 0, -5,
+      10, 0, -5,
+      -10, 0, 5,
+      0, 0, 5,
+      10, 0, 5,
+    ]);
+  });
+
   it('物理坐标按 row-major 顺序生成居中的 3D 基础位置', () => {
     const positions = buildPointGridBasePositions({
       amountX: 2,
@@ -108,10 +130,10 @@ describe('点阵管线与原场景组件逐帧一致', () => {
       points: [[0, 0], [4, 0], [0, 2], [4, 2]],
     });
     expect(Array.from(positions)).toEqual([
-      -50, 0, 25,
-      50, 0, 25,
       -50, 0, -25,
       50, 0, -25,
+      -50, 0, 25,
+      50, 0, 25,
     ]);
   });
   const blurRadii = [1, 2, 4];
@@ -223,5 +245,29 @@ describe('参数归一化', () => {
   it('无有效点位时返回 null，由渲染器决定退化行为', () => {
     expect(normalizePointGridParams({ points: [] }).points).toBeNull();
     expect(normalizePointGridParams({ points: [null, 'bad'] }).points).toBeNull();
+  });
+
+  it('keeps legacy tuning unless display params are explicitly provided', () => {
+    const legacy = { value1: 2, valuej1: 200, valueg1: 3 };
+    expect(resolvePointGridTuning(legacy, {})).toEqual(legacy);
+    expect(resolvePointGridTuning(legacy, {
+      heightScale: 0.5,
+      colorMax: 2560,
+      filterMin: 0,
+    })).toEqual({ value1: 0.5, valuej1: 2560, valueg1: 3, valuef1: 0 });
+  });
+
+  it('normalizes point height and color range params', () => {
+    const params = normalizePointGridParams({
+      heightScale: '0.75',
+      colorMax: '2048',
+      filterMin: '0',
+    });
+    expect(params.heightScale).toBe(0.75);
+    expect(params.colorMax).toBe(2048);
+    expect(params.filterMin).toBe(0);
+    expect(normalizePointGridParams({}).heightScale).toBeNull();
+    expect(normalizePointGridParams({}).colorMax).toBeNull();
+    expect(normalizePointGridParams({}).filterMin).toBeNull();
   });
 });

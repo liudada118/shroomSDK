@@ -14,27 +14,42 @@ aside: false
 
 ## 最小用法
 
+传 `frame` 即可，不需要 ref：
+
 ```jsx
-import { useEffect, useRef } from 'react'
 import HandPointsRenderer from 'shroom-backend-sdk/UI/frontend/renderers/handPoints/react/HandPointsRenderer.jsx'
 
 export function GlovePoints({ matrix }) {
-  const rendererRef = useRef(null)
-
-  useEffect(() => {
-    rendererRef.current?.sitData({ wsPointData: matrix }, false)
-  }, [matrix])
-
   return (
     <div style={{ height: 520 }}>
       <HandPointsRenderer
-        ref={rendererRef}
+        frame={matrix}
         params={{ sit: { num1: 32, num2: 32, interp: 2, order: 4 }, pointTable: 'gloves', maskMode: 'gloves', modelUrl: '' }}
       />
     </div>
   )
 }
 ```
+
+IMU 标定、关节清零这些命令仍走 ref，两条通路可以同时用：
+
+```jsx
+const rendererRef = useRef(null)
+return <HandPointsRenderer ref={rendererRef} frame={matrix} />
+```
+
+## 声明式 props
+
+| prop | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `frame` | `number[]` / `TypedArray` / `{ wsPointData }` | 手部矩阵帧，变化时自动推给 `sitData` |
+| `params` | `object` | 渲染参数，见下方[关键参数](#关键参数) |
+| `local` | `boolean` | 回放模式，为真时不驱动宿主侧栏曲线 |
+| `data` | `ref` | 宿主回调容器，需挂 `changeData` / `handleCharts` / `handleChartsArea` |
+| `changeSelect` | `function` | 框选结果回调 |
+| `colormap` | `{ id, reverse }` | 配色方案，变化会整场重建 |
+
+`frame` 按引用比较：**原地修改同一个数组不会触发重画**，高频通路请每帧给新数组，或改用 ref 上的 `sitData`。参数变化会整场重建场景，重建后当前 `frame` 会自动重推一次。
 
 ## 输入数据
 

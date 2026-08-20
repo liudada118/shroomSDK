@@ -71,8 +71,13 @@ import {
 import { DUAL_CHANNEL_DEFAULTS, createThresholdState } from '../../../core/displayThresholds.js';
 import { addSide, findMax, gaussBlur_1, interpSmall, jet } from '../../../core/frameMath.js';
 import { jetgGrey } from '../../../core/greyLadder.js';
-import { deriveGridSize, normalizePointGridParams } from '../core/params.js';
+import {
+  deriveGridSize,
+  normalizePointGridParams,
+  resolvePointGridTuning,
+} from '../core/params.js';
 import { buildPointGridBasePositions } from '../core/pipeline.js';
+import { useDeclarativeFrame } from '../../shared/react/useDeclarativeFrame.js';
 // 打包器把它变成一个真实存在的 URL；理由见文件头第 1 条。
 // 2026-08-07 从 `./circle.png` 挪到 `../../shared/three/`：`handPoints` 渲染器也要这张图，
 // 放在两个渲染器目录之一会让另一个跨目录引资源。它和 `SelectionHelper` /
@@ -186,6 +191,7 @@ const PointGridRenderer = React.forwardRef((props, refs) => {
     let resizeObserver = null;
 
     state.disposed = false;
+    state.tuning = resolvePointGridTuning(state.tuning, config);
     state.bigArrg = new Array(gridTotal).fill(1);
     state.smoothBig = new Array(gridTotal).fill(1);
     state.ndata1 = new Array(sit.num1 * sit.num2).fill(0);
@@ -667,7 +673,16 @@ const PointGridRenderer = React.forwardRef((props, refs) => {
     // `spriteUrl` 也在里面 —— 换贴图本可以只 `texture.dispose()` 再 load 一张，
     // 但那要把 material 单拎出来管生命周期。换图不是热路径（一个消费者通常
     // 只设一次），重建整场景换来的是「这个 effect 只有一条清理路径」。
-  }, [sit, back, config.separation, config.fps, config.points, spriteUrl]);
+  }, [
+    sit,
+    back,
+    config.separation,
+    config.fps,
+    config.points,
+    config.heightScale,
+    config.colorMax,
+    spriteUrl,
+  ]);
 
   // 命令式接口转发到当前 effect 周期内的实现。
   // 走 state.api 中转而非直接闭包，是为了让参数变化重建场景后，
@@ -683,6 +698,19 @@ const PointGridRenderer = React.forwardRef((props, refs) => {
     changeGroupRotate: (...args) => stateRef.current.api?.changeGroupRotate(...args),
     reset: (...args) => stateRef.current.api?.reset(...args),
   }), []);
+
+  // 声明式帧入口，两个通道各一条。resetKey 里带上 `spriteUrl`：换贴图同样会
+  // 整场重建（见上面 effect 的依赖），而它**不在** `normalizePointGridParams`
+  // 的返回里，所以 `paramsKey` 覆盖不到它。
+  const frameResetKey = `${paramsKey}|${spriteUrl}`;
+
+  useDeclarativeFrame(props.frame, (payload) => {
+    stateRef.current.api?.sitData(payload);
+  }, frameResetKey);
+
+  useDeclarativeFrame(props.backFrame, (payload) => {
+    stateRef.current.api?.backData(payload);
+  }, frameResetKey);
 
   return (
     <div style={{ width: '100%', height: '100%', minHeight: 320 }}>

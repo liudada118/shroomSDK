@@ -407,7 +407,7 @@ const TERRAIN_MAP_DEFAULTS = {
   columns: 32,
   maxValue: 1024,
   heightScale: 4.8,
-  height: 620,
+  height: 460,
   title: 'Glove Pressure Matrix',
   subtitle: '32 x 32 sequential matrix',
   showControls: true,

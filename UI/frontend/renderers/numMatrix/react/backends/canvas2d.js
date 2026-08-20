@@ -55,7 +55,7 @@
  */
 
 import { isClassicColormap, sampleColormapRgb } from '../../../../core/colormaps.js';
-import { addSide, gaussBlur_2, jetRound, rotate90CW } from '../../../../core/frameMath.js';
+import { addSide, gaussBlur_2, jetRound } from '../../../../core/frameMath.js';
 import {
   GLOVE_147_BASE,
   GLOVE_147_PADDED,
@@ -70,6 +70,15 @@ const GLOVE_147_BLUR = 1.2;
 /** 手套原始 256 数据的矩阵尺寸。抄自 `NumWs.jsx:261`。 */
 const GLOVE_256_ROWS = 16;
 const GLOVE_256_COLS = 16;
+
+/**
+ * 常规矩阵帧遵循 row-major 约定，渲染前不旋转、不镜像、不转置。
+ * 专用手套/足底线序仍由各自的命令式入口处理。
+ */
+export function prepareCanvas2dFrame(frame, width, height, blurSigma) {
+  if (!(blurSigma > 0)) return frame;
+  return gaussBlur_2([...frame], width, height, blurSigma);
+}
 
 /**
  * 创建 Canvas 2D 后端。
@@ -260,33 +269,25 @@ export function createCanvas2dMatrixBackend({
 
   return {
     /**
-     * 常规通道：shell 已经按 `valuef1` 过滤过，这里补上旋转、总量守卫和模糊。
-     *
-     * 顺序与原实现（`NumWs.jsx:187-203`）等价：原实现先旋转再过滤，过滤是
-     * 逐元素的、旋转是置换，两者可交换。
-     *
-     * ⚠️ **`rotate90CW` 的尺寸是写死的 32×32，与 `grid` 无关** —— 原实现如此。
-     * `carCol` 预设的网格是 10×9（90 个点），按 32×32 旋转会得到一个长 1024、
-     * 大部分是 `undefined` 的数组，于是 `total` 是 `NaN`、总量守卫恒不触发。
-     * 这是 `num3D` 形式下 `carCol` 现在的行为，照搬；要改是单独一件事。
-     *
+     * 常规通道保持 row-major 顺序，只执行总量守卫和模糊。
      * @param {number[]} nextFrame 已过滤的帧。
      */
     setFrame(nextFrame) {
       if (!Array.isArray(nextFrame)) return;
-      const rotated = rotate90CW(nextFrame, opts.rotateHeight, opts.rotateWidth);
+      const rowMajorFrame = prepareCanvas2dFrame(
+        nextFrame,
+        grid.gridWidth,
+        grid.gridHeight,
+        opts.blurSigma,
+      );
 
-      let data = rotated;
-      const total = rotated.reduce((a, b) => a + b, 0);
+      let data = rowMajorFrame;
+      const total = rowMajorFrame.reduce((a, b) => a + b, 0);
       if (total < tuning.valuelInit1) {
         data = new Array(grid.gridWidth * grid.gridHeight).fill(0);
       }
 
-      submit(
-        gaussBlur_2(data, grid.gridWidth, grid.gridHeight, opts.blurSigma),
-        grid.gridWidth,
-        grid.gridHeight,
-      );
+      submit(data, grid.gridWidth, grid.gridHeight);
     },
 
     /** 配色/色标上限变了重画一帧。没有纹理要重烘，所以只是排一次 RAF。 */

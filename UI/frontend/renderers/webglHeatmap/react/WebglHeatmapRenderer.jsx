@@ -35,6 +35,7 @@ import {
   prepareFrame,
   pushWindow,
 } from '../core/pipeline.js';
+import { useDeclarativeFrame } from '../../shared/react/useDeclarativeFrame.js';
 import { WebGLCanvas } from './blobs.js';
 
 const WebglHeatmapRenderer = React.forwardRef(function WebglHeatmapRenderer(props, refs) {
@@ -199,6 +200,11 @@ const WebglHeatmapRenderer = React.forwardRef(function WebglHeatmapRenderer(prop
     changeColor,
     bthClickHandle,
   }), [sitData, sitValue, changeColor, bthClickHandle]);
+
+  // 声明式帧入口。`params` 已按引用记忆化，这里再按内容取键：调用方传内联
+  // 字面量时引用每次都变，用引用做依赖会每渲染一次就重推一帧。
+  const paramsKey = useMemo(() => JSON.stringify(params), [params]);
+  useDeclarativeFrame(props.frame, sitData, paramsKey);
 
   return (
     <div

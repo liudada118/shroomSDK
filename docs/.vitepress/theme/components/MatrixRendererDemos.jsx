@@ -85,29 +85,31 @@ export function ParamsEditor({ params, defaultParams, onApply }) {
   }
 
   return (
-    <div className="matrix-params-editor">
-      <div className="matrix-params-editor__header">
+    <details className="matrix-params-editor">
+      <summary className="matrix-params-editor__summary">
         <strong>params</strong>
-        <span>JSON · Ctrl+Enter 应用</span>
+        <span>展开编辑 JSON</span>
+      </summary>
+      <div className="matrix-params-editor__body">
+        <textarea
+          aria-label="编辑组件 params JSON"
+          spellCheck="false"
+          value={source}
+          onChange={(event) => setSource(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+              event.preventDefault()
+              apply()
+            }
+          }}
+        />
+        <div className="matrix-params-editor__actions">
+          <button type="button" className="matrix-params-apply" onClick={apply}>应用参数</button>
+          <ResetButton label="重置参数" onClick={reset} />
+          {error && <span className="matrix-params-editor__error" role="alert">{error}</span>}
+        </div>
       </div>
-      <textarea
-        aria-label="编辑组件 params JSON"
-        spellCheck="false"
-        value={source}
-        onChange={(event) => setSource(event.target.value)}
-        onKeyDown={(event) => {
-          if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-            event.preventDefault()
-            apply()
-          }
-        }}
-      />
-      <div className="matrix-params-editor__actions">
-        <button type="button" className="matrix-params-apply" onClick={apply}>应用参数</button>
-        <ResetButton label="重置参数" onClick={reset} />
-        {error && <span className="matrix-params-editor__error" role="alert">{error}</span>}
-      </div>
-    </div>
+    </details>
   )
 }
 
@@ -119,6 +121,7 @@ const NUM_MATRIX_DEFAULTS = {
   canvasHeightRatio: { compact: 0.6, normal: 0.8 },
   textureValueMax: 255,
   decimalScale: 1,
+  filterMin: 0,
   retintOnThresholdChange: true,
   cameraControls: true,
   chartWindow: 60,
@@ -136,10 +139,8 @@ const NUM_MATRIX_DEFAULTS = {
     textHeight: 0.2,
     textColorMax: 255,
     colorValueScale: 1,
-    blurSigma: 1.6,
+    blurSigma: 0,
     baseTiltDeg: 0,
-    rotateHeight: 16,
-    rotateWidth: 16,
     rotationPresets: [0, 0.5235987756, 1.0471975512],
   },
 }
@@ -149,6 +150,9 @@ const POINT_GRID_DEFAULTS = {
   back: { num1: 16, num2: 32, interp: 2, order: 4 },
   fps: 10,
   separation: 100,
+  heightScale: 0.5,
+  colorMax: 2560,
+  filterMin: 0,
   points: null,
 }
 
@@ -178,12 +182,12 @@ const WEBGL_HEATMAP_DEFAULTS = {
   dataHeight: 32,
   canvasWidth: 512,
   canvasHeight: 512,
-  radius: 18,
-  max: 255,
+  radius: 10,
+  max: 1024,
   filter: 0,
   valueScale: 1,
   blurFactor: 0.55,
-  displaySize: 'min(100%, 540px)',
+  displaySize: 'min(100%, 340px)',
   minFrameLength: 1,
   chartWindow: 60,
   edgeClear: null,
@@ -195,8 +199,8 @@ const BLOB_HEATMAP_DEFAULTS = {
   dataWidth: 32,
   dataHeight: 32,
   canvasScale: 0.82,
-  radius: 24,
-  max: 255,
+  radius: 8,
+  max: 1024,
   min: 0,
   maxOpacity: 1,
   alphaFloor: 0,
@@ -240,7 +244,33 @@ function PointGridRendererDemo() {
   useRendererFrame(rendererRef, frame, params)
 
   return (
-    <RendererDemoShell editor={<ParamsEditor params={params} defaultParams={POINT_GRID_DEFAULTS} onApply={setParams} />} controls={<ResetButton label="重置视角" onClick={() => rendererRef.current?.reset()} />}>
+    <RendererDemoShell editor={<ParamsEditor params={params} defaultParams={POINT_GRID_DEFAULTS} onApply={setParams} />} controls={(
+      <>
+        <label className="matrix-renderer-field matrix-renderer-field--range">
+          点高度 <output>{params.heightScale}</output>
+          <input
+            type="range"
+            min="0"
+            max="2"
+            step="0.1"
+            value={params.heightScale}
+            onChange={(event) => setParams((current) => ({ ...current, heightScale: Number(event.target.value) }))}
+          />
+        </label>
+        <label className="matrix-renderer-field matrix-renderer-field--range">
+          色阶上限 <output>{params.colorMax}</output>
+          <input
+            type="range"
+            min="200"
+            max="5000"
+            step="20"
+            value={params.colorMax}
+            onChange={(event) => setParams((current) => ({ ...current, colorMax: Number(event.target.value) }))}
+          />
+        </label>
+        <ResetButton label="重置视角" onClick={() => rendererRef.current?.reset()} />
+      </>
+    )}>
       <PointGridRenderer ref={rendererRef} params={params} />
     </RendererDemoShell>
   )
@@ -274,7 +304,7 @@ function WebglHeatmapRendererDemo() {
     <RendererDemoShell editor={<ParamsEditor params={params} defaultParams={WEBGL_HEATMAP_DEFAULTS} onApply={setParams} />} controls={(
       <label className="matrix-renderer-field matrix-renderer-field--range">
             色阶上限 <output>{params.max}</output>
-            <input type="range" min="80" max="500" value={params.max} onChange={(event) => updateMax(Number(event.target.value))} />
+            <input type="range" min="128" max="2048" step="32" value={params.max} onChange={(event) => updateMax(Number(event.target.value))} />
       </label>
     )}>
       <WebglHeatmapRenderer ref={rendererRef} params={params} />
@@ -298,7 +328,7 @@ function BlobHeatmapRendererDemo() {
     <RendererDemoShell editor={<ParamsEditor params={params} defaultParams={BLOB_HEATMAP_DEFAULTS} onApply={setParams} />} controls={(
       <label className="matrix-renderer-field matrix-renderer-field--range">
             色阶上限 <output>{params.max}</output>
-            <input type="range" min="80" max="500" value={params.max} onChange={(event) => updateMax(Number(event.target.value))} />
+            <input type="range" min="128" max="2048" step="32" value={params.max} onChange={(event) => updateMax(Number(event.target.value))} />
       </label>
     )}>
       <BlobHeatmapRenderer ref={rendererRef} params={params} />

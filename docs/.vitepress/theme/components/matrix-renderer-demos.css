@@ -4,35 +4,42 @@
 }
 
 .matrix-params-editor {
-  padding: 12px;
   border-bottom: 1px solid #293743;
   background: #0b141b;
 }
 
-.matrix-params-editor__header,
+.matrix-params-editor__summary,
 .matrix-params-editor__actions {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.matrix-params-editor__header {
+.matrix-params-editor__summary {
   justify-content: space-between;
-  margin-bottom: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
   color: #f4f7f9;
   font-size: 13px;
+  cursor: pointer;
+  list-style-position: inside;
 }
 
-.matrix-params-editor__header span {
+.matrix-params-editor__summary span {
   color: #8fa2b1;
   font-size: 12px;
+}
+
+.matrix-params-editor__body {
+  padding: 12px;
+  border-top: 1px solid #293743;
 }
 
 .matrix-params-editor textarea {
   display: block;
   width: 100%;
-  min-height: 280px;
-  max-height: 520px;
+  min-height: 100px;
+  max-height: 180px;
   resize: vertical;
   padding: 10px 12px;
   border: 1px solid #364957;
@@ -132,7 +139,7 @@
 .matrix-renderer-stage {
   position: relative;
   width: 100%;
-  height: 480px;
+  height: 360px;
   min-height: 320px;
   overflow: hidden;
   isolation: isolate;
@@ -154,7 +161,23 @@
 
 .matrix-renderer-stage .maxNum {
   position: absolute !important;
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
   z-index: 2;
+}
+
+.matrix-renderer-stage .canvasNum .threeBoxF {
+  width: min(100%, 340px) !important;
+  height: auto !important;
+  max-height: 100%;
+  aspect-ratio: 1;
+}
+
+.matrix-renderer-stage .canvasNum .threeBoxF > div,
+.matrix-renderer-stage .canvasNum .threeBoxF canvas {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .matrix-renderer-fallback {
@@ -168,17 +191,17 @@
 
 @media (max-width: 640px) {
   .matrix-params-editor textarea {
-    min-height: 220px;
+    min-height: 100px;
   }
 
-  .matrix-params-editor__header {
+  .matrix-params-editor__summary {
     align-items: flex-start;
     flex-direction: column;
     gap: 2px;
   }
 
   .matrix-renderer-stage {
-    height: 360px;
+    height: 340px;
   }
 
   .matrix-renderer-field--range input {

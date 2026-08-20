@@ -35,6 +35,7 @@ export const PARAM_RANGES = {
   gridHeight: { min: 0, max: 256 },
   textureValueMax: { min: 0, max: 4095 },
   decimalScale: { min: 1, max: 100 },
+  filterMin: { min: 0, max: 65535 },
   chartWindow: { min: 2, max: 600 },
   chartPadding: { min: 0, max: 100000 },
   pressureRows: { min: 1, max: 256 },
@@ -51,7 +52,6 @@ export const PARAM_RANGES = {
   colorValueScale: { min: 0.01, max: 1000 },
   blurSigma: { min: 0, max: 20 },
   baseTiltDeg: { min: -180, max: 180 },
-  rotateSize: { min: 1, max: 256 },
   // ---- webgl 后端 ----
   widthRatio: { min: 0.1, max: 1 },
   cellPadding: { min: 0, max: 500 },
@@ -152,16 +152,8 @@ const CANVAS2D_DEFAULTS = {
   textHeight: 3,        // NumWs.jsx:106 `useRef(3)`，每 1 单位数值往上抬几像素
   textColorMax: 30,     // NumWs.jsx:107 `useRef(30)`，jet 色标上限
   colorValueScale: 5,   // NumWs.jsx:80，取色前先把数值放大几倍
-  blurSigma: 1.6,       // NumWs.jsx:202
+  blurSigma: 0,         // 常规矩阵默认原值展示；大于 0 时显式启用平滑
   baseTiltDeg: 20,      // NumWs.jsx:110，`rotateX` 初值
-  /**
-   * `rotate90CW` 用的行列数。**故意与 `grid` 解耦**：原实现写死
-   * `rotate90CW(newData, 32, 32)`，`carCol`（10×9）走的也是这个 32，
-   * 结果是一个长 1024、大部分 `undefined` 的数组。两条预设都保 32 是为了
-   * 逐帧一致；要修 `carCol` 是单独一件事，改这个参数即可，不用动代码。
-   */
-  rotateHeight: 32,
-  rotateWidth: 32,
 };
 
 /** `changePointRotation` / `changeGroupRotate` 的可选角度（弧度）。NumWs.jsx:92。 */
@@ -196,12 +188,6 @@ function normalizeCanvas2dParams(raw = {}) {
     blurSigma: clampNumber(raw.blurSigma, CANVAS2D_DEFAULTS.blurSigma, PARAM_RANGES.blurSigma),
     baseTiltDeg: clampNumber(
       raw.baseTiltDeg, CANVAS2D_DEFAULTS.baseTiltDeg, PARAM_RANGES.baseTiltDeg,
-    ),
-    rotateHeight: clampInteger(
-      raw.rotateHeight, CANVAS2D_DEFAULTS.rotateHeight, PARAM_RANGES.rotateSize,
-    ),
-    rotateWidth: clampInteger(
-      raw.rotateWidth, CANVAS2D_DEFAULTS.rotateWidth, PARAM_RANGES.rotateSize,
     ),
     rotationPresets: presets,
   };
@@ -451,6 +437,7 @@ export function normalizeNumMatrixParams(params = {}) {
     textureValueMax: clampInteger(params.textureValueMax, 0, PARAM_RANGES.textureValueMax),
     /** 定点小数倍率。10 表示数据是放大 10 倍的定点数，显示时除回去并保留一位。 */
     decimalScale: clampInteger(params.decimalScale, 1, PARAM_RANGES.decimalScale),
+    filterMin: clampNumber(params.filterMin, null, PARAM_RANGES.filterMin),
     pressureRedistribution: normalizePressureRedistribution(params.pressureRedistribution),
     /**
      * 阈值（valuej）变化时是否重烘精灵图。
@@ -499,6 +486,13 @@ export function normalizeNumMatrixParams(params = {}) {
      * —— Fast256 与 Bed4096 靠这个做到「切换模式时调参不重置」。
      */
     sharedTuningKey: params.sharedTuningKey ? String(params.sharedTuningKey) : null,
+  };
+}
+
+export function resolveNumMatrixTuning(tuning = {}, params = {}) {
+  return {
+    ...tuning,
+    valuef1: params.filterMin ?? tuning.valuef1,
   };
 }
 
@@ -792,14 +786,7 @@ export const LEGACY_PRESETS = {
     statsBeforeFilter: true,
   },
 
-  /**
-   * `num/NumWs.jsx` 里 `props.matrixName == 'carCol'` 那一支（`NumWs.jsx:99`）。
-   *
-   * ⚠️ **只改网格，不改 `canvas2d.rotateWidth/rotateHeight`** —— 原实现的
-   * `rotate90CW` 写死 32，`carCol` 走的也是它。见 `CANVAS2D_DEFAULTS.rotateHeight`
-   * 的注释：这条预设现在的画面是有问题的，但要跟原实现逐帧一致就得照搬。
-   * 想修的话把这两项设成 9 / 10 即可，不用改后端代码。
-   */
+  /** `num/NumWs.jsx` 里 `props.matrixName == 'carCol'` 那一支（`NumWs.jsx:99`）。 */
   num3dCarCol: {
     backend: 'canvas2d',
     gridWidth: 10,

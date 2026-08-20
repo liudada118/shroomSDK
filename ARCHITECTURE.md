@@ -1,6 +1,6 @@
 # Shroom SDK Architecture
 
-最后更新于：2026-08-12
+最后更新于：2026-08-20
 
 ## 项目概述
 
@@ -97,7 +97,9 @@ flowchart LR
 
 `TerrainMap` 的统计和矩阵缩略图使用输入的原始规范化矩阵；插值、高斯平滑和增益只作用于 Three.js 地形，不会写回输入数据。原项目版 `TerrainMapPage` 保存在 `UI/render/prototypes` 作为迁移参考，并从发布包中排除。
 
-`UI/frontend/renderers` 下的五套渲染器同样只消费 normalized matrix。实时帧和回放帧进入同一 core pipeline；插值、阈值、配色和视角状态仅服务展示，不写回采集、回放或下载所持有的原始规范化帧。`registerBuiltinRenderers()` 只注册动态导入描述符，React、Three.js 和 WebGL 实现不会进入纯 core 的静态依赖图。
+`UI/frontend/renderers` 下的五套渲染器同样只消费 normalized matrix。常规矩阵统一遵循 row-major 方向契约：`data[row * cols + col]` 直接对应显示位置，不在渲染器内部旋转、镜像或转置；专用手套、足底等物理线序仍由各自的显式命令入口处理。实时帧和回放帧进入同一 core pipeline；插值、阈值、配色和视角状态仅服务展示，不写回采集、回放或下载所持有的原始规范化帧。`registerBuiltinRenderers()` 只注册动态导入描述符，React、Three.js 和 WebGL 实现不会进入纯 core 的静态依赖图。
+
+五个渲染器同时提供声明式和命令式两条帧入口。声明式 `frame`（`pointGrid` 另有 `backFrame`）由 `renderers/shared/react/useDeclarativeFrame.js` 推给各自的 `sitData` / `backData`，入参归一化在 `core/framePayload.js`（普通数组原样透传不复制，TypedArray 转一次，`{ wsPointData }` 保留额外字段）。prop 名不用 `data` —— 该键已被宿主回调 ref 占用。会整场重建的三个渲染器把 `paramsKey` 作为重推标记，参数变化后当前帧会用新参数重画一次；`pointGrid` 的标记额外拼上 `spriteUrl`，因为贴图不在归一化参数里。命令式 ref 通路一个方法都没有移除，两条可以在同一个实例上同时用。
 
 React 渲染器以宿主容器为尺寸边界：Three.js 点阵通过 `ResizeObserver` 同步相机和画布，Canvas 热力图在宿主短边内调整 backing store 并重绘最后一帧。GLB 手模是显式传入的可选运行时资源，SDK 默认只渲染手部点云；参数变化或卸载后到达的旧模型会被丢弃并释放。
 
@@ -105,7 +107,7 @@ React 渲染器以宿主容器为尺寸边界：Three.js 点阵通过 `ResizeObs
 
 VitePress 文档通过 `UiComponentDemo.vue` 在客户端创建 React root，再由 `ComponentDemo.jsx` 按组件名加载真实 SDK 组件和模拟业务状态。组件独立页直接展示真实交互，静态构建阶段只渲染挂载容器，不执行浏览器 API。
 
-六个矩阵渲染组件示例共享 `ParamsEditor`：编辑区只接受 JSON 对象，解析失败时保留上一次有效配置。`UI/frontend/renderers` 的五个组件将对象作为 `params`；`TerrainMap` 将顶层字段映射为组件 props，并将 `options` 作为受控渲染配置。示例输入统一使用从 1 到矩阵元素数量的连续数组，元素数量由已应用的行列参数决定。
+六个矩阵渲染组件示例共享可折叠的 `ParamsEditor`：编辑区只接受 JSON 对象，解析失败时保留上一次有效配置。`UI/frontend/renderers` 的五个组件将对象作为 `params`；`TerrainMap` 将顶层字段映射为组件 props，并将 `options` 作为受控渲染配置。示例输入统一使用从 1 到矩阵元素数量的连续数组，元素数量由已应用的行列参数决定。两种热力图的 32×32 示例使用 `max: 1024`，点半径不超过相邻点间距的主要范围，避免递增数据和 alpha 重叠造成整图饱和。文档示例使用紧凑的响应式舞台，并覆盖旧渲染器的固定定位和固有画布尺寸，避免数值浮层及矩阵画布超出可视区域。`PointGridRenderer` 额外将点高度倍率和色阶上限纳入公开 `params`，文档工具栏可直接调节。
 
 ## 更新日志
 
@@ -127,6 +129,11 @@ VitePress 文档通过 `UiComponentDemo.vue` 在客户端创建 React root，再
 | 2026-08-11 | 发布优化 | 根 npm 包仅发布运行源文件、示例和入口文档，不再包含 VitePress 站点与实施计划 |
 | 2026-08-12 | 文档交互 | 五个矩阵渲染示例新增 `params` JSON 编辑器，输入帧统一为从 1 开始的连续递增数组 |
 | 2026-08-12 | 文档交互 | `TerrainMap` 接入共享参数编辑器，六个矩阵组件示例补全常用公开参数并同步参数与演示输入 |
+| 2026-08-14 | 修复缺陷 | 缩短矩阵示例参数区和渲染舞台，修复数字矩阵浮层、固定画布裁切及移动端非正方形问题 |
+| 2026-08-14 | 文档交互 | 矩阵参数编辑器默认折叠，PointGrid 新增点高度和色阶上限参数及实时调节控件 |
+| 2026-08-14 | 修复缺陷 | 统一 NumMatrix 与 PointGrid 的常规矩阵 row-major 方向，移除默认旋转和行列转置，并提供 `filterMin: 0` 原值展示配置 |
+| 2026-08-20 | 新增功能 | 五套矩阵渲染器新增声明式 `frame` / `backFrame` prop，命令式 ref 通路保持不变 |
+| 2026-08-20 | 文档更新 | `API_REFERENCE` 重写为参数级参考，补齐构造 options、方法签名、返回结构和已知限制 |
 
 ## 项目进度
 
@@ -146,3 +153,9 @@ VitePress 文档通过 `UiComponentDemo.vue` 在客户端创建 React root，再
 | 2026-08-11 | 外部宿主适配 | 五套矩阵渲染器完成宿主尺寸约束、可选模型加载和发布依赖边界核对 |
 | 2026-08-12 | 渲染参数在线调试 | 文档页支持修改、应用和重置组件 `params`，并根据矩阵尺寸重建递增演示帧 |
 | 2026-08-12 | TerrainMap 在线调参 | 文档页支持在线修改组件 props 和 `TerrainMapOptions`，输入数组随 `rows * columns` 自动重建 |
+| 2026-08-14 | 渲染文档响应式适配 | 六个矩阵渲染页在桌面和移动视口中完整展示，数字矩阵保持正方形且不再裁切 |
+| 2026-08-14 | PointGrid 显示调参 | `heightScale` 和 `colorMax` 可通过 SDK 参数或文档滑块控制，并兼容旧项目默认值 |
+| 2026-08-14 | 矩阵方向一致性 | 常规矩阵输入按 `data[row * cols + col]` 原位置展示，NumMatrix 与 PointGrid 不再隐式改变方向 |
+| 2026-08-14 | 全渲染方向与热图色阶 | 修正 PointGrid 上下方向和 BlobHeatmap 非方阵转置，关闭 WebglHeatmap 默认镜像，并按 1..1024 示例范围校准两种热力图色阶与点半径 |
+| 2026-08-20 | 声明式帧入口 | 五个渲染器接入 `frame` prop，接入代码从「建 ref + useEffect + `sitData({ wsPointData })`」降为一个 prop |
+| 2026-08-20 | 后端参数参考 | `API_REFERENCE` 覆盖全部根导出、构造 options、方法参数与返回结构，并标注存储、导出、实时通道的已知限制 |

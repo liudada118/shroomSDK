@@ -9,8 +9,8 @@
  * 2. 可复用：55 个场景组件用的是同一套变换，差别只在参数，
  *    提取之后它们才可能收敛成一个渲染器。
  *
- * 变换顺序与原实现逐字对应，不做任何"顺手优化"——
- * 一致性验证通过之前，任何改动都会污染基准。
+ * 数据变换顺序与原实现对应；显示坐标统一按 SDK 的 row-major 契约生成，
+ * 修正旧场景里规则矩阵的行列换轴和上下翻转。
  */
 
 // 扩展名必须写全 —— 这一层要能被裸 Node import（`scripts/smoke-core.mjs`
@@ -65,7 +65,7 @@ export function buildPointGridBasePositions({
         const offset = index * 3;
         result[offset] = (Number(point[0]) - centerX) * scale;
         result[offset + 1] = 0;
-        result[offset + 2] = -(Number(point[1]) - centerY) * scale;
+        result[offset + 2] = (Number(point[1]) - centerY) * scale;
       });
       return result;
     }
@@ -75,9 +75,9 @@ export function buildPointGridBasePositions({
   for (let row = 0; row < amountX; row += 1) {
     for (let col = 0; col < amountY; col += 1) {
       const offset = index * 3;
-      result[offset] = row * separation - ((amountX - 1) * separation) / 2;
+      result[offset] = col * separation - ((amountY - 1) * separation) / 2;
       result[offset + 1] = 0;
-      result[offset + 2] = col * separation - ((amountY - 1) * separation) / 2;
+      result[offset + 2] = row * separation - ((amountX - 1) * separation) / 2;
       index += 1;
     }
   }

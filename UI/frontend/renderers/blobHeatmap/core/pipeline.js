@@ -30,16 +30,13 @@
 /**
  * 把一帧铺成带屏幕坐标的点表。
  *
- * ⚠️ **坐标公式照抄，它是错位的。** 原件写的是
+ * 原件把行下标用于 X、列下标用于 Y，导致非方阵发生转置并且边缘越界。
+ * SDK 统一采用 row-major 显示约定：列控制 X、行控制 Y，第 0 行显示在顶部。
  *
  * ```js
- * obj.x = i * canvas.width  / width      // i 走 0..height-1，却除以 width
- * obj.y = j * canvas.height / height     // j 走 0..width-1， 却除以 height
+ * obj.x = column * canvas.width / width
+ * obj.y = row * canvas.height / height
  * ```
- *
- * 行下标配的是宽、列下标配的是高 —— 方阵（32×32，主应用绝大多数情况）看不出来，
- * 但 `carCol` 的 10×9 会既转置又缩放不匀（x 最多到画布的 0.8，y 正好铺满一格
- * 出界）。搬家不改观感，所以逐字保留；要正过来就是换一条公式的事。
  *
  * @param {number[]} values 一帧原始数据。
  * @param {number} width 矩阵宽。
@@ -50,12 +47,12 @@
  */
 export function buildBlobPoints(values, width, height, canvasWidth, canvasHeight) {
   const points = [];
-  for (let i = 0; i < height; i += 1) {
-    for (let j = 0; j < width; j += 1) {
+  for (let row = 0; row < height; row += 1) {
+    for (let column = 0; column < width; column += 1) {
       points.push({
-        x: (i * canvasWidth) / width,
-        y: (j * canvasHeight) / height,
-        value: values[i * width + j],
+        x: (column * canvasWidth) / width,
+        y: (row * canvasHeight) / height,
+        value: values[row * width + column],
       });
     }
   }

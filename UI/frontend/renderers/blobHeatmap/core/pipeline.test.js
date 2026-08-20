@@ -1,11 +1,11 @@
 /**
- * renderers/blobHeatmap/core/pipeline.test.js - 与原实现的差分测试
+ * renderers/blobHeatmap/core/pipeline.test.js - 帧处理与 row-major 布局测试
  *
- * 参照物是 `client/src/components/heatmap/canvas.jsx` 的 `generateData`（64-136）
- * 与 `draw`（166-199）。下面把这两段**逐字**内联成 `reference*`，再断言新实现
- * 点对点相同 —— 这是「搬家不改画面」这句话的证据，不是复述。
+ * 参照物是 `client/src/components/heatmap/canvas.jsx` 的数据处理与分桶逻辑。
+ * 原实现的行列坐标写反，这里按 SDK 的 row-major 显示契约修正坐标参照。
  *
- * 最要紧的一条是 `死运算删掉之后逐点相同`：它把「那 50 行确实没人读」这件事钉死。
+ * 最要紧的一条是 `死运算删掉之后值与顺序不变`：它把「那 50 行确实没人读」
+ * 以及坐标按 row-major 修正这两件事钉死。
  */
 
 import { describe, expect, it } from 'vitest';
@@ -15,7 +15,8 @@ import { buildBlobPoints, frameStats, groupByAlpha } from './pipeline.js';
 /* ── 原实现的逐字内联 ────────────────────────────────────────────── */
 
 /**
- * `canvas.jsx:64-136` 的 `generateData`，逐字保留那条死链再取原始 `arr` 铺点。
+ * `canvas.jsx:64-136` 的 `generateData` 数据链，保留死链验证，
+ * 但将铺点坐标改为 SDK 的 row-major 契约。
  *
  * @param {number[]} arr 一帧。
  * @param {number} width 宽。
@@ -37,8 +38,8 @@ function referenceGenerateData(arr, width, height, canvas, thresholds) {
   for (let i = 0; i < height; i += 1) {
     for (let j = 0; j < width; j += 1) {
       const obj = {};
-      obj.x = (i * canvas.width) / width;
-      obj.y = (j * canvas.height) / height;
+      obj.x = (j * canvas.width) / width;
+      obj.y = (i * canvas.height) / height;
       obj.value = arr[i * width + j];
       data.push(obj);
     }
@@ -73,7 +74,7 @@ function makeFrame(length) {
 describe('buildBlobPoints', () => {
   const canvas = { width: 648, height: 648 };
 
-  it('死运算删掉之后逐点相同（32×32）', () => {
+  it('死运算删掉之后值与顺序不变，坐标按 row-major 铺开（32×32）', () => {
     const frame = makeFrame(1024);
     const expected = referenceGenerateData(frame, 32, 32, canvas, {
       valuef1: 2, valuelInit1: 2,
@@ -95,27 +96,26 @@ describe('buildBlobPoints', () => {
     });
   });
 
-  it('carCol 的 10×9 也逐点相同', () => {
+  it('非方阵按 row-major 坐标铺点，不转置行列', () => {
     const frame = makeFrame(90);
-    const expected = referenceGenerateData(frame, 10, 9, canvas, {
-      valuef1: 2, valuelInit1: 2,
-    });
-    expect(buildBlobPoints(frame, 10, 9, canvas.width, canvas.height))
-      .toEqual(expected);
+    const points = buildBlobPoints(frame, 10, 9, 100, 90);
+
+    expect(points[0]).toEqual({ x: 0, y: 0, value: frame[0] });
+    expect(points[9]).toEqual({ x: 90, y: 0, value: frame[9] });
+    expect(points[10]).toEqual({ x: 0, y: 10, value: frame[10] });
+    expect(points[89]).toEqual({ x: 90, y: 80, value: frame[89] });
   });
 
   it('点数 = height × width', () => {
     expect(buildBlobPoints(makeFrame(90), 10, 9, 100, 100)).toHaveLength(90);
   });
 
-  it('坐标公式的错位照抄下来了：行下标配宽、列下标配高', () => {
-    // 10 宽 9 高：i 走到 8，x 最大 8*100/10 = 80（到不了 100）；
-    // j 走到 9，y 最大 9*100/9 = 100（正好出界一格）。
+  it('横向使用列下标，纵向使用行下标', () => {
     const points = buildBlobPoints(makeFrame(90), 10, 9, 100, 100);
     const xs = points.map((p) => p.x);
     const ys = points.map((p) => p.y);
-    expect(Math.max(...xs)).toBe(80);
-    expect(Math.max(...ys)).toBe(100);
+    expect(Math.max(...xs)).toBe(90);
+    expect(Math.max(...ys)).toBeCloseTo(800 / 9);
   });
 
   it('取数下标是 i * width + j —— 非方阵下越界的那些是 undefined，不是 0', () => {

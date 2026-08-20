@@ -36,7 +36,7 @@ test('all five demos expose a params JSON editor and no live generated frame', (
 
   assert.match(source, /function ParamsEditor/)
   assert.match(source, /应用参数/)
-  assert.match(source, /Ctrl\+Enter/)
+  assert.match(source, /event\.ctrlKey \|\| event\.metaKey\) && event\.key === 'Enter'/)
   assert.equal((source.match(/<ParamsEditor/g) || []).length, 5)
   assert.doesNotMatch(source, /useLiveFrame|setInterval|createMatrixFrame/)
 })
@@ -65,4 +65,50 @@ test('renderer demo defaults expose common public tuning fields', () => {
   ]) {
     assert.match(source, new RegExp(`${field}:`), `missing documented params field: ${field}`)
   }
+})
+
+test('heatmap demos scale the sequential 32x32 frame without saturating the canvas', () => {
+  const source = readFileSync(
+    new URL('../docs/.vitepress/theme/components/MatrixRendererDemos.jsx', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(
+    source,
+    /const WEBGL_HEATMAP_DEFAULTS = \{[\s\S]*?radius: 10,[\s\S]*?max: 1024,/,
+  )
+  assert.match(
+    source,
+    /const BLOB_HEATMAP_DEFAULTS = \{[\s\S]*?radius: 8,[\s\S]*?max: 1024,/,
+  )
+  assert.equal((source.match(/max="2048"/g) || []).length, 2)
+})
+
+test('renderer demos collapse params and use a compact stage without clipping the num canvas', () => {
+  const styles = readFileSync(
+    new URL('../docs/.vitepress/theme/components/matrix-renderer-demos.css', import.meta.url),
+    'utf8',
+  )
+  const componentDemo = readFileSync(
+    new URL('../docs/.vitepress/theme/components/ComponentDemo.jsx', import.meta.url),
+    'utf8',
+  )
+  const rendererDemos = readFileSync(
+    new URL('../docs/.vitepress/theme/components/MatrixRendererDemos.jsx', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(rendererDemos, /<details className="matrix-params-editor">/)
+  assert.match(styles, /min-height:\s*100px/)
+  assert.match(styles, /max-height:\s*180px/)
+  assert.match(styles, /\.matrix-renderer-stage\s*\{[^}]*height:\s*360px/s)
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.matrix-renderer-stage\s*\{[^}]*height:\s*340px/)
+  assert.match(styles, /\.matrix-renderer-stage \.maxNum\s*\{[^}]*inset:\s*0/s)
+  assert.match(styles, /\.matrix-renderer-stage \.canvasNum \.threeBoxF\s*\{[^}]*width:\s*min\(100%, 340px\)[^}]*height:\s*auto[^}]*aspect-ratio:\s*1/s)
+  assert.match(styles, /\.matrix-renderer-stage \.canvasNum \.threeBoxF canvas\s*\{[^}]*width:\s*100%[^}]*height:\s*100%/s)
+  assert.match(componentDemo, /height:\s*460/)
+  assert.match(rendererDemos, /heightScale:\s*0\.5/)
+  assert.match(rendererDemos, /colorMax:\s*2560/)
+  assert.match(rendererDemos, /step="20"/)
+  assert.match(rendererDemos, /displaySize:\s*'min\(100%, 340px\)'/)
 })

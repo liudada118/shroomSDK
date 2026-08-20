@@ -24,6 +24,17 @@ export const RENDERER_PROPS = {
   data: '可变数据源引用（ref），高频帧数据经由它读取，绕开 setState',
   local: '国际化标记，true 表示由外层托管图表回调',
   params: '渲染器参数对象，来自 manifest 的 display.renderers[].params',
+  // ---- 2026-08-20 追加的两个声明式帧入口 ----
+  //
+  // 契约原本只有命令式喂数据这一条路（ref + `sitData({ wsPointData })`）。
+  // 那对宿主是合适的——它本来就持有 ref 去调 `sitValue` / `reset`；但对只想
+  // 画一个矩阵的外部使用方是四步样板代码，且 `wsPointData` 这个名字无从得知。
+  //
+  // 两条通路共存，不是替换：`frame` 变化时推一帧，其余能力仍走 ref。
+  // 名字刻意不叫 `data` —— 那个键已经被"宿主回调 ref"占了（见上一行），
+  // 复用会让 `props.data?.current?.changeData` 那三处静默失效。
+  frame: '声明式帧数据，number[] / TypedArray / { wsPointData }，变化时推给 sitData',
+  backFrame: '声明式第二通道帧数据，语义同 frame，仅暴露 backData 的渲染器实现',
   handleChartsBody: '主图表数据回调',
   handleChartsBody1: '副图表数据回调',
   changeStateData: '向上回写状态',

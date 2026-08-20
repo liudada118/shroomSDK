@@ -8,35 +8,51 @@ aside: false
 
 ## 实时示例
 
-示例默认输入 32×32 的 `[1, 2, ..., 1024]`，可直接编辑 `params` JSON；拖动色阶上限会重新绘制当前帧。
+示例默认输入 32×32 的 `[1, 2, ..., 1024]`，因此色阶上限默认为 `1024`；可直接编辑 `params` JSON，拖动色阶上限会重新绘制当前帧。
 
 <UiComponentDemo name="BlobHeatmapRenderer" />
 
 ## 最小用法
 
+传 `frame` 即可，不需要 ref：
+
 ```jsx
-import { useEffect, useRef } from 'react'
 import BlobHeatmapRenderer from 'shroom-backend-sdk/UI/frontend/renderers/blobHeatmap/react/BlobHeatmapRenderer.jsx'
 
 export function BlobPressure({ matrix }) {
-  const rendererRef = useRef(null)
-
-  useEffect(() => {
-    rendererRef.current?.sitData({ wsPointData: matrix }, false)
-  }, [matrix])
-
   return (
     <BlobHeatmapRenderer
-      ref={rendererRef}
+      frame={matrix}
       params={{ dataWidth: 32, dataHeight: 32, canvasScale: 0.55, radius: 24, max: 255 }}
     />
   )
 }
 ```
 
+导出画布（`bthClickHandle` 返回 canvas）仍走 ref，两条通路可以同时用：
+
+```jsx
+const rendererRef = useRef(null)
+const canvas = rendererRef.current?.bthClickHandle(peakFrame)
+return <BlobHeatmapRenderer ref={rendererRef} frame={matrix} />
+```
+
+## 声明式 props
+
+| prop | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `frame` | `number[]` / `TypedArray` / `{ wsPointData }` | 矩阵帧，变化时自动推给 `sitData` |
+| `params` | `object` | 渲染参数，见下方[关键参数](#关键参数) |
+| `data` | `ref` | 宿主回调容器，只用到 `changeData`；不传则不推统计 |
+
+空数组会被丢弃（不清屏），声明式通路同样如此。改 `params` 时当前 `frame` 会用新参数重画一次 —— 这一点与命令式通路不同，后者要等下一帧。
+
+`frame` 按引用比较：**原地修改同一个数组不会触发重画**，高频通路请每帧给新数组，或改用 ref 上的 `sitData`。
+
 ## 输入数据
 
 - `dataWidth × dataHeight` 必须与一维数组长度匹配，数据按行展开。
+- 第 0 行显示在上方，每行从左到右，不做旋转、镜像或转置。
 - 建议输入 0 到固定上限之间的 normalized matrix；无效项应在数据层转成 0。
 - 实时与回放共享同一输入结构，Canvas 调色不会修改原数组。
 

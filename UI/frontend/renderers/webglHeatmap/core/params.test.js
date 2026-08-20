@@ -3,8 +3,7 @@
  *
  * 重点只有两条：
  *
- * 1. **`bed4096` 预设逐字等于原件写死的那组值。** 主应用两个渲染点都用它，这条
- *    红了就意味着搬家改了画面。
+ * 1. **`bed4096` 保留原件尺寸和阈值，但方向遵循 row-major 契约。**
  * 2. **归一化之后每个字段都有值。** 渲染器与 pipeline 里没有一处写 `?? 默认值`，
  *    全靠这里兜底。
  */
@@ -31,7 +30,7 @@ describe('normalizeWebglHeatmapParams', () => {
     });
   });
 
-  it('默认值就是原件写死的那组', () => {
+  it('默认值保留通用参数，但默认关闭会改变输入顺序的镜像', () => {
     const params = normalizeWebglHeatmapParams();
     expect(params.dataWidth).toBe(64);
     expect(params.dataHeight).toBe(64);
@@ -41,7 +40,7 @@ describe('normalizeWebglHeatmapParams', () => {
     expect(params.max).toBe(200);
     expect(params.valueScale).toBe(1.8);
     expect(params.edgeClear).toEqual({ keepFrom: 6, keepTo: 58 });
-    expect(params.mirrorX).toBe(true);
+    expect(params.mirrorX).toBe(false);
     expect(params.minFrameLength).toBe(4096);
   });
 
@@ -62,14 +61,14 @@ describe('normalizeWebglHeatmapParams', () => {
     expect(normalizeWebglHeatmapParams({ edgeClear: false }).edgeClear).toBeNull();
   });
 
-  it('mirrorX 显式传 false 才关，缺省是开', () => {
-    expect(normalizeWebglHeatmapParams({}).mirrorX).toBe(true);
-    expect(normalizeWebglHeatmapParams({ mirrorX: false }).mirrorX).toBe(false);
+  it('mirrorX 缺省关闭，只有显式传 true 才镜像', () => {
+    expect(normalizeWebglHeatmapParams({}).mirrorX).toBe(false);
+    expect(normalizeWebglHeatmapParams({ mirrorX: true }).mirrorX).toBe(true);
   });
 });
 
 describe('LEGACY_PRESETS', () => {
-  it('bed4096 归一化后逐字等于原件的写死值', () => {
+  it('bed4096 也保持 row-major 原顺序', () => {
     const params = normalizeWebglHeatmapParams(LEGACY_PRESETS.bed4096);
     expect(params).toMatchObject({
       dataWidth: 64,
@@ -80,7 +79,7 @@ describe('LEGACY_PRESETS', () => {
       max: 200,
       filter: 0,
       valueScale: 1.8,
-      mirrorX: true,
+      mirrorX: false,
       minFrameLength: 4096,
     });
     expect(params.edgeClear).toEqual({ keepFrom: 6, keepTo: 58 });

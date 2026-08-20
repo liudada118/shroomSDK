@@ -53,8 +53,8 @@ const DEFAULTS = {
    * `./pipeline.js` 的 `clearEdges` 说明 —— 那是现在屏幕上的样子。
    */
   edgeClear: { keepFrom: 6, keepTo: 58 },
-  /** 左右镜像。 */
-  mirrorX: true,
+  /** 左右镜像。默认关闭，保证输入矩阵按 row-major 原顺序显示。 */
+  mirrorX: false,
   /** 喂进来的帧至少要这么长才认，短了整帧丢弃（原件写死 4096）。 */
   minFrameLength: 4096,
   /** 两条曲线的滑窗长度。 */
@@ -119,8 +119,8 @@ export function normalizeWebglHeatmapParams(input = {}) {
 /**
  * 预设。
  *
- * - `bed4096` 是**唯一的迁移预设** —— 逐字等于 `Canvas4096WebGL` 现在的行为，
- *   主应用两个渲染点都用它。
+ * - `bed4096` 是**唯一的迁移预设** —— 尺寸和阈值来自 `Canvas4096WebGL`，
+ *   但方向统一为 row-major；反向安装的硬件可显式传 `mirrorX: true`。
  * - `plain` 不对应任何原实现，是给二开的起点：喂什么画什么，不清边、不镜像、
  *   不缩放。新增预设不改任何既有画面。
  */
@@ -135,7 +135,7 @@ export const LEGACY_PRESETS = {
     filter: 0,
     valueScale: 1.8,
     edgeClear: { keepFrom: 6, keepTo: 58 },
-    mirrorX: true,
+    mirrorX: false,
     minFrameLength: 4096,
   },
   plain: {

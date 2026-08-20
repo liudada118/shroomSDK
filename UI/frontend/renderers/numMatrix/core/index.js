@@ -23,6 +23,7 @@ export {
   deriveGrid,
   normalizeNumMatrixParams,
   paramsFromManifest,
+  resolveNumMatrixTuning,
 } from './params.js';
 
 export {

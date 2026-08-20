@@ -47,6 +47,9 @@ export const PARAM_RANGES = {
   order: { min: 0, max: 16 },
   fps: { min: 1, max: 120 },
   separation: { min: 1, max: 1000 },
+  heightScale: { min: 0, max: 10 },
+  colorMax: { min: 1, max: 65535 },
+  filterMin: { min: 0, max: 65535 },
 };
 
 function clampInteger(value, fallback, range) {
@@ -61,6 +64,15 @@ function clampInteger(value, fallback, range) {
   if (rounded < range.min) return range.min;
   if (rounded > range.max) return range.max;
   return rounded;
+}
+
+function clampOptionalNumber(value, range) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  if (parsed < range.min) return range.min;
+  if (parsed > range.max) return range.max;
+  return parsed;
 }
 
 /**
@@ -121,7 +133,20 @@ export function normalizePointGridParams(params = {}) {
     back,
     fps: clampInteger(params.fps, DEFAULT_FPS, PARAM_RANGES.fps),
     separation: clampInteger(params.separation, DEFAULT_SEPARATION, PARAM_RANGES.separation),
+    heightScale: clampOptionalNumber(params.heightScale, PARAM_RANGES.heightScale),
+    colorMax: clampOptionalNumber(params.colorMax, PARAM_RANGES.colorMax),
+    filterMin: clampOptionalNumber(params.filterMin, PARAM_RANGES.filterMin),
     points: normalizePoints(params.points),
+  };
+}
+
+export function resolvePointGridTuning(tuning = {}, params = {}) {
+  const normalized = normalizePointGridParams(params);
+  return {
+    ...tuning,
+    value1: normalized.heightScale ?? tuning.value1,
+    valuej1: normalized.colorMax ?? tuning.valuej1,
+    valuef1: normalized.filterMin ?? tuning.valuef1,
   };
 }
 
