@@ -7,7 +7,7 @@
 在你的实验项目里执行：
 
 ```powershell
-pnpm add file:E:\ShroomSDK
+pnpm add file:<你的 SDK 路径>
 ```
 
 使用：
@@ -106,7 +106,7 @@ pnpm sdk:serial-demo -- --mock
 ### 前端 UI 组件
 
 ```powershell
-pnpm add file:E:\ShroomSDK
+pnpm add file:<你的 SDK 路径>
 pnpm add react react-dom antd @ant-design/icons mobx mobx-react react-i18next styled-components sass
 pnpm add three @react-three/fiber @react-three/drei
 ```
@@ -125,7 +125,7 @@ import { TerrainMap } from 'shroom-backend-sdk/UI/render';
 
 ```jsx
 import { MatrixRenderers } from 'shroom-backend-sdk/UI'
-import NumMatrixRenderer from 'shroom-backend-sdk/UI/frontend/renderers/numMatrix/react/NumMatrixRenderer.jsx'
+import NumMatrixRenderer from 'shroom-backend-sdk/renderers/numMatrix'
 
 MatrixRenderers.registerBuiltinRenderers()
 ```

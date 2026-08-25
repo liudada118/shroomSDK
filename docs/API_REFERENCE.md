@@ -121,9 +121,10 @@ const session = await sdk.open({
 
 通道名可以是任意字符串，`sit` / `back` / `head` 只是约定；它会原样出现在 frame 的 `channel` 字段和采集记录里。
 
+多通道是**串行**打开的；中途失败会先关掉已打开的端口再抛错，不会留下占着设备又无法通过 session 关闭的孤儿端口。
+
 ::: warning 当前限制
-- 多通道是**串行**打开的，第二个失败时第一个不会回滚关闭。
-- serialport 的 `dataBits` / `stopBits` / `parity` / `rtscts` / `highWaterMark` 目前无法透传，只有 `baudRate` 生效。
+serialport 的 `dataBits` / `stopBits` / `parity` / `rtscts` / `highWaterMark` 目前无法透传，只有 `baudRate` 生效。
 :::
 
 ## SensorSession
@@ -141,12 +142,26 @@ const session = await sdk.open({
 | `captureStart` / `captureStop` | 采集记录 | 采集开关 |
 | `channelClose` | `{ channel, portPath }` | 单个通道关闭 |
 | `close` | — | `close()` 执行完毕 |
-| `error` | `{ channel, error }` | 串口报错 |
+| `error` | `{ channel, error, phase? }` | 串口报错，或帧处理各阶段出错 |
 
-::: danger 必须监听 error
-`error` 是 `EventEmitter` 的保留事件名。没有监听者时 Node 会直接抛出，进程退出。挂上 `session.on('error', ...)` 不是可选项。
+### 错误处理
 
-同理，协议解析抛错目前**没有**被 `handleRawFrame` 捕获，会从串口 `data` 回调冒泡上去。见下方[线序](#线序)里必然触发这条的三个 profile。
+**一帧脏数据不会终止进程。** `handleRawFrame` 的四个阶段各自独立捕获，`error` 事件的 `phase` 指明出错位置：
+
+| `phase` | 含义 | 后果 |
+| :--- | :--- | :--- |
+| 无 | 串口自身报错 | 由 serialport 决定 |
+| `rawFrame` | `rawFrame` 监听器抛错 | 继续解析 |
+| `parse` | 协议解析或 `frameProcessor` 抛错 | **丢这一帧**，下一帧照常处理 |
+| `frame` | `frame` 监听器抛错 | 不影响入库 |
+| `capture` | 入库失败 | 继续接收后续帧 |
+
+解析失败时 `rawFrame` 事件**仍然会发**——它是这种情况下唯一的排障线索。
+
+::: tip error 没有监听者时不会崩
+`error` 是 `EventEmitter` 的保留事件名，通常没有监听者就直接抛出。本 SDK 在发之前先查监听者数量，没有时降级为一条 `console.error` 提示，不会终止进程，也不会静默吞掉。
+
+即便如此仍**建议挂上** `session.on('error', ...)`：控制台提示只够定位，不够处理。
 :::
 
 ### 方法
@@ -234,28 +249,35 @@ const registry = new ProtocolRegistry(profiles, { lineOrders, extraLineOrders })
 - **函数** —— 直接调用，签名 `(data, context) => number[]`，`context` 含 `profile`、`channel` 与合并后的 `lineOrderOptions`。
 - **字符串** —— 去线序注册表里查；查不到**抛错**。
 
-::: danger 内置线序注册表是空的
-`PROJECT_LINE_ORDER_NAMES` 是 `[]`：`createProjectLineOrderRegistry()` 不注册任何内置线序。
+### 内置线序
 
-因此 `hand`、`handSinglePoint`、`smallBed12B` 这三个 profile 在第一帧到达时就会抛
-`line order "jqbed" is not registered`。抛点在串口 `data` 回调里，没有被捕获，会终止进程。
+`PROJECT_LINE_ORDER_NAMES` 为 `['handSinglePoint', 'jqbed']`，两个都随包提供，无需额外配置。
 
-用这三个 profile 必须自己提供处理函数：
+| 名字 | 用在哪 | 做什么 |
+| :--- | :--- | :--- |
+| `jqbed` | `hand`、`smallBed12B` | 前 15 行上下翻转，再整体挪到末尾。写死 32 列 |
+| `handSinglePoint` | `handSinglePoint` | 按「中段正序 + 前段倒序 + 尾段」三段重排 1024 点 |
+
+两者都是纯重排：保长度、不增删值、不修改入参。
+
+要覆盖内置实现（设备批次差异导致走线不同）时同名注入即可，**使用方的实现优先**：
 
 ```js
 const sdk = new ShroomSensorSDK({
   extraLineOrders: {
-    jqbed: (data) => data,             // 换成实际的重排实现
-    handSinglePoint: (data) => data,
+    jqbed: (data, context) => myReorder(data),
   },
 });
 ```
 
-或者在 profile 里直接给函数，绕开注册表：
+也可以在 profile 里直接给函数，绕开注册表：
 
 ```js
 sdk.registerProfile('hand', { lineOrder: (data) => data });
 ```
+
+::: tip 加 profile 时别忘了线序实现
+`tests/backend-line-orders.test.mjs` 有一条断言会检查「声明了线序名的 profile，那个名字必须真的注册过」。写了名字没写实现会在测试阶段被拦下，而不是等到客户接上设备的第一帧。
 :::
 
 ## LineOrderRegistry

@@ -51,7 +51,13 @@ flowchart LR
   F --> G["ReplayService / CsvExporter"]
 ```
 
-前端 UI 组件不从 SDK 根入口加载，避免后端项目在 `require('shroom-backend-sdk')` 时引入 React 依赖。React 项目通过 `shroom-backend-sdk/UI/qxui` 或 `shroom-backend-sdk/UI/shroomui` 深路径导入 UI 组件。
+这条链路上的每一步都在 `handleRawFrame` 的独立 try/catch 里，`error` 事件的 `phase` 指明出错阶段（`rawFrame` / `parse` / `frame` / `capture`）。解析失败只丢当前帧，下一帧照常处理——采集程序不该因为一帧脏数据而退出。`error` 在没有监听者时降级为 `console.error` 而不是抛出（`EventEmitter` 对该事件名的默认行为是抛出，在 I/O 回调里即进程退出），但也不静默吞掉。
+
+线序实现随包提供（`src/line/builtinLineOrders.js`），逐字搬自主项目的 `openWeb.js`。上游 SDK 是从主项目根目录动态 require 线序的，抽成独立包时那条 require 指向包外被移除，而 profile 里的线序声明留着，导致三个 profile 首帧抛错——`tests/backend-line-orders.test.mjs` 现在断言「声明了线序名的 profile，那个名字必须真的注册过」，防止同类回归。
+
+前端 UI 组件不从 SDK 根入口加载，避免后端项目在 `require('shroom-backend-sdk')` 时引入 React 依赖。根 `package.json` 的 `exports` 为前端提供短路径（`shroom-backend-sdk/renderers/<id>`、`/core`、`/qxui`、`/shroomui`、`/render`），并把 `UI/render/index.d.ts` 接为 `types`。`UI/frontend` 子包自带的 exports 映射只服务子包直接消费者，根包这一层是给外部使用方的等价出口。
+
+`exports` 是收口动作：声明之后未列出的子路径全部被封死，所以目录型入口必须逐条显式声明（`./UI/*` 这类通配不会为目录补 `index.js`），且通配范围收窄到已发布子树，避免触达 `files` 用 `!UI/render/prototypes` 排除掉的迁移参考件。全部已文档化的旧深路径由 `tests/package-exports.test.mjs` 用 Node 真实解析器逐条守住，只能增不能减。
 
 ## UI 组件结构
 
@@ -101,6 +107,8 @@ flowchart LR
 
 五个渲染器同时提供声明式和命令式两条帧入口。声明式 `frame`（`pointGrid` 另有 `backFrame`）由 `renderers/shared/react/useDeclarativeFrame.js` 推给各自的 `sitData` / `backData`，入参归一化在 `core/framePayload.js`（普通数组原样透传不复制，TypedArray 转一次，`{ wsPointData }` 保留额外字段）。prop 名不用 `data` —— 该键已被宿主回调 ref 占用。会整场重建的三个渲染器把 `paramsKey` 作为重推标记，参数变化后当前帧会用新参数重画一次；`pointGrid` 的标记额外拼上 `spriteUrl`，因为贴图不在归一化参数里。命令式 ref 通路一个方法都没有移除，两条可以在同一个实例上同时用。
 
+点阵渲染器除等距网格外还支持按物理点位成形。`core/coordinateGrid.js` 把实测的稀疏坐标表（`{X,Y,Z}`，一个传感点一条）扩成与渲染网格等长的密集表，顺序是**先插值再补边**——与压力管线的 `interpSmall → addSide` 一致，因此第 N 个坐标与第 N 个压力值指向同一物理点位。参考实现 `carQXFbx.jsx` 的 `objdupli()` 是先补边，点数不同（16×16 / interp 2 / order 4 下 2304 与 1600），直接搬会让坐标与压力错位。坐标表的 `Z` 作为点的基础高度，压力叠加在它之上，弧面座垫与鞋垫起伏在无压力时即可见；`Z` 以整表均值为零点（实测值常带大偏置）并与 `X`/`Y` 共用缩放系数。`sparsePoints` 长度与 `num1 × num2` 不符时静默退回规则矩阵，而不是拿尺寸不符的表插值。
+
 React 渲染器以宿主容器为尺寸边界：Three.js 点阵通过 `ResizeObserver` 同步相机和画布，Canvas 热力图在宿主短边内调整 backing store 并重绘最后一帧。GLB 手模是显式传入的可选运行时资源，SDK 默认只渲染手部点云；参数变化或卸载后到达的旧模型会被丢弃并释放。
 
 地形曲面使用插值后的高密度几何体；网格层由 `buildTerrainWireSegments` 按输入矩阵的原始行列数独立生成，只连接有效区域的横向和纵向相邻点。网格不包含 Three.js 三角面线框的对角线，也不随插值倍数加密。
@@ -134,6 +142,12 @@ VitePress 文档通过 `UiComponentDemo.vue` 在客户端创建 React root，再
 | 2026-08-14 | 修复缺陷 | 统一 NumMatrix 与 PointGrid 的常规矩阵 row-major 方向，移除默认旋转和行列转置，并提供 `filterMin: 0` 原值展示配置 |
 | 2026-08-20 | 新增功能 | 五套矩阵渲染器新增声明式 `frame` / `backFrame` prop，命令式 ref 通路保持不变 |
 | 2026-08-20 | 文档更新 | `API_REFERENCE` 重写为参数级参考，补齐构造 options、方法签名、返回结构和已知限制 |
+| 2026-08-20 | 发布优化 | 根包新增 `exports` 映射，前端短路径由 7 段降为 2 段，旧深路径全量保留兼容 |
+| 2026-08-20 | 文档更新 | 补打包器配置（Vite / webpack）、peer deps 分组安装、五个渲染器参数表与静默钳制规则 |
+| 2026-08-21 | 新增功能 | `PointGridRenderer` 支持按空间位置渲染：稀疏实测坐标表自动插值，Z 作为点的基础高度 |
+| 2026-08-25 | 修复缺陷 | 补回 `jqbed` / `handSinglePoint` 内置线序，11 个 profile 全部可解析（此前 3 个首帧必崩） |
+| 2026-08-25 | 修复缺陷 | `handleRawFrame` 分阶段捕获异常，`error` 无监听者时降级提示，多通道打开失败回滚已开端口 |
+| 2026-08-25 | 测试补齐 | `src/` 从零测试到 69 项，覆盖解析、线序、清零、存储、回放与会话容错 |
 
 ## 项目进度
 
@@ -159,3 +173,7 @@ VitePress 文档通过 `UiComponentDemo.vue` 在客户端创建 React root，再
 | 2026-08-14 | 全渲染方向与热图色阶 | 修正 PointGrid 上下方向和 BlobHeatmap 非方阵转置，关闭 WebglHeatmap 默认镜像，并按 1..1024 示例范围校准两种热力图色阶与点半径 |
 | 2026-08-20 | 声明式帧入口 | 五个渲染器接入 `frame` prop，接入代码从「建 ref + useEffect + `sitData({ wsPointData })`」降为一个 prop |
 | 2026-08-20 | 后端参数参考 | `API_REFERENCE` 覆盖全部根导出、构造 options、方法参数与返回结构，并标注存储、导出、实时通道的已知限制 |
+| 2026-08-20 | 前端接入面收口 | 根包 `exports` 打通短路径与类型入口，`tests/package-exports.test.mjs` 锁死全部已文档化旧路径 |
+| 2026-08-20 | 渲染参数文档补齐 | numMatrix 由 6 项补到 60 余项（含 `canvas2d` / `webgl` 嵌套对象），handPoints 由 4 项补到 19 项，五页均写明取值范围钳制 |
+| 2026-08-21 | 空间位置点阵 | `core/coordinateGrid.js` 提供稀疏坐标表的插值与补边，点阵渲染器新增 `sparsePoints`，曲面传感器可按实测点位与自身起伏成形 |
+| 2026-08-25 | 数据链路可用性 | 内置线序补回、帧处理全程容错、端口回滚；客户第一步「数据联通」不再因单帧异常终止进程 |

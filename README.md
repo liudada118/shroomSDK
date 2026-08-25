@@ -1,13 +1,24 @@
 # Shroom SDK
 
-Standalone SDK package for Shroom sensor experiments.
+Standalone SDK package for Shroom sensor experiments. Despite the `-backend-` in the package name, this ships **both** halves:
+
+- **Backend** — serial read, protocol parsing, zero calibration, capture, replay, CSV export, and a client for the main app's HTTP/WebSocket API.
+- **Frontend** — 5 matrix renderers (`numMatrix`, `pointGrid`, `handPoints`, `webglHeatmap`, `blobHeatmap`), a Three.js terrain map, and 17 base UI components.
 
 This folder is intended to be installed by lab/demo projects without importing `E:\shroom1` internals.
+
+## Quick Start
+
+No hardware needed — this runs the full serial chain against mock data:
+
+```powershell
+pnpm sdk:serial-demo -- --mock
+```
 
 ## Install In A Lab Project
 
 ```powershell
-pnpm add file:E:\ShroomSDK
+pnpm add file:<path-to-this-folder>
 ```
 
 Use it:
@@ -76,22 +87,52 @@ pnpm sdk:serial-demo -- --mock
 - `ProtocolRegistry`: sensor profile and parser registry.
 - `ZeroCalibrator`: baseline capture and zero subtraction helper.
 
-## Frontend UI Components
+## Frontend Components
 
-React UI source components are exported from `UI/qxui`:
+### Matrix renderers
+
+Five renderers consuming a normalized matrix. Pass the frame as a prop — no ref needed:
 
 ```jsx
-import { DynamicReportCard, ComparePlay } from 'shroom-backend-sdk/UI/qxui';
-import { ChartPanel, MetricValue } from 'shroom-backend-sdk/UI/shroomui';
-import { TerrainMap } from 'shroom-backend-sdk/UI/render';
+import NumMatrixRenderer from 'shroom-backend-sdk/renderers/numMatrix';
+import PointGridRenderer from 'shroom-backend-sdk/renderers/pointGrid';
+import HandPointsRenderer from 'shroom-backend-sdk/renderers/handPoints';
+import WebglHeatmapRenderer from 'shroom-backend-sdk/renderers/webglHeatmap';
+import BlobHeatmapRenderer from 'shroom-backend-sdk/renderers/blobHeatmap';
+
+<BlobHeatmapRenderer frame={matrix} params={{ dataWidth: 32, dataHeight: 32 }} />
 ```
 
-Install UI peer dependencies in the frontend project when using these components:
+| Renderer | Output |
+| :--- | :--- |
+| `numMatrix` | Numeric grid via Canvas 2D, WebGL, or Three.js sprites |
+| `pointGrid` | Rotatable 3D point cloud, height + color by pressure |
+| `handPoints` | Glove pressure on a 3D hand point cloud with IMU rotation |
+| `webglHeatmap` | WebGL blob heatmap for dense matrices |
+| `blobHeatmap` | Canvas 2D soft blob heatmap |
 
-```powershell
-pnpm add react react-dom antd @ant-design/icons mobx mobx-react react-i18next styled-components sass
-pnpm add three @react-three/fiber @react-three/drei
+Each renderer splits into `core/` (pure functions, no React/Three/DOM — testable in plain Node) and `react/`. Import the core alone with `shroom-backend-sdk/renderers/<id>/core`.
+
+### Other UI
+
+```jsx
+import { TerrainMap } from 'shroom-backend-sdk/render';       // Three.js pressure terrain
+import { DynamicReportCard } from 'shroom-backend-sdk/qxui';  // report + playback
+import { ChartPanel } from 'shroom-backend-sdk/shroomui';     // base components
 ```
+
+### Peer dependencies
+
+Install only what you use:
+
+| Using | Install |
+| :--- | :--- |
+| Backend only | nothing |
+| Matrix renderers | `react` `react-dom` `three` |
+| TerrainMap | the above + `@react-three/fiber` `@react-three/drei` |
+| qxui / shroomui | `react` `react-dom` `antd` `@ant-design/icons` `mobx` `mobx-react` `i18next` `react-i18next` `styled-components` `sass` |
+
+The package ships **uncompiled `.jsx` / `.scss`** so the host controls the React version. Most bundlers skip `node_modules` JSX by default — see the bundler config section in the docs site (`UI Components` page) for Vite and webpack snippets.
 
 ## Version
 

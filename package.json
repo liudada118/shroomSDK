@@ -4,6 +4,53 @@
   "description": "Standalone SDK for Shroom backend HTTP/WebSocket integration and local serial sensor experiments.",
   "main": "index.js",
   "type": "commonjs",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+
+    "./renderers": "./UI/frontend/renderers/index.js",
+    "./renderers/numMatrix": "./UI/frontend/renderers/numMatrix/react/NumMatrixRenderer.jsx",
+    "./renderers/pointGrid": "./UI/frontend/renderers/pointGrid/react/PointGridRenderer.jsx",
+    "./renderers/handPoints": "./UI/frontend/renderers/handPoints/react/HandPointsRenderer.jsx",
+    "./renderers/webglHeatmap": "./UI/frontend/renderers/webglHeatmap/react/WebglHeatmapRenderer.jsx",
+    "./renderers/blobHeatmap": "./UI/frontend/renderers/blobHeatmap/react/BlobHeatmapRenderer.jsx",
+    "./renderers/numMatrix/core": "./UI/frontend/renderers/numMatrix/core/index.js",
+    "./renderers/pointGrid/core": "./UI/frontend/renderers/pointGrid/core/index.js",
+    "./renderers/handPoints/core": "./UI/frontend/renderers/handPoints/core/index.js",
+    "./renderers/webglHeatmap/core": "./UI/frontend/renderers/webglHeatmap/core/index.js",
+    "./renderers/blobHeatmap/core": "./UI/frontend/renderers/blobHeatmap/core/index.js",
+
+    "./core": "./UI/frontend/core/index.js",
+    "./core/*": "./UI/frontend/core/*",
+    "./frontend": "./UI/frontend/index.js",
+    "./styles/*": "./UI/frontend/styles/*",
+
+    "./qxui": "./UI/qxui/index.js",
+    "./shroomui": "./UI/shroomui/index.js",
+    "./render": {
+      "types": "./UI/render/index.d.ts",
+      "default": "./UI/render/index.js"
+    },
+
+    "./UI": "./UI/index.js",
+    "./UI/qxui": "./UI/qxui/index.js",
+    "./UI/shroomui": "./UI/shroomui/index.js",
+    "./UI/render": {
+      "types": "./UI/render/index.d.ts",
+      "default": "./UI/render/index.js"
+    },
+    "./UI/frontend": "./UI/frontend/index.js",
+    "./UI/frontend/core": "./UI/frontend/core/index.js",
+    "./UI/frontend/renderers": "./UI/frontend/renderers/index.js",
+    "./UI/index.js": "./UI/index.js",
+    "./UI/frontend/*": "./UI/frontend/*",
+    "./UI/qxui/*": "./UI/qxui/*",
+    "./UI/shroomui/*": "./UI/shroomui/*",
+    "./UI/render/*": "./UI/render/*",
+
+    "./src/*.js": "./src/*.js",
+    "./src/*": "./src/*.js"
+  },
   "files": [
     "index.js",
     "src",

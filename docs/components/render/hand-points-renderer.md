@@ -17,7 +17,7 @@ aside: false
 传 `frame` 即可，不需要 ref：
 
 ```jsx
-import HandPointsRenderer from 'shroom-backend-sdk/UI/frontend/renderers/handPoints/react/HandPointsRenderer.jsx'
+import HandPointsRenderer from 'shroom-backend-sdk/renderers/handPoints'
 
 export function GlovePoints({ matrix }) {
   return (
@@ -59,12 +59,94 @@ return <HandPointsRenderer ref={rendererRef} frame={matrix} />
 
 ## 关键参数
 
+### 几何
+
 | 参数 | 类型 | 默认值 | 作用 |
 | :--- | :--- | :--- | :--- |
-| `sit` | `{ num1, num2, interp, order }` | 预设值 | 压力矩阵尺寸和插值 |
-| `pointTable` | `'gloves'` 或点位数组 | `'gloves'` | 选择手套点位表 |
+| `sit.num1` | `number` | `32` | 矩阵行数 |
+| `sit.num2` | `number` | `32` | 矩阵列数 |
+| `sit.interp` | `number` | `2` | 插值倍率 |
+| `sit.order` | `number` | `4` | 边缘补边阶数 |
+| `separation` | `number` | `100` | 点间距 |
+| `fps` | `number` | `10` | 统计上报节流频率（不是 rAF 的节流） |
+
+顶点数为 `(num1 × interp + order × 2) × (num2 × interp + order × 2)`。默认预设是 72×72 = 5184，`hand0205_147` 预设是 140×140 = 19600——**调大 `interp` 时顶点数按平方增长**。
+
+### 点表与管线选路
+
+| 参数 | 类型 | 默认值 | 作用 |
+| :--- | :--- | :--- | :--- |
+| `pointTable` | `'gloves' \| 'glovesAlt' \| 'hand147'` | `'gloves'` | 选择点位表 |
 | `maskMode` | `'gloves' \| 'hand147'` | `'gloves'` | 选择矩阵掩码规则 |
-| `modelUrl` | `string` | `''` | 可选 GLB 手模地址；留空时只渲染点云 |
+| `interpMode` | `'centered' \| 'ramp'` | `'centered'` | 插值实现 |
+| `maskSource` | `'mask' \| 'value'` | `'mask'` | 判定"这个点是不是手"依据掩码还是压力 |
+
+::: warning maskSource 是真实的行为差异
+`'mask'` 用**掩码**模糊后的值判定，`'value'` 用**压力**模糊后的值判定。走 `'value'` 时掩码会算一整套（插值 + 补边 + 高斯）却完全不参与判定，只有压力低于 `maskThreshold` 的点被藏起来。两种都是原实现的既有行为，没有统一——统一就是可见的画面变化。
+:::
+
+### 观感
+
+| 参数 | 类型 | 默认值 | 作用 |
+| :--- | :--- | :--- | :--- |
+| `pointSize` | `number` | `0.3125`（5/16） | 点精灵大小 |
+| `particleScale` | `[x, y, z]` 或 `number` | `[0.0011, 0.0011, 0.0011]` | 点云整体缩放；传单个数字等价于三轴相同 |
+| `particlePosition` | `[x, y, z]` 或 `number` | `[1.5, 1.1, 3]` | 点云整体位移 |
+| `rotationX` | `number` | `Math.PI` | 点云绕 X 轴旋转（弧度） |
+| `rotationZ` | `number` | `Math.PI` | 点云绕 Z 轴旋转（弧度） |
+| `pointSprite` | `string` | 包内圆点图 | 点精灵贴图 URL |
+
+### 掩码
+
+| 参数 | 类型 | 默认值 | 作用 |
+| :--- | :--- | :--- | :--- |
+| `maskBlur` | `number` | `1.2` | 掩码高斯模糊半径 |
+| `maskThreshold` | `number` | `50` | 判定阈值，低于此值的点会被藏起来 |
+| `hiddenY` | `number` | `-100000` | 被藏起来的点挪到的 Y 坐标（负值，移出视野） |
+
+### 手模与关节
+
+手模是**可选**的运行期资源，SDK 不内置 GLB。不传 `modelUrl` 时只渲染点云。
+
+| 参数 | 类型 | 默认值 | 作用 |
+| :--- | :--- | :--- | :--- |
+| `modelUrl` | `string` | `''` | GLB 手模地址；留空只渲染点云 |
+| `fingerBones` | `string[][]` | 见下 | 五指骨骼名，外层是手指、内层是该指从根到尖的骨节 |
+| `fingerRotationScale` | `number` | `-Math.PI / 2` | 关节旋转系数：`bone.rotation.z = 本值 × value` |
+
+`fingerBones` 默认对应 `hand1.glb` 的骨骼命名：
+
+```js
+[
+  ['Finger_01', 'Finger_02'],                  // 拇指只有两节
+  ['Finger_10', 'Finger_11', 'Finger_12'],
+  ['Finger_20', 'Finger_21', 'Finger_22'],
+  ['Finger_30', 'Finger_31', 'Finger_32'],
+  ['Finger_40', 'Finger_41', 'Finger_42'],
+]
+```
+
+取不到的骨骼在旋转时被**静默跳过**——换手模时若关节不动，先核对这张表的命名。
+
+### 内置预设
+
+`LEGACY_PRESETS` 提供三组经过逐帧一致性验证的参数，可从 core 层取用：
+
+```js
+import { LEGACY_PRESETS } from 'shroom-backend-sdk/renderers/handPoints/core'
+
+<HandPointsRenderer frame={matrix} params={LEGACY_PRESETS.hand0205_147} />
+```
+
+| 预设 | 点表 | 差异 |
+| :--- | :--- | :--- |
+| `hand0205` | `gloves` | 默认组合 |
+| `hand0205Alt` | `glovesAlt` | 仅换点位表，其余与 `hand0205` 相同 |
+| `hand0205_147` | `hand147` | `interp: 4`、`order: 6`、`pointSize: 0.125`、`maskSource: 'value'`、`maskBlur: 1.5`、`hiddenY: -1000` |
+
+### 取值范围
+
+超出范围会被**静默钳制**到边界，不报错也不警告：`num1`/`num2` 1~128、`interp` 1~8、`order` 0~16、`fps` 1~120、`separation` 1~1000、`pointSize` 0.001~100、`maskBlur` 0~20、`maskThreshold` 0~1e6、`hiddenY` -1e9~0。
 
 ## 公开命令
 

@@ -19,7 +19,7 @@ aside: false
 传 `frame` 即可，不需要 ref：
 
 ```jsx
-import PointGridRenderer from 'shroom-backend-sdk/UI/frontend/renderers/pointGrid/react/PointGridRenderer.jsx'
+import PointGridRenderer from 'shroom-backend-sdk/renderers/pointGrid'
 
 export function PressurePoints({ matrix }) {
   return (
@@ -81,10 +81,84 @@ return <PointGridRenderer ref={rendererRef} frame={matrix} backFrame={backMatrix
 | `heightScale` | `number` | 未设置 | 点阵高度倍率；越大峰值越高，设置 `0` 可显示为平面 |
 | `colorMax` | `number` | 未设置 | 色阶归一化上限；越小越快进入红色，越大越容易保留完整渐变 |
 | `filterMin` | `number` | 未设置 | 显式下限过滤；传 `0` 时保留原始矩阵数值 |
-| `points` | `Array<[x, y]>` | `null` | 物理点位表；给了就按实际点位布局，非法项被丢弃，全非法时退回规则矩阵 |
+| `points` | `Array<[x,y]>` / `Array<[x,y,z]>` | `null` | **已插值**的密集点位表，长度须等于渲染网格；`z` 作为该点基础高度 |
+| `sparsePoints` | `Array<{X,Y,Z}>` | `null` | **稀疏**实测坐标表，长度为 `sit.num1 × sit.num2`，渲染器自动插值到网格 |
 | `pointSprite` | `string` | 包内圆点图 | 点精灵贴图 URL；更换会整场重建 |
 
 取值范围会被静默钳制（`num1` / `num2` 上限 128，`interp` 上限 8，`order` 上限 16，`fps` 上限 120，`separation` 上限 1000，`heightScale` 上限 10，`colorMax` / `filterMin` 上限 65535）。超出范围不报错，按边界值渲染。
+
+## 按空间位置渲染
+
+规则矩阵按 `separation` 等距铺点，表达不了弧面座垫、脚型鞋垫这类**物理点位不规则**的传感器。传一张实测坐标表即可按真实形状摆点。
+
+```jsx
+// 实测导出的坐标表：一个传感点一条记录，行优先
+const seatCoordinates = [
+  { X: 3520.99, Y: -2410.32, Z: 0 },
+  { X: 3542.31, Y: -2419.34, Z: 0 },
+  // ... 共 sit.num1 × sit.num2 条
+]
+
+<PointGridRenderer
+  frame={matrix}
+  params={{
+    sit: { num1: 16, num2: 16, interp: 2, order: 4 },
+    sparsePoints: seatCoordinates,
+  }}
+/>
+```
+
+### 两个参数的分工
+
+| 参数 | 长度要求 | 谁来插值 |
+| :--- | :--- | :--- |
+| `sparsePoints` | `num1 × num2`（一个传感点一条） | 渲染器自动做 |
+| `points` | `deriveGridSize().total`（与渲染网格等长） | 调用方自己做好 |
+
+多数情况用 `sparsePoints`——实测表直接喂进去。两者都传时 `sparsePoints` 优先，因为它没被插值过、信息更完整。
+
+### 字段说明
+
+- **`X` / `Y`** 是平面位置。单位任意（mm、CAD 单位都可以），渲染器按整表的包围盒等比缩放到点阵范围，长边贴合、短边保持原始比例，所以长条形和异形传感器不会被拉成方形。
+- **`Z` 是该点的基础高度**，压力值**叠加在它之上**。曲面传感器靠它表达自身形状：座垫的弧度、鞋垫的起伏在没有压力时就已经可见。Z 以整表均值为零点（实测坐标常带大偏置），并与 X/Y 共用同一个缩放系数，所以起伏比例不随点阵尺寸漂移。
+- **字段可以是字符串**（`{ "X": "3528.398" }`）——实测导出常是这种格式，渲染器会转换。个别坏点归零而不是整表报废。
+
+不需要基础高度就把 `Z` 填 `0`（或省略），行为与规则矩阵一致。
+
+::: warning 长度必须精确匹配
+`sparsePoints` 的长度不等于 `sit.num1 × sit.num2` 时会被**静默忽略**，退回规则矩阵。这是有意的：用尺寸不符的坐标表插值出来的是一团乱麻，而形状明显不对（退成等距网格）更容易发现问题。
+
+改了 `num1` / `num2` 记得同步换坐标表。
+:::
+
+::: tip 插值顺序与压力管线对齐
+坐标扩展走的是「先插值、再补边」，与压力管线的 `interpSmall → addSide` 一致，因此第 N 个坐标与第 N 个压力值指向同一个物理点位。参考实现 `carQXFbx.jsx` 的 `objdupli()` 是反过来的（先补边），点数不同（16×16/interp2/order4：2304 vs 1600），直接搬会让坐标和压力错位。
+:::
+
+### 纯算法层
+
+坐标扩展是纯函数，可脱离 React 单独使用（比如在 Node 里预处理坐标表）：
+
+```js
+import {
+  expandCoordinateGrid,
+  toPointTable,
+} from 'shroom-backend-sdk/core'
+
+const dense = expandCoordinateGrid({
+  table: seatCoordinates,
+  rows: 16, cols: 16, interp: 2, order: 4,
+})
+const points = toPointTable(dense, { includeZ: true })   // 可直接作为 params.points
+```
+
+| 函数 | 作用 |
+| :--- | :--- |
+| `expandCoordinateGrid` | 插值 + 补边，输出与渲染网格等长的密集坐标表；输入不可用时返回 `null` |
+| `interpolateCoordinateTable` | 单独做双线性插值（三轴独立） |
+| `padCoordinateTable` | 单独做补边，越界处夹取最近边缘点而非补零 |
+| `isCoordinateTable` | 校验坐标表是否可用，可带长度要求 |
+| `toPointTable` | `{X,Y,Z}` 表转成 `[x,y]` / `[x,y,z]` 元组表 |
 
 ## 公开命令
 

@@ -18,10 +18,12 @@ features:
     details: 通过 BackendSdkClient 读取 /api/sdk/contract、打开串口、订阅实时数据、启动采集和读取 Display Systems metadata。
   - title: 本地直连串口
     details: 通过 ShroomSensorSDK 直接读取物理串口，走 SerialPort、DelimiterParser、ProtocolRegistry、ZeroCalibrator 和 CaptureStore。
+  - title: 五套矩阵渲染器
+    details: numMatrix 数值网格、pointGrid 三维点阵、handPoints 手部点云、webglHeatmap 与 blobHeatmap 两种热力图。传一个 frame prop 即可出图，每套都拆成无 React 依赖的 core 层和 React 层。
   - title: 前端 UI 组件
-    details: 通过 UI/render 提供 Three.js 矩阵地形渲染，通过 UI/qxui 提供动态报告和回放，通过 UI/shroomui 提供面板、抽屉、导出弹窗和工具栏等基础组件。
+    details: 通过 render 提供 Three.js 矩阵地形渲染，通过 qxui 提供动态报告和回放，通过 shroomui 提供面板、抽屉、导出弹窗和工具栏等基础组件。
   - title: 产品实验室友好
-    details: 实验项目可以 pnpm add file:E:\ShroomSDK，不需要 import E:\shroom1 内部模块。
+    details: 实验项目用 pnpm 直接从本地路径安装，不需要 import E:\shroom1 内部模块。
   - title: 可运行 Demo
     details: 提供 sdk:demo 和 sdk:serial-demo，分别验证后端链路和本地串口链路。
 ---

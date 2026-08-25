@@ -17,7 +17,7 @@ aside: false
 传 `frame` 即可，不需要 ref：
 
 ```jsx
-import BlobHeatmapRenderer from 'shroom-backend-sdk/UI/frontend/renderers/blobHeatmap/react/BlobHeatmapRenderer.jsx'
+import BlobHeatmapRenderer from 'shroom-backend-sdk/renderers/blobHeatmap'
 
 export function BlobPressure({ matrix }) {
   return (
@@ -64,8 +64,17 @@ return <BlobHeatmapRenderer ref={rendererRef} frame={matrix} />
 | `radius` | `number` | `50` | 阴影圆点半径 |
 | `max` | `number` | `600` | 色阶上限 |
 | `min` | `number` | `0` | 色阶下限 |
-| `canvasScale` | `number` | `0.6` | 画布边长相对宿主容器短边的倍率 |
+| `canvasScale` | `number` | `0.6` | 画布边长相对宿主容器短边的倍率，最终不超过宿主 |
+| `maxOpacity` | `number` | `0.9` | 着色 alpha 上限 |
+| `alphaFloor` | `number` | `0.7` | 着色 alpha **下限**。这是本渲染器"整体发糊、没有真正淡色区"的来源；想要通透感就调小它 |
+| `shadow` | `boolean` | `true` | 圆点是否带阴影。阴影就是那圈羽化，**关掉会什么都画不出来**（圆心画在画布外） |
 | `gradient` | 色标对象 | 内置色标 | 自定义颜色停止点 |
+
+取值范围会被**静默钳制**到边界，不报错也不警告：`dataWidth` / `dataHeight` 1~512、`radius` 1~400、`max` / `min` 上限 65535、`maxOpacity` 0.01~1、`alphaFloor` 0~1、`canvasScale` 0.05~4。
+
+::: tip radius 的实际尺寸
+画出来的圆连阴影一共是 `radius × 1.5` 那么大（阴影模糊半径固定为 `radius / 2`）。铺满不重叠时 `radius` 应明显小于相邻点间距。
+:::
 
 ## 公开命令
 

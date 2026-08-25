@@ -17,7 +17,7 @@ aside: false
 传 `frame` 即可，不需要 ref：
 
 ```jsx
-import WebglHeatmapRenderer from 'shroom-backend-sdk/UI/frontend/renderers/webglHeatmap/react/WebglHeatmapRenderer.jsx'
+import WebglHeatmapRenderer from 'shroom-backend-sdk/renderers/webglHeatmap'
 
 export function PressureHeatmap({ matrix }) {
   return (
@@ -65,9 +65,21 @@ return <WebglHeatmapRenderer ref={rendererRef} frame={matrix} />
 | `canvasWidth` / `canvasHeight` | `number` | `1024` | 内部绘制分辨率 |
 | `radius` | `number` | `24` | 热点半径 |
 | `max` | `number` | 预设值 | 色阶上限 |
+| `filter` | `number` | `0` | 下限：小于此值的点归零。对应侧栏 `valuef` 滑块 |
+| `valueScale` | `number` | `1.8` | 铺点时的数值缩放。与 `max` 是一对，等价于把满值阈值降到 `max / valueScale` |
+| `blurFactor` | `number` | `0.55` | 圆点实心区占半径的比例，其余线性羽化 |
 | `edgeClear` | `{ keepFrom, keepTo } \| null` | 预设值 | 边缘清零窗口 |
 | `mirrorX` | `boolean` | `false` | 是否水平镜像每一行；默认保持输入顺序 |
+| `minFrameLength` | `number` | `4096` | 帧长门槛，**短于此值的帧整帧丢弃且不报错** |
+| `chartWindow` | `number` | `20` | 侧栏滚动曲线窗口长度 |
+| `background` | `string` | 预设值 | 宿主容器底色 |
 | `displaySize` | `string` | `'80vh'` | 页面显示尺寸 |
+
+取值范围会被**静默钳制**到边界，不报错也不警告：`dataWidth` / `dataHeight` 1~512、`canvasWidth` / `canvasHeight` 16~4096、`radius` 1~256、`max` / `filter` 上限 65535、`valueScale` 0~100、`blurFactor` 0.01~1、`chartWindow` 2~600。
+
+::: warning 画面全黑先查 minFrameLength
+默认 `4096` 是给 64×64 矩阵定的。喂 32×32（1024 个点）时必须一并把它调到 `1024` 或更小，否则每一帧都会被静默丢弃。
+:::
 
 ## 公开命令
 
