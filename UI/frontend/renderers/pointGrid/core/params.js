@@ -11,6 +11,14 @@
  * 因此点阵渲染器只需要两类参数：标量几何参数 + 可选点位表。
  */
 
+// 稀疏实测坐标表的补边与插值。放在公共 core 层而不是本目录，是因为手部点云
+// 和数字矩阵将来同样需要它——曲面传感器不是点阵独有的问题。
+import {
+  expandCoordinateGrid,
+  isCoordinateTable,
+  toPointTable,
+} from '../../../core/coordinateGrid.js';
+
 /**
  * 单通道几何参数默认值。
  *
@@ -94,19 +102,49 @@ function normalizeChannel(channel = {}, defaults = DEFAULT_CHANNEL) {
 /**
  * 归一化点位表。
  *
- * 点位表来自 manifest 的 coordinateMap / pointOrder，形如 [[x, y], ...]。
- * 非法项直接丢弃而不是抛错——用户手工编辑的 manifest 出现个别坏点时，
+ * 支持三种输入：
+ *
+ * | 传入 | 处理 |
+ * | :--- | :--- |
+ * | `[[x, y], ...]` | 平面点位，原样使用 |
+ * | `[[x, y, z], ...]` | 第三个分量作为该点**基础高度**，压力在它之上叠加 |
+ * | `[{X, Y, Z}, ...]` | 实测坐标表（CAD / 扫描件的原始格式），自动转成元组 |
+ *
+ * 点位表来自 manifest 的 coordinateMap / pointOrder，或传感器实测导出。
+ * 非法项直接丢弃而不是抛错——用户手工编辑的表出现个别坏点时，
  * 应当降级渲染而不是让整个模块加载失败。
  *
+ * ⚠️ **这一层不做插值。** 稀疏实测表（16×16=256 条）要先经
+ * `core/coordinateGrid.js` 的 `expandCoordinateGrid()` 扩成与渲染网格等长，
+ * 否则长度对不上，`buildPointGridBasePositions` 会回落规则矩阵。
+ * 渲染器的 `sparsePoints` 参数会自动做这一步。
+ *
  * @param {Array} points 原始点位表。
- * @returns {Array<[number, number]> | null} 归一化点位表，无有效点时返回 null。
+ * @returns {Array<number[]> | null} 归一化点位表，无有效点时返回 null。
  */
 function normalizePoints(points) {
   if (!Array.isArray(points) || points.length === 0) return null;
+
   const normalized = points
-    .filter((point) => Array.isArray(point) && point.length >= 2)
-    .map(([x, y]) => [Number(x), Number(y)])
-    .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+    .map((point) => {
+      // 实测坐标表格式。字段常常是字符串，走 Number() 转换。
+      if (point && !Array.isArray(point) && typeof point === 'object') {
+        const x = Number(point.X);
+        const y = Number(point.Y);
+        const z = Number(point.Z);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        return Number.isFinite(z) ? [x, y, z] : [x, y];
+      }
+      if (!Array.isArray(point) || point.length < 2) return null;
+      const x = Number(point[0]);
+      const y = Number(point[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      // 第三个分量可选：给了就当基础高度，没给就是平面点位。
+      const z = Number(point[2]);
+      return Number.isFinite(z) ? [x, y, z] : [x, y];
+    })
+    .filter(Boolean);
+
   return normalized.length > 0 ? normalized : null;
 }
 
@@ -128,6 +166,14 @@ export function normalizePointGridParams(params = {}) {
     order: 4,
   });
 
+  // 稀疏实测表：长度按 sit 的 num1 × num2 校验，扩展后长度自然等于渲染网格。
+  // 与 `points` 的分工——`points` 是**已经**和网格等长的密集表，
+  // `sparsePoints` 是一个点位一条记录的原始表，由渲染器负责扩展。
+  // 两者都给时 `sparsePoints` 优先：它信息更完整，没有被插值过。
+  const sparsePoints = isCoordinateTable(params.sparsePoints, sit.num1 * sit.num2)
+    ? params.sparsePoints
+    : null;
+
   return {
     sit,
     back,
@@ -137,7 +183,38 @@ export function normalizePointGridParams(params = {}) {
     colorMax: clampOptionalNumber(params.colorMax, PARAM_RANGES.colorMax),
     filterMin: clampOptionalNumber(params.filterMin, PARAM_RANGES.filterMin),
     points: normalizePoints(params.points),
+    sparsePoints,
   };
+}
+
+/**
+ * 解析最终喂给几何体的密集点位表。
+ *
+ * 优先级：`sparsePoints`（自动扩展）> `points`（已是密集表）> null（规则矩阵）。
+ *
+ * 放在 core 层而不是 React 层，是因为它是纯的、需要单测，而且非渲染通路
+ * （导出、坐标核对）也要拿到同一份结果。
+ *
+ * @param {object} config 已归一化的参数。
+ * @returns {Array<number[]> | null} 密集点位表，无有效点位时为 null。
+ */
+export function resolvePointGridPoints(config = {}) {
+  const channel = config.sit || DEFAULT_CHANNEL;
+
+  if (config.sparsePoints) {
+    const expanded = expandCoordinateGrid({
+      table: config.sparsePoints,
+      rows: channel.num1,
+      cols: channel.num2,
+      interp: channel.interp,
+      order: channel.order,
+    });
+    // 扩展失败（长度对不上）时不静默回落到 points —— 两张表尺寸不同，
+    // 混用会画出一团乱麻。宁可退回规则矩阵，形状明显不对更容易发现。
+    if (expanded) return toPointTable(expanded, { includeZ: true });
+  }
+
+  return config.points || null;
 }
 
 export function resolvePointGridTuning(tuning = {}, params = {}) {

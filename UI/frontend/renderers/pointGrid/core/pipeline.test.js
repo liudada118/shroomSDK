@@ -16,6 +16,7 @@ import {
   deriveGridSize,
   LEGACY_PRESETS,
   normalizePointGridParams,
+  resolvePointGridPoints,
   resolvePointGridTuning,
 } from './params.js';
 import {
@@ -269,5 +270,124 @@ describe('参数归一化', () => {
     expect(normalizePointGridParams({}).heightScale).toBeNull();
     expect(normalizePointGridParams({}).colorMax).toBeNull();
     expect(normalizePointGridParams({}).filterMin).toBeNull();
+  });
+});
+
+describe('空间位置渲染（稀疏坐标表）', () => {
+  /** 造一张 rows×cols 的实测坐标表。 */
+  function makeTable(rows, cols, { step = 10, z = () => 0 } = {}) {
+    const table = [];
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        table.push({ X: col * step, Y: row * step, Z: z(row, col) });
+      }
+    }
+    return table;
+  }
+
+  it('normalizePointGridParams 接受实测 {X,Y,Z} 表', () => {
+    const config = normalizePointGridParams({
+      sit: { num1: 2, num2: 2, interp: 1, order: 0 },
+      sparsePoints: makeTable(2, 2),
+    });
+
+    expect(config.sparsePoints).toHaveLength(4);
+  });
+
+  it('长度与 num1×num2 对不上的稀疏表被拒绝', () => {
+    const config = normalizePointGridParams({
+      sit: { num1: 4, num2: 4, interp: 1, order: 0 },
+      sparsePoints: makeTable(2, 2),
+    });
+
+    expect(config.sparsePoints).toBeNull();
+  });
+
+  it('resolvePointGridPoints 把稀疏表扩到渲染网格长度', () => {
+    const config = normalizePointGridParams({
+      sit: { num1: 4, num2: 4, interp: 2, order: 1 },
+      sparsePoints: makeTable(4, 4),
+    });
+    const points = resolvePointGridPoints(config);
+    const { total } = deriveGridSize(config.sit);
+
+    expect(points).toHaveLength(total);
+    // 扩展结果带 Z，供基础高度使用。
+    expect(points[0]).toHaveLength(3);
+  });
+
+  it('sparsePoints 优先于 points：它没被插值过，信息更完整', () => {
+    const config = normalizePointGridParams({
+      sit: { num1: 2, num2: 2, interp: 1, order: 0 },
+      sparsePoints: makeTable(2, 2, { step: 100 }),
+      points: [[0, 0], [1, 1], [2, 2], [3, 3]],
+    });
+    const points = resolvePointGridPoints(config);
+
+    expect(points[3][0]).toBe(100);
+  });
+
+  it('没有 sparsePoints 时按原样返回 points（向后兼容）', () => {
+    const config = normalizePointGridParams({
+      sit: { num1: 2, num2: 2, interp: 1, order: 0 },
+      points: [[0, 0], [1, 0], [0, 1], [1, 1]],
+    });
+
+    expect(resolvePointGridPoints(config)).toEqual([[0, 0], [1, 0], [0, 1], [1, 1]]);
+  });
+
+  it('两者都没有时返回 null，渲染器回落规则矩阵', () => {
+    expect(resolvePointGridPoints(normalizePointGridParams({}))).toBeNull();
+  });
+
+  it('points 的第三个分量被保留为基础高度', () => {
+    const config = normalizePointGridParams({
+      points: [[0, 0, 5], [1, 0, 6]],
+    });
+
+    expect(config.points).toEqual([[0, 0, 5], [1, 0, 6]]);
+  });
+
+  it('基础高度进入 Y 分量，且以自身均值为零点', () => {
+    // 实测 Z 常带大偏置（整表在 -2400 附近），不去偏置会把点阵推出视野。
+    const positions = buildPointGridBasePositions({
+      amountX: 2,
+      amountY: 2,
+      separation: 100,
+      points: [[0, 0, -2400], [100, 0, -2400], [0, 100, -2300], [100, 100, -2300]],
+    });
+
+    const heights = [positions[1], positions[4], positions[7], positions[10]];
+    // 均值为零点：两高两低应当对称分布在 0 两侧。
+    expect(heights[0]).toBeLessThan(0);
+    expect(heights[2]).toBeGreaterThan(0);
+    expect(heights[0] + heights[2]).toBeCloseTo(0, 5);
+  });
+
+  it('平面点位表的基础高度是 0（与规则矩阵一致）', () => {
+    const positions = buildPointGridBasePositions({
+      amountX: 2,
+      amountY: 2,
+      separation: 100,
+      points: [[0, 0], [100, 0], [0, 100], [100, 100]],
+    });
+
+    expect(positions[1]).toBe(0);
+    expect(positions[4]).toBe(0);
+  });
+
+  it('Z 与 X/Y 共用 scale：起伏比例不随点阵尺寸漂移', () => {
+    const points = [[0, 0, 0], [100, 0, 0], [0, 100, 50], [100, 100, 50]];
+    const small = buildPointGridBasePositions({
+      amountX: 2, amountY: 2, separation: 100, points,
+    });
+    const large = buildPointGridBasePositions({
+      amountX: 2, amountY: 2, separation: 200, points,
+    });
+
+    // separation 翻倍时，高度差应当同比例翻倍（而不是保持不变）。
+    const smallSpread = small[7] - small[1];
+    const largeSpread = large[7] - large[1];
+    expect(largeSpread / smallSpread).toBeCloseTo(2, 5);
   });
 });

@@ -23,12 +23,16 @@ import { deriveGridSize } from './params.js';
  * 为 3D 点阵生成稳定的平面坐标。
  * 有物理点位表时保持传感器真实形状；没有时回退为规则矩阵。
  *
+ * 点位表支持两种元组：`[x, y]` 是平面点位；`[x, y, z]` 的第三个分量作为该点的
+ * **基础高度**，压力值在它之上叠加——曲面传感器（座椅弧面、鞋垫起伏）靠它表达
+ * 自身形状。Z 与 X/Y 用同一个 `scale`，否则起伏比例会随点阵尺寸漂移。
+ *
  * @param {object} options 坐标生成参数。
  * @param {number} options.amountX 行方向点数。
  * @param {number} options.amountY 列方向点数。
  * @param {number} options.separation 规则矩阵点间距。
- * @param {Array<[number, number]>} [options.points] row-major 物理点位表。
- * @returns {Float32Array} 每点三个分量的基础坐标，Y 固定为 0。
+ * @param {Array<number[]>} [options.points] row-major 物理点位表，`[x,y]` 或 `[x,y,z]`。
+ * @returns {Float32Array} 每点三个分量的基础坐标；无 Z 时 Y 为 0。
  */
 export function buildPointGridBasePositions({
   amountX,
@@ -61,10 +65,18 @@ export function buildPointGridBasePositions({
       const scale = targetExtent / longestSide;
       const centerX = (minX + maxX) / 2;
       const centerY = (minY + maxY) / 2;
+      // 基础高度以自身均值为零点：实测坐标的 Z 常带一个大偏置
+      // （整表都在 -2400 附近），直接用会把整个点阵推出视野。
+      const zs = points.map((point) => {
+        const z = Number(point[2]);
+        return Number.isFinite(z) ? z : 0;
+      });
+      const centerZ = zs.reduce((sum, z) => sum + z, 0) / zs.length;
       points.forEach((point, index) => {
         const offset = index * 3;
         result[offset] = (Number(point[0]) - centerX) * scale;
-        result[offset + 1] = 0;
+        // Z 与 X/Y 共用 scale，起伏比例才不随点阵尺寸变化。
+        result[offset + 1] = (zs[index] - centerZ) * scale;
         result[offset + 2] = (Number(point[1]) - centerY) * scale;
       });
       return result;

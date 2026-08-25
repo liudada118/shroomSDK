@@ -128,6 +128,16 @@ export {
   buildCoordinateWorldLayout,
 } from './coordinatePointLayout.js';
 
+// 稀疏物理坐标表的补边与插值。曲面传感器（座椅弧面、鞋垫起伏）的实测点位
+// 是一个点一条记录，要先扩成与渲染网格等长才能喂给点阵。
+export {
+  expandCoordinateGrid,
+  interpolateCoordinateTable,
+  isCoordinateTable,
+  padCoordinateTable,
+  toPointTable,
+} from './coordinateGrid.js';
+
 export {
   BUILTIN_MATRIX_RENDERER_OPTIONS,
   MATRIX_DISPLAY_MODES,

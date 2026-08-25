@@ -74,6 +74,7 @@ import { jetgGrey } from '../../../core/greyLadder.js';
 import {
   deriveGridSize,
   normalizePointGridParams,
+  resolvePointGridPoints,
   resolvePointGridTuning,
 } from '../core/params.js';
 import { buildPointGridBasePositions } from '../core/pipeline.js';
@@ -186,7 +187,9 @@ const PointGridRenderer = React.forwardRef((props, refs) => {
       amountX: AMOUNTX,
       amountY: AMOUNTY,
       separation: SEPARATION,
-      points: config.points,
+      // 稀疏实测表在这里被扩成与网格等长的密集表；没传 sparsePoints 时
+      // 直接返回 config.points，行为与之前一致。
+      points: resolvePointGridPoints(config),
     });
     let resizeObserver = null;
 
@@ -350,7 +353,9 @@ const PointGridRenderer = React.forwardRef((props, refs) => {
       for (let pointIndex = 0; pointIndex < numParticles; pointIndex += 1) {
         const offset = pointIndex * 3;
         state.positions[offset] = basePositions[offset];
-        state.positions[offset + 1] = 0;
+        // 基础高度来自点位表的 Z（曲面传感器的自身形状）。无 Z 时它是 0，
+        // 与规则矩阵的行为一致。
+        state.positions[offset + 1] = basePositions[offset + 1];
         state.positions[offset + 2] = basePositions[offset + 2];
         state.scales[pointIndex] = 1;
         state.colors[offset] = 0;
@@ -469,7 +474,10 @@ const PointGridRenderer = React.forwardRef((props, refs) => {
           smoothBig[l] = smoothBig[l] + (value - smoothBig[l] + 0.5) / t.valuel1;
 
           positions[k] = basePositions[k];
-          positions[k + 1] = smoothBig[l] * t.value1;
+          // 压力**叠加在**基础高度之上，而不是覆盖它 —— 曲面传感器的起伏
+          // （basePositions[k+1]，来自点位表的 Z）要和压力形变同时可见。
+          // 平面点位表和规则矩阵的基础高度是 0，此处等价于原来的写法。
+          positions[k + 1] = basePositions[k + 1] + smoothBig[l] * t.value1;
           positions[k + 2] = basePositions[k + 2];
 
           let rgb;
@@ -679,6 +687,9 @@ const PointGridRenderer = React.forwardRef((props, refs) => {
     config.separation,
     config.fps,
     config.points,
+    // 换坐标表要重建顶点缓冲区。`config` 按内容记忆化，所以这一项是
+    // 稳定引用，不会因为父组件重渲染而反复重建。
+    config.sparsePoints,
     config.heightScale,
     config.colorMax,
     spriteUrl,
