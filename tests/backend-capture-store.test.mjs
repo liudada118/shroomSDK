@@ -44,11 +44,21 @@ const skip = sqliteUnavailable
 function withStore(run) {
   const dir = mkdtempSync(join(tmpdir(), 'shroom-db-'))
   const store = new CaptureStore({ dbDir: dir })
-  try {
-    return run(store, dir)
-  } finally {
+  const cleanup = () => {
     try { store.close() } catch { /* 已关就算了 */ }
     rmSync(dir, { recursive: true, force: true })
+  }
+
+  try {
+    const result = run(store, dir)
+    if (result && typeof result.then === 'function') {
+      return result.finally(cleanup)
+    }
+    cleanup()
+    return result
+  } catch (error) {
+    cleanup()
+    throw error
   }
 }
 
@@ -142,6 +152,29 @@ test('listCaptures 按创建时间倒序并支持 sensorType 过滤', { skip }, 
   })
 })
 
+test('SQLite 支持分页、通道时间筛选、计数和级联删除', { skip }, () => {
+  withStore((store) => {
+    const capture = store.createCapture({ name: 'paged', sensorType: 'matrix' })
+    for (const [channel, timestamp] of [['left', 1000], ['right', 1100], ['left', 1200]]) {
+      store.insertFrame({ captureId: capture.id, channel, frame: sampleFrame(timestamp) })
+    }
+
+    assert.equal(store.countCaptures({ sensorType: 'matrix' }), 1)
+    assert.equal(store.countFrames({ captureId: capture.id, channel: 'left' }), 2)
+    assert.deepEqual(
+      store.queryFrames({ captureId: capture.id, channel: 'left', fromTimestamp: 1100, limit: 1 })
+        .map((row) => row.timestamp),
+      [1200],
+    )
+    assert.deepEqual(store.deleteCapture({ captureId: capture.id }), {
+      captureId: capture.id,
+      capturesDeleted: 1,
+      framesDeleted: 3,
+    })
+    assert.equal(store.getCapture({ captureId: capture.id }), undefined)
+  })
+})
+
 test('getCapture 三种查法', { skip }, () => {
   withStore((store) => {
     const capture = store.createCapture({ name: 'dup', sensorType: 'x' })
@@ -202,7 +235,7 @@ test('两种存储的返回结构一致（CsvExporter / ReplayService 对二者�
 })
 
 test('导出 CSV 落盘且行数正确', { skip }, () => {
-  withStore((store, dir) => {
+  return withStore((store, dir) => {
     const capture = store.createCapture({ name: 'exp', sensorType: 'hand0205' })
     for (const timestamp of [1000, 1500]) {
       store.insertFrame({ captureId: capture.id, frame: sampleFrame(timestamp) })
@@ -218,7 +251,7 @@ test('导出 CSV 落盘且行数正确', { skip }, () => {
 })
 
 test('导出无帧的采集时抛错而不是产出空文件', { skip }, () => {
-  withStore((store, dir) => {
+  return withStore((store, dir) => {
     const exporter = new CsvExporter({ store, exportDir: join(dir, 'out') })
     return assert.rejects(
       () => exporter.exportCapture({ captureId: 999 }),

@@ -68,8 +68,112 @@ const sdk = new ShroomSensorSDK({
 数据链路：
 
 ```text
-SerialPort -> DelimiterParser -> ProtocolRegistry.parse -> ZeroCalibrator -> frame event -> CaptureStore
+SerialManager -> SensorSession -> SerialPort -> DelimiterParser -> ProtocolRegistry.parse -> ZeroCalibrator -> frame event -> CaptureStore
 ```
+
+### 通用串口连接
+
+手动选口：
+
+```js
+const result = await sdk.connectSerial({
+  sensorType: 'fast1024',
+  channels: { pressure: 'COM3' },
+});
+
+result.session.on('frame', (frame) => console.log(frame.data));
+```
+
+一键查口、识别波特率并连接：
+
+```js
+const result = await sdk.connectSerial({ sensorType: 'fast1024' });
+```
+
+`sdk.serialManager` 保存所有当前串口的会话状态和最新帧，并提供 `rescan()`、`write()` 和 `disconnectAll()`。打开默认重试 3 次，单次超时 2 秒；端口仍打开但 5 秒无数据时标记为 `stale`。
+
+### 手套一站式连接
+
+手动指定串口：
+
+```js
+const { connectGlove } = require('shroom-backend-sdk');
+
+const glove = await connectGlove({
+  profileId: 'hand0205Double',
+  leftPort: 'COM3',
+  rightPort: 'COM4',
+  onFrame(frame) {
+    console.log(frame.handSide, frame.pressureData, frame.imu.quaternion, frame.matrixData);
+  },
+  onError({ error, phase }) {
+    console.error(phase, error);
+  },
+});
+
+await glove.close();
+```
+
+一键查找并连接 WCH / CH34 类传感器串口：
+
+```js
+const glove = await connectGlove({ profileId: 'hand0205' });
+```
+
+也可以复用已有实例：`await sdk.connectGlove(options)`。手套帧同时提供原始 256 点、147/195 点手部 Mapping、32×32 展示矩阵和四元数 IMU；前端直接把 `frame.matrixData` 交给矩阵渲染器。分包手套的左右手点位由根导出 `GLOVE_HAND_MAPPING` 统一维护，索引从 1 开始，并保留五指、指腹和手掌分组。
+
+### 本地采集
+
+采集行为参考 `E:\shroom1`：自定义频率按通道独立取样，数据批量事务入库，停止采集或关闭串口会先写完剩余帧。
+
+```js
+const capture = sdk.startCapture(glove, {
+  name: 'glove_test',
+  frequencyMode: 'custom', // serial 表示每个有效串口帧都保存
+  frequencyHz: 60,
+  dataField: 'matrixData', // 也可保存 data / pressureData / mappedData
+  batchSize: 200,
+  flushIntervalMs: 250,
+});
+
+glove.on('captureFlush', ({ count }) => {
+  console.log('已写入', count, '帧');
+});
+
+glove.on('captureError', ({ error }) => {
+  console.error(error.code, error.message);
+});
+
+const result = sdk.stopCapture(glove);
+console.log(result.stats);
+```
+
+### 存储、回放、CSV 和算法
+
+```js
+sdk.registerAlgorithm('sum', (data) => (
+  data.reduce((total, value) => total + value, 0)
+));
+
+const captures = sdk.listCaptures({ sensorType: 'hand0205', limit: 20 });
+const player = sdk.createReplay({
+  captureId: captures[0].id,
+  speed: 2,
+  applyAlgorithms: true,
+});
+
+player.on('frame', (frame) => {
+  console.log(frame.data, frame.algorithmResults.sum);
+});
+player.play();
+
+await sdk.exportCsv({
+  captureId: captures[0].id,
+  outputPath: 'D:/sensor-data/glove.csv',
+});
+```
+
+六项后端能力的完整接口和数据流见 [Backend Capabilities](./BACKEND_CAPABILITIES.md)。
 
 ## 3. Demo 命令
 

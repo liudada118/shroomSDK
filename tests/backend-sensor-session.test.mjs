@@ -15,6 +15,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { SensorSession } from '../src/serial/SensorSession.js'
+import { MemoryCaptureStore } from '../src/storage/MemoryCaptureStore.js'
 
 /** 造一个最小可用的 session；`parse` 决定解析行为。 */
 function createSession({ parse, frameProcessor = null } = {}) {
@@ -229,4 +230,76 @@ test('全部通道成功时不触发回滚', async () => {
 
   assert.equal(closed, 0)
   assert.equal(openEvents.length, 1)
+})
+
+test('SensorSession 采集支持全帧模式和 dataField', () => {
+  const store = new MemoryCaptureStore()
+  const session = createSession({
+    parse: (type, buffer) => ({
+      sensorType: type,
+      timestamp: buffer[0],
+      data: [buffer[1]],
+      pressureData: [buffer[1] + 10],
+      mappedData: [buffer[1] + 20],
+    }),
+  })
+
+  const started = session.startCapture({
+    store,
+    name: 'session-capture',
+    frequencyMode: 'serial',
+    dataField: 'mappedData',
+    batchSize: 100,
+    flushIntervalMs: 60000,
+  })
+  session.handleRawFrame('sit', Buffer.from([1, 2]))
+  session.handleRawFrame('sit', Buffer.from([2, 3]))
+  const stopped = session.stopCapture()
+
+  assert.equal(started.status, 'recording')
+  assert.equal(stopped.stats.storedFrames, 2)
+  assert.deepEqual(
+    store.queryFrames({ captureId: started.id }).map((row) => JSON.parse(row.data_json)),
+    [[22], [23]],
+  )
+})
+
+test('关闭串口会话前自动停止采集并 flush', async () => {
+  const store = new MemoryCaptureStore()
+  const session = createSession()
+  const started = session.startCapture({
+    store,
+    frequencyMode: 'serial',
+    batchSize: 100,
+    flushIntervalMs: 60000,
+  })
+  session.handleRawFrame('sit', Buffer.from([9]))
+
+  await session.close()
+
+  assert.equal(session.getState().capture.status, 'stopped')
+  assert.equal(store.queryFrames({ captureId: started.id }).length, 1)
+})
+
+test('同一会话不能同时开始两次采集', () => {
+  const session = createSession()
+  const store = new MemoryCaptureStore()
+  session.startCapture({ store })
+  assert.throws(() => session.startCapture({ store }), /already active/)
+  session.stopCapture()
+})
+
+test('存储错误后 stopCapture 仍返回最后错误状态', () => {
+  const session = createSession()
+  const store = {
+    createCapture: () => ({ id: 1, name: 'x', sensorType: 'test', hz: 12, metadata: {} }),
+    insertFrames: () => { throw Object.assign(new Error('full'), { code: 'SQLITE_FULL' }) },
+    finishCapture: () => {},
+  }
+  session.on('error', () => {})
+  session.startCapture({ store, frequencyMode: 'serial', batchSize: 1 })
+  session.handleRawFrame('sit', Buffer.from([1]))
+
+  assert.equal(session.stopCapture().status, 'error')
+  assert.equal(session.stopCapture().error.code, 'SQLITE_FULL')
 })

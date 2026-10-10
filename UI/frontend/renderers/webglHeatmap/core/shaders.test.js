@@ -20,7 +20,11 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { HEAT_BLOB_STOPS, glslStopLadder, sampleColormapRgb } from '../../../core/colormaps.js';
+import {
+  HEAT_BLOB_STOPS,
+  glslStopLadder,
+  sampleColormapRgb,
+} from '../../../core/colormaps.js';
 import {
   BLOB_ALPHA_CUTOFF,
   BLOB_FRAGMENT_SHADER,
@@ -182,15 +186,19 @@ function lines(source) {
 
 /** 抽出 `const vec3 cN = vec3(a, b, c)` 的八组常量，按声明顺序。 */
 function legacyStopColors(source) {
-  const matched = [...source.matchAll(
-    /const\s+vec3\s+c\d+\s*=\s*vec3\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/g,
-  )];
+  const matched = [
+    ...source.matchAll(
+      /const\s+vec3\s+c\d+\s*=\s*vec3\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/g,
+    ),
+  ];
   return matched.map((hit) => [Number(hit[1]), Number(hit[2]), Number(hit[3])]);
 }
 
 /** 抽出 `if(p <= X)` 的七个断点，按出现顺序。 */
 function legacyThresholds(source) {
-  return [...source.matchAll(/p\s*<=\s*([\d.]+)\)/g)].map((hit) => Number(hit[1]));
+  return [...source.matchAll(/p\s*<=\s*([\d.]+)\)/g)].map((hit) =>
+    Number(hit[1]),
+  );
 }
 
 /** 原件那条阶梯的 JS 复现，输入 0~1，输出 0~1 的三分量。 */
@@ -203,7 +211,9 @@ function legacyLadder(p) {
     if (clamped <= upper || i === breaks.length - 2) {
       const lower = breaks[i];
       const t = (clamped - lower) / (upper - lower);
-      return colors[i].map((channel, k) => channel + (colors[i + 1][k] - channel) * t);
+      return colors[i].map(
+        (channel, k) => channel + (colors[i + 1][k] - channel) * t,
+      );
     }
   }
   return colors[colors.length - 1];
@@ -211,8 +221,8 @@ function legacyLadder(p) {
 
 /** 原件的 `linearToSRGB` + 光栅化取整，输出 0~255 整数。 */
 function legacyColorAt(p) {
-  return legacyLadder(p).map(
-    (channel) => Math.round(255 * Math.min(1, Math.pow(channel * 1.5, 1 / 2.2))),
+  return legacyLadder(p).map((channel) =>
+    Math.round(255 * Math.min(1, Math.pow(channel * 1.5, 1 / 2.2))),
   );
 }
 
@@ -226,34 +236,41 @@ describe('逐字搬的三段与原件逐行相同', () => {
   });
 
   it('合成顶点着色器', () => {
-    expect(lines(COMPOSITE_VERTEX_SHADER)).toEqual(lines(LEGACY_COMPOSITE_VERTEX));
+    expect(lines(COMPOSITE_VERTEX_SHADER)).toEqual(
+      lines(LEGACY_COMPOSITE_VERTEX),
+    );
   });
 
   it('那个空分支照抄了 —— 圆最外一像素环仍然什么都不写', () => {
-    expect(BLOB_FRAGMENT_SHADER).toContain('if ( diff >= 0.0 && diff <= 1.0 ){');
+    expect(BLOB_FRAGMENT_SHADER).toContain(
+      'if ( diff >= 0.0 && diff <= 1.0 ){',
+    );
   });
 });
 
-describe('发出来的色带与原件等价', () => {
-  it('八个色标逐个等于原件的 c0..c7', () => {
-    const legacy = legacyStopColors(LEGACY_COMPOSITE_FRAGMENT);
-    expect(legacy).toHaveLength(HEAT_BLOB_STOPS.length);
-    HEAT_BLOB_STOPS.forEach((stop, index) => {
-      stop.rgb.forEach((channel, k) => {
-        expect(channel / 255).toBeCloseTo(legacy[index][k], 10);
-      });
+describe('睡眠回放压力色带', () => {
+  const expectedStops = [
+    { at: 0.16, rgb: [214, 233, 250] },
+    { at: 0.27, rgb: [168, 206, 255] },
+    { at: 0.43, rgb: [120, 169, 242] },
+    { at: 0.56, rgb: [97, 204, 174] },
+    { at: 0.67, rgb: [236, 219, 91] },
+    { at: 0.78, rgb: [255, 173, 51] },
+    { at: 0.86, rgb: [253, 99, 99] },
+    { at: 0.97, rgb: [255, 51, 150] },
+  ];
+
+  it('保留八个指定锚点，并在 0/1 两端夹取首尾颜色', () => {
+    expect(HEAT_BLOB_STOPS.slice(1, -1)).toEqual(expectedStops);
+    expect(HEAT_BLOB_STOPS[0]).toEqual({ at: 0, rgb: expectedStops[0].rgb });
+    expect(HEAT_BLOB_STOPS.at(-1)).toEqual({
+      at: 1,
+      rgb: expectedStops.at(-1).rgb,
     });
   });
 
-  it('七个断点逐个等于原件的 if(p <= X)', () => {
-    expect(legacyThresholds(LEGACY_COMPOSITE_FRAGMENT))
-      .toEqual(HEAT_BLOB_STOPS.slice(1, -1).map((stop) => stop.at));
-  });
-
-  it('⚠️ c7 的注释写 #FF1E42，代码是纯红 —— 照抄代码，最后 16% 是等色 mix', () => {
-    const legacy = legacyStopColors(LEGACY_COMPOSITE_FRAGMENT);
-    expect(legacy[7]).toEqual(legacy[6]);
-    expect(HEAT_BLOB_STOPS[7].rgb).toEqual(HEAT_BLOB_STOPS[6].rgb);
+  it.each(expectedStops)('锚点 $at 的 CSS 与 WebGL 数值一致', (stop) => {
+    expect(sampleColormapRgb('heatBlobs', stop.at)).toEqual(stop.rgb);
   });
 
   it('发出来的 GLSL 里每个断点都在，且插进了合成片元', () => {
@@ -265,26 +282,6 @@ describe('发出来的色带与原件等价', () => {
   });
 });
 
-describe('JS 侧色卡与 GLSL 侧出图同色', () => {
-  it.each([0, 0.07, 0.14, 0.28, 0.35, 0.42, 0.56, 0.63, 0.7, 0.84, 0.92, 1])(
-    'p = %s',
-    (p) => {
-      const sdk = sampleColormapRgb('heatBlobs', p);
-      const legacy = legacyColorAt(p);
-      // 两侧的浮点路径不同（一边先归一化到 0-255 再除回去），差 1 个量化级
-      // 属于取整噪声，不是配色不同。
-      sdk.forEach((channel, k) => {
-        expect(Math.abs(channel - legacy[k])).toBeLessThanOrEqual(1);
-      });
-    },
-  );
-
-  it('起点是黑、终点是纯红过完 gamma 之后的样子', () => {
-    expect(sampleColormapRgb('heatBlobs', 0)).toEqual([0, 0, 0]);
-    expect(sampleColormapRgb('heatBlobs', 1)).toEqual(legacyColorAt(1));
-  });
-});
-
 describe('buildCompositeFragmentShader', () => {
   it('默认 cutoff 是 0.03，与原件一致', () => {
     expect(BLOB_ALPHA_CUTOFF).toBe(0.03);
@@ -292,7 +289,9 @@ describe('buildCompositeFragmentShader', () => {
   });
 
   it('cutoff 可换', () => {
-    expect(buildCompositeFragmentShader({ alphaCutoff: 0.5 })).toContain('p_alpha > 0.5000');
+    expect(buildCompositeFragmentShader({ alphaCutoff: 0.5 })).toContain(
+      'p_alpha > 0.5000',
+    );
   });
 
   it('色带可换 —— 换成两段就只发一个分支', () => {
@@ -305,14 +304,21 @@ describe('buildCompositeFragmentShader', () => {
     // 发出来的函数本身，不是整段着色器）。
     expect(ladder).not.toContain('else');
     expect(ladder).not.toContain('if (');
-    expect(buildCompositeFragmentShader({
-      stops: [{ at: 0, rgb: [0, 0, 0] }, { at: 1, rgb: [255, 255, 255] }],
-    })).toContain(ladder);
+    expect(
+      buildCompositeFragmentShader({
+        stops: [
+          { at: 0, rgb: [0, 0, 0] },
+          { at: 1, rgb: [255, 255, 255] },
+        ],
+      }),
+    ).toContain(ladder);
   });
 
-  it('main() 与原件逐行相同（cutoff 字面量除外）', () => {
-    const generated = lines(COMPOSITE_FRAGMENT_SHADER).slice(-9).join('\n');
-    const legacy = lines(LEGACY_COMPOSITE_FRAGMENT).slice(-9).join('\n');
-    expect(generated.replace('0.0300', '0.03')).toEqual(legacy);
+  it('锚点是最终 sRGB 值，不再做额外 gamma 提亮', () => {
+    expect(COMPOSITE_FRAGMENT_SHADER).not.toContain('linearToSRGB');
+    expect(COMPOSITE_FRAGMENT_SHADER).not.toContain('pow(');
+    expect(COMPOSITE_FRAGMENT_SHADER).toContain(
+      'gl_FragColor = vec4(col, 1.0)',
+    );
   });
 });

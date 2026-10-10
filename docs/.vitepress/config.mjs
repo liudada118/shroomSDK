@@ -6,6 +6,7 @@ export default {
     logo: null,
     nav: [
       { text: 'Guide', link: '/SDK_GUIDE' },
+      { text: 'Backend', link: '/BACKEND_CAPABILITIES' },
       { text: 'Serial', link: '/SERIAL_CHAIN' },
       { text: 'UI Components', link: '/UI_COMPONENTS' },
       { text: 'API Reference', link: '/API_REFERENCE' },
@@ -21,6 +22,19 @@ export default {
       {
         text: '后端与串口',
         items: [
+          {
+            text: '后端能力',
+            collapsed: false,
+            items: [
+              { text: '能力总览', link: '/BACKEND_CAPABILITIES' },
+              { text: '串口', link: '/BACKEND_CAPABILITIES#serial' },
+              { text: '采集', link: '/BACKEND_CAPABILITIES#capture' },
+              { text: '存储', link: '/BACKEND_CAPABILITIES#storage' },
+              { text: '回放', link: '/BACKEND_CAPABILITIES#replay' },
+              { text: 'CSV', link: '/BACKEND_CAPABILITIES#csv' },
+              { text: '简单算法通道', link: '/BACKEND_CAPABILITIES#algorithm-channel' },
+            ],
+          },
           { text: '后端连接链路', link: '/BACKEND_CLIENT' },
           { text: '本地串口链路', link: '/SERIAL_CHAIN' },
         ],

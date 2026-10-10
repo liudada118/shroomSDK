@@ -1,3 +1,5 @@
+const { buildStoredFrameRow } = require('./frameRecord');
+
 class MemoryCaptureStore {
   constructor() {
     this.captureId = 1;
@@ -35,33 +37,35 @@ class MemoryCaptureStore {
   }
 
   insertFrame({ captureId, sensorType, channel = 'sit', rawFrame, frame }) {
-    const data = Array.isArray(frame?.pressureData)
-      ? frame.pressureData
-      : Array.isArray(frame?.data)
-        ? frame.data
-        : [];
-    this.frames.push({
-      id: this.frameId++,
-      capture_id: captureId,
-      sensor_type: sensorType || frame?.sensorType || '',
-      channel: channel || frame?.channel || 'sit',
-      timestamp: frame?.timestamp || Date.now(),
-      raw_frame_hex: rawFrame ? Buffer.from(rawFrame).toString('hex') : null,
-      data_json: JSON.stringify(data),
-      stats_json: JSON.stringify(frame?.stats || {}),
-      extra_json: JSON.stringify({
-        rotate: frame?.rotate || [],
-        matrix: frame?.matrix || {},
-        extra: frame?.extra || {},
-      }),
+    return this.insertFrames([{ captureId, sensorType, channel, rawFrame, frame }]);
+  }
+
+  insertFrames(frames = []) {
+    if (!Array.isArray(frames) || !frames.length) return 0;
+    frames.forEach((frame) => {
+      this.frames.push({
+        id: this.frameId++,
+        ...buildStoredFrameRow(frame),
+      });
     });
+    return frames.length;
   }
 
   listCaptures(filter = {}) {
-    return this.captures
+    const offset = normalizeOffset(filter.offset);
+    const limit = normalizeLimit(filter.limit);
+    const rows = this.captures
       .filter((capture) => !filter.sensorType || capture.sensor_type === filter.sensorType)
+      .filter((capture) => !(filter.captureName || filter.name) || capture.name === (filter.captureName || filter.name))
+      .filter((capture) => !Number.isFinite(Number(filter.createdFrom)) || capture.created_at >= Number(filter.createdFrom))
+      .filter((capture) => !Number.isFinite(Number(filter.createdTo)) || capture.created_at <= Number(filter.createdTo))
       .slice()
-      .sort((a, b) => b.created_at - a.created_at);
+      .sort((a, b) => b.created_at - a.created_at || b.id - a.id);
+    return rows.slice(offset, limit == null ? undefined : offset + limit);
+  }
+
+  countCaptures(filter = {}) {
+    return this.listCaptures({ ...filter, limit: undefined, offset: undefined }).length;
   }
 
   getCapture({ captureId, captureName, sensorType } = {}) {
@@ -81,17 +85,50 @@ class MemoryCaptureStore {
       return [];
     }
 
-    return this.frames
+    const offset = normalizeOffset(options.offset);
+    const limit = normalizeLimit(options.limit);
+    const rows = this.frames
       .filter((frame) => frame.capture_id === capture.id)
+      .filter((frame) => !options.channel || frame.channel === options.channel)
+      .filter((frame) => !Number.isFinite(Number(options.fromTimestamp)) || frame.timestamp >= Number(options.fromTimestamp))
+      .filter((frame) => !Number.isFinite(Number(options.toTimestamp)) || frame.timestamp <= Number(options.toTimestamp))
       .map((frame) => ({
         ...frame,
         capture_name: capture.name,
         hz: capture.hz,
       }))
       .sort((a, b) => a.timestamp - b.timestamp || a.id - b.id);
+    return rows.slice(offset, limit == null ? undefined : offset + limit);
+  }
+
+  countFrames(options = {}) {
+    return this.queryFrames({ ...options, limit: undefined, offset: undefined }).length;
+  }
+
+  deleteCapture(options = {}) {
+    const capture = this.getCapture(options);
+    if (!capture) return { captureId: null, capturesDeleted: 0, framesDeleted: 0 };
+    const before = this.frames.length;
+    this.frames = this.frames.filter((frame) => frame.capture_id !== capture.id);
+    this.captures = this.captures.filter((item) => item.id !== capture.id);
+    return {
+      captureId: capture.id,
+      capturesDeleted: 1,
+      framesDeleted: before - this.frames.length,
+    };
   }
 
   close() {}
+}
+
+function normalizeLimit(value) {
+  const numberValue = Number(value);
+  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : null;
+}
+
+function normalizeOffset(value) {
+  const numberValue = Number(value);
+  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : 0;
 }
 
 module.exports = {

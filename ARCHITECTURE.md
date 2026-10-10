@@ -1,6 +1,6 @@
 # Shroom SDK Architecture
 
-最后更新于：2026-08-20
+最后更新于：2026-08-28
 
 ## 项目概述
 
@@ -23,6 +23,12 @@ Shroom SDK 是一个独立传感器 SDK，用于把主项目中的后端 HTTP/We
 E:\ShroomSDK
 ├─ index.js                 SDK 后端根入口
 ├─ src\                     后端 SDK 模块
+│  ├─ capture\              采集限频、批量队列、flush 与存储故障状态
+│  ├─ algorithm\            同步轻量算法注册、执行与结果隔离
+│  ├─ glove\                手套产品 Profile、组帧、IMU、左右手 Mapping
+│  ├─ replay\               静态时间线与可控回放播放器
+│  ├─ storage\              SQLite/内存采集存储、分页筛选与删除
+│  └─ serial\               串口管理、会话、错误模型、波特率探测与写入
 ├─ examples\                后端和本地串口 demo
 ├─ docs\                    VitePress 中文文档
 │  ├─ .vitepress\theme\     React 组件实时示例挂载与文档样式
@@ -43,17 +49,44 @@ E:\ShroomSDK
 
 ```mermaid
 flowchart LR
-  A["SerialPort"] --> B["DelimiterParser"]
-  B --> C["ProtocolRegistry"]
+  M["SerialManager"] --> T["serialTools / connection policy"]
+  T --> A["SerialPort"]
+  A --> B["DelimiterParser"]
+  B --> C["ProtocolRegistry / Glove assembler"]
   C --> D["ZeroCalibrator"]
-  D --> E["SensorSession frame event"]
-  E --> F["CaptureStore / MemoryCaptureStore"]
-  F --> G["ReplayService / CsvExporter"]
+  D --> H["Glove Mapping"]
+  H --> J["AlgorithmChannel"]
+  J --> E["SensorSession frame event"]
+  E --> I["CaptureController"]
+  I --> F["CaptureStore / MemoryCaptureStore"]
+  F --> G["ReplayService / ReplayPlayer / CsvExporter"]
 ```
+
+`SerialManager` 参考 `E:\shroom\server\serial\SerialManager.js` 与 `E:\shroom\sdk\node\serial.js`，作为通用 SDK 的串口聚合层。手动连接直接使用指定 Profile/端口；一键连接执行 WCH/CH34 筛选、分隔符与帧长波特率探测、临时口释放等待、稳定重试和部分失败聚合。管理器持有所有当前 `SensorSession`、通道在线/断流状态与最新帧，并统一提供重扫、写串口和断开方法。
+
+`SensorSession` 默认每个通道尝试 3 次、单次 2 秒超时、重试间隔 500ms，且在串口仍 open 但 5 秒无数据时标记 `stale`。会话保留每通道的最新帧、收包/好帧/坏帧计数和数据质量，支持 `write`、`writeAll`、`reconnectChannel` 和 `closeChannel`。`errors.js` 将操作系统字符串归一为 `PORT_BUSY`、`PORT_NOT_FOUND`、`BAUD_FAIL`、`STALE_CONNECTION` 等稳定错误码；主项目特有的 MAC 在线查询和授权没有被写死，而是通过 `resolveDevice` 回调由宿主注入。
 
 这条链路上的每一步都在 `handleRawFrame` 的独立 try/catch 里，`error` 事件的 `phase` 指明出错阶段（`rawFrame` / `parse` / `frame` / `capture`）。解析失败只丢当前帧，下一帧照常处理——采集程序不该因为一帧脏数据而退出。`error` 在没有监听者时降级为 `console.error` 而不是抛出（`EventEmitter` 对该事件名的默认行为是抛出，在 I/O 回调里即进程退出），但也不静默吞掉。
 
+`CaptureController` 参考 `E:\shroom1` 的生产采集方式，将采集生命周期从串口会话和数据库实现中拆出。`custom` 模式以每个通道独立时钟按 1..200Hz 取样，`serial` 模式保存全部有效帧；默认 200 帧或 250ms 触发一次批量写。`CaptureStore.insertFrames()` 使用预编译语句和单事务落库，停止采集或关闭 `SensorSession` 时强制 flush。调用方可通过 `dataField` / `frameSelector` 明确保存线序后数据、手套 Mapping 或 32×32 矩阵；采集参数和 Profile 同时快照到 metadata。可选 `minFreeBytes` 使用数据库目录可用空间做保护，写库失败或空间不足只停止当前采集并发出 `captureError`，串口实时帧继续运行。
+
+`AlgorithmChannel` 位于线序、Mapping 和清零之后，`frame` 事件与采集之前。算法同步接收标准数组并把可序列化结果写入 `frame.algorithmResults`；单个算法默认隔离错误，不会中断串口链路。该结果随标准帧进入 SQLite/内存存储、回放和 CSV。历史帧传 `applyAlgorithms: true` 时可重新执行当前算法，实时与回放共用同一算法定义。
+
+`CaptureStore` 与 `MemoryCaptureStore` 对齐分页、通道筛选、时间区间、计数和级联删除接口。SQLite 删除在一个事务中清理采集记录及所属帧。`ReplayService` 保留静态时间线，并通过 `ReplayPlayer` 提供播放、暂停、定位、逐帧、倍速和循环；播放间隔按原始帧时间戳差计算。`CsvExporter` 支持相同查询条件，并把算法结果作为独立 JSON 列导出。
+
+pnpm 通过 `pnpm.onlyBuiltDependencies` 明确允许 `better-sqlite3` 执行安装脚本，保证新工作区在 `pnpm install` 时能准备 SQLite 原生绑定，而不会被 pnpm 的依赖构建安全策略静默跳过。
+
 线序实现随包提供（`src/line/builtinLineOrders.js`），逐字搬自主项目的 `openWeb.js`。上游 SDK 是从主项目根目录动态 require 线序的，抽成独立包时那条 require 指向包外被移除，而 profile 里的线序声明留着，导致三个 profile 首帧抛错——`tests/backend-line-orders.test.mjs` 现在断言「声明了线序名的 profile，那个名字必须真的注册过」，防止同类回归。
+
+### 手套协议与标准帧
+
+手套能力集中在 `src/glove`，不再把产品型号、协议、IMU 和线序散落在串口回调中。`catalog.js` 以主项目真实产品菜单标识作为稳定型号：`hand0205`、`hand0205Double`、`handGlove115200`、`handGloveFullPacket`。前三者使用 130+146 分包，整包型号使用 274 字节定长包；`hand0205Double` 按 `packetType` 的 `1=left / 2=right` 路由，其余型号按连接通道定侧，保留了生产运行时实际差异。
+
+分包解析器是每个 `SensorSession` 独享的有状态组帧器，并按左右手分别缓存首包，允许双手包交错到达。首包只触发 `packetPending`，不会产生伪完整帧；尾包缺首包、包长错误和压力点数错误通过 `GloveFrameError.code` 明确上报。274 整包严格校验 274 字节，字段为 2 字节头、256 个 uint8 压力 ADC、16 字节 IMU。
+
+标准手套帧保留兼容字段 `pressureData` 和 `rotate`，并增加 `handSide`、`pressure`、`imu`、`mappedData`、`matrixData`、`product`、`validation`。压力值语义是 0..255 的未标定 ADC count，不冒充 N/kPa；IMU 是 little-endian float32 四元数，顺序为 `x,y,z,w`。分包手套的左右手 256 点 Mapping 以 `GLOVE_HAND_MAPPING` 结构化点位表为唯一数据源，保留五指、指腹和手掌分组，再自动生成 137 通道线序；整包型号输出 195 点，最终都提供 32×32 row-major 矩阵。清零后会重新执行 Mapping，保证实时显示、采集和回放引用同一份压力语义。
+
+`ShroomSensorSDK.connectGlove()` 和根导出 `connectGlove()` 统一处理手动端口、一键查口、Profile 选择、回调预绑定和错误分类。返回的仍是 `SensorSession`，可继续使用采集、关闭和 `getState()`；连接错误使用 `NO_GLOVE_PORT`、`PORT_BUSY`、`PORT_NOT_FOUND`、`OPEN_FAILED` 等稳定错误码。
 
 前端 UI 组件不从 SDK 根入口加载，避免后端项目在 `require('shroom-backend-sdk')` 时引入 React 依赖。根 `package.json` 的 `exports` 为前端提供短路径（`shroom-backend-sdk/renderers/<id>`、`/core`、`/qxui`、`/shroomui`、`/render`），并把 `UI/render/index.d.ts` 接为 `types`。`UI/frontend` 子包自带的 exports 映射只服务子包直接消费者，根包这一层是给外部使用方的等价出口。
 
@@ -148,6 +181,13 @@ VitePress 文档通过 `UiComponentDemo.vue` 在客户端创建 React root，再
 | 2026-08-25 | 修复缺陷 | 补回 `jqbed` / `handSinglePoint` 内置线序，11 个 profile 全部可解析（此前 3 个首帧必崩） |
 | 2026-08-25 | 修复缺陷 | `handleRawFrame` 分阶段捕获异常，`error` 无监听者时降级提示，多通道打开失败回滚已开端口 |
 | 2026-08-25 | 测试补齐 | `src/` 从零测试到 69 项，覆盖解析、线序、清零、存储、回放与会话容错 |
+| 2026-08-25 | 手套 SDK | 明确四个产品 Profile，补齐分包/整包组帧、压力与 IMU 语义、左右手 Mapping 和 `connectGlove()` |
+| 2026-08-25 | 手套校验 | 新增生产协议形态 fixture，覆盖左右交错组帧、缺首包、长度校验、IMU float32LE 和 256→147/195→1024 Mapping |
+| 2026-08-25 | 手套点位表 | 录入左右手结构化 Mapping，扁平线序改为自动生成并增加范围、重复点和布局校验 |
+| 2026-08-27 | 采集 SDK | 参考 `E:\shroom1` 抽取按通道限频、全帧模式、批量事务、停止 flush、磁盘保护和采集错误状态 |
+| 2026-08-27 | 串口 SDK | 参考 `E:\shroom` 补齐 `SerialManager`、自动波特率、稳定重试、连接锁、断流状态、重扫、写串口和统一错误码 |
+| 2026-08-28 | 后端能力闭环 | 补齐存储分页/筛选/删除、可控回放、CSV 算法列和简单算法通道，六项能力使用统一标准帧 |
+| 2026-08-28 | 文档更新 | 新增 `Backend Capabilities` 页面和串口、采集、存储、回放、CSV、算法通道二级导航 |
 
 ## 项目进度
 
@@ -177,3 +217,8 @@ VitePress 文档通过 `UiComponentDemo.vue` 在客户端创建 React root，再
 | 2026-08-20 | 渲染参数文档补齐 | numMatrix 由 6 项补到 60 余项（含 `canvas2d` / `webgl` 嵌套对象），handPoints 由 4 项补到 19 项，五页均写明取值范围钳制 |
 | 2026-08-21 | 空间位置点阵 | `core/coordinateGrid.js` 提供稀疏坐标表的插值与补边，点阵渲染器新增 `sparsePoints`，曲面传感器可按实测点位与自身起伏成形 |
 | 2026-08-25 | 数据链路可用性 | 内置线序补回、帧处理全程容错、端口回滚；客户第一步「数据联通」不再因单帧异常终止进程 |
+| 2026-08-25 | 手套最小链路 | `connectGlove()` 完成查口/连接/组帧/解析/左右手 Mapping，帧可直接送入 32×32 渲染器或采集链路 |
+| 2026-08-25 | 左右手 Mapping | 五指、指腹、手掌点位进入 SDK 单一数据源，外部项目可通过 `GLOVE_HAND_MAPPING` 读取原始分组 |
+| 2026-08-27 | 稳定采集链路 | `CaptureController` 统一管理采集频率、批次和统计，SQLite/内存 Store 对齐 `insertFrames`，会话关闭不再遗留未落库帧 |
+| 2026-08-27 | 串口管理闭环 | 同时支持手动与一键连接，聚合所有串口的最新数据、在线/断流状态，并打通写入、重连、重扫和错误处理 |
+| 2026-08-28 | 后端六项能力 | 串口、采集、存储、回放、CSV 和简单算法通道均提供根入口、统一数据流、测试与本地网页文档 |

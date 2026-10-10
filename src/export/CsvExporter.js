@@ -38,6 +38,7 @@ function getTitles(language = 'zh') {
       data: 'data',
       rotate: 'rotate',
       rawFrame: 'rawFrameHex',
+      algorithms: 'algorithms',
       extra: 'extra',
     };
   }
@@ -55,6 +56,7 @@ function getTitles(language = 'zh') {
     data: '矩阵数据',
     rotate: '姿态数据',
     rawFrame: '原始帧HEX',
+    algorithms: '算法结果',
     extra: '附加信息',
   };
 }
@@ -104,6 +106,7 @@ class CsvExporter {
         data: JSON.stringify(data),
         rotate: JSON.stringify(extra.rotate || []),
         rawFrame: row.raw_frame_hex || '',
+        algorithms: JSON.stringify(extra.algorithmResults || {}),
         extra: JSON.stringify(extra.extra || {}),
       };
     });
@@ -123,6 +126,7 @@ class CsvExporter {
         { id: 'data', title: titles.data },
         { id: 'rotate', title: titles.rotate },
         { id: 'rawFrame', title: titles.rawFrame },
+        { id: 'algorithms', title: titles.algorithms },
         { id: 'extra', title: titles.extra },
       ],
     });

@@ -48,6 +48,12 @@ const BACKEND_OPERATIONS = [
     description: 'CSV 导出目录校验、表头生成、按采集记录导出。',
   },
   {
+    domain: 'algorithm',
+    commands: [],
+    sdk: ['registerAlgorithm', 'processAlgorithms', 'AlgorithmChannel.process'],
+    description: '同步轻量算法注册、实时帧处理、历史帧复算和算法结果持久化。',
+  },
+  {
     domain: 'report',
     commands: ['getDbHeatmap', 'uploadCanvas'],
     sdk: ['ReportService.getDbHeatmap', 'ReportService.generateFootPressureReport', 'PathService'],

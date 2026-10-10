@@ -42,7 +42,8 @@ function interpolateStops(stops, ratio) {
   const weight = position - lowerIndex;
   const lower = stops[lowerIndex];
   const upper = stops[upperIndex];
-  const channel = (index) => Math.round(lower[index] + (upper[index] - lower[index]) * weight);
+  const channel = (index) =>
+    Math.round(lower[index] + (upper[index] - lower[index]) * weight);
   return [channel(0), channel(1), channel(2)];
 }
 
@@ -131,34 +132,28 @@ function sampleJet(ratio) {
 }
 
 /**
- * 斑点热力（`webglHeatmap`）那条 8 段色带，逐字来自
- * `components/webgl/WebGL.HeatMap copy 2.js` 的 `fragmentShader1`。
+ * 斑点热力（`webglHeatmap`）使用的不等距压力色带。
  *
- * **它和上面六条的区别是色标不等距**：0.14 一档走到 0.84，最后一段却是 0.16 宽。
- * `createStopColormap` 假定等距，所以这条走 `createPositionedStopColormap`。
- *
- * ⚠️ **`c7` 的注释与代码不符，照代码搬。** 原件写的是
- * `const vec3 c7 = vec3(1.0, 0.0, 0.0); /* 1.00 -> #FF1E42 *\/` —— 注释说
- * `#FF1E42`（一个偏粉的红），代码是纯红，和 `c6` 一模一样。也就是最后那 16%
- * 是一段**恒定色**，`mix(c6, c7, t)` 是个空插值。搬家不改观感，所以这里照代码
- * 记 `[255, 0, 0]`；要改成注释里那个颜色是一次看得见的画面变化，另议。
+ * 真实锚点来自睡眠回放展示规范。0 与 1 两端重复首尾颜色，表示低于 0.16、
+ * 高于 0.97 时夹取边界颜色，避免外插产生未定义色值。
  */
 export const HEAT_BLOB_STOPS = [
-  { at: 0.00, rgb: [0, 0, 0] },       // #000000
-  { at: 0.14, rgb: [0, 0, 255] },     // #0000FF
-  { at: 0.28, rgb: [0, 102, 255] },   // #0066FF（GLSL 写作 0.4，102/255 正好是 0.4）
-  { at: 0.42, rgb: [0, 255, 0] },     // #00FF00
-  { at: 0.56, rgb: [255, 255, 0] },   // #FFFF00
-  { at: 0.70, rgb: [255, 102, 0] },   // #FF6600
-  { at: 0.84, rgb: [255, 0, 0] },     // #FF0000
-  { at: 1.00, rgb: [255, 0, 0] },     // 注释写 #FF1E42，代码是纯红 —— 见上
+  { at: 0.0, rgb: [214, 233, 250] }, // 低端夹取 #D6E9FA
+  { at: 0.16, rgb: [214, 233, 250] }, // #D6E9FA
+  { at: 0.27, rgb: [168, 206, 255] }, // #A8CEFF
+  { at: 0.43, rgb: [120, 169, 242] }, // #78A9F2
+  { at: 0.56, rgb: [97, 204, 174] }, // #61CCAE
+  { at: 0.67, rgb: [236, 219, 91] }, // #ECDB5B
+  { at: 0.78, rgb: [255, 173, 51] }, // #FFAD33
+  { at: 0.86, rgb: [253, 99, 99] }, // #FD6363
+  { at: 0.97, rgb: [255, 51, 150] }, // #FF3396
+  { at: 1.0, rgb: [255, 51, 150] }, // 高端夹取 #FF3396
 ];
 
 /**
  * 在**不等距**色标上插值，返回未取整的 0-255 浮点三元组。
  *
- * 不取整是有意的：`heatBlobs` 还要在插值结果上做一次 gamma，先取整会把误差
- * 放大到肉眼可见（暗端尤其明显，`pow` 在 0 附近很陡）。
+ * 不先取整可以让相邻锚点之间保持连续插值。
  *
  * @param {Array<{at: number, rgb: [number, number, number]}>} stops 升序色标。
  * @param {number} ratio 归一化比例。
@@ -172,7 +167,8 @@ function interpolatePositionedStops(stops, ratio) {
       const lower = stops[index];
       const span = upper.at - lower.at;
       const weight = span > 0 ? (position - lower.at) / span : 0;
-      const channel = (i) => lower.rgb[i] + (upper.rgb[i] - lower.rgb[i]) * weight;
+      const channel = (i) =>
+        lower.rgb[i] + (upper.rgb[i] - lower.rgb[i]) * weight;
       return [channel(0), channel(1), channel(2)];
     }
   }
@@ -180,20 +176,16 @@ function interpolatePositionedStops(stops, ratio) {
 }
 
 /**
- * `heatBlobs` 的数值形式：插值之后再跑一遍着色器里那句 `linearToSRGB`。
- *
- * **gamma 必须在这里跑，不能只留在 GLSL 里。** 否则色卡（`previewCss`）与实际
- * 出图是两个颜色 —— 文档站的配色页会当场露馅。`pow(c * 1.5, 1/2.2)` 在 c > 0.4
- * 左右就超过 1，GL 在输出时夹掉；这里显式 `Math.min(1, …)` 复现同一个夹取。
+ * `heatBlobs` 的数值形式。锚点本身已经是 sRGB 色值，直接插值并取整，避免旧版
+ * gamma 再次提亮导致屏幕颜色偏白。
  *
  * @param {number} ratio 归一化比例。
  * @returns {[number, number, number]} 0-255 的 RGB 三元组。
  */
 function sampleHeatBlobsRgb(ratio) {
-  const linear = interpolatePositionedStops(HEAT_BLOB_STOPS, ratio);
-  return linear.map((channel) => Math.round(
-    255 * Math.min(1, Math.pow((channel / 255) * 1.5, 1 / 2.2)),
-  ));
+  return interpolatePositionedStops(HEAT_BLOB_STOPS, ratio).map((channel) =>
+    Math.round(channel),
+  );
 }
 
 /**
@@ -216,19 +208,37 @@ export const COLORMAPS = [
     previewCss: buildPreviewCss(sampleClassic),
   },
   createStopColormap('thermal', '热成像', [
-    [8, 8, 20], [120, 20, 90], [220, 50, 40], [250, 160, 30], [255, 255, 220],
+    [8, 8, 20],
+    [120, 20, 90],
+    [220, 50, 40],
+    [250, 160, 30],
+    [255, 255, 220],
   ]),
   createStopColormap('viridis', 'Viridis', [
-    [68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37],
+    [68, 1, 84],
+    [59, 82, 139],
+    [33, 145, 140],
+    [94, 201, 98],
+    [253, 231, 37],
   ]),
   createStopColormap('inferno', 'Inferno', [
-    [0, 0, 4], [87, 16, 110], [188, 55, 84], [249, 142, 9], [252, 255, 164],
+    [0, 0, 4],
+    [87, 16, 110],
+    [188, 55, 84],
+    [249, 142, 9],
+    [252, 255, 164],
   ]),
   createStopColormap('grayscale', '灰度', [
-    [24, 24, 24], [128, 128, 128], [245, 245, 245],
+    [24, 24, 24],
+    [128, 128, 128],
+    [245, 245, 245],
   ]),
   createStopColormap('iceFire', '冰火', [
-    [24, 90, 190], [130, 190, 235], [245, 245, 245], [240, 150, 80], [200, 40, 40],
+    [24, 90, 190],
+    [130, 190, 235],
+    [245, 245, 245],
+    [240, 150, 80],
+    [200, 40, 40],
   ]),
   // jet 不是插值色标，是一条四段折线公式，所以不走 createStopColormap。
   // 它是全仓 18 处老配色用的那条阶梯，登记进来之后画布配置器和 manifest
@@ -240,8 +250,7 @@ export const COLORMAPS = [
     sampleRgb: sampleJetRgb,
     previewCss: buildPreviewCss(sampleJet),
   },
-  // 第八条，2026-08-07 第三轮批 4 随 `webglHeatmap` 进包。色标不等距 +
-  // 一道 sRGB gamma，所以两条通用工厂都套不上，单独一份采样函数。
+  // 第八条随 `webglHeatmap` 进包。色标不等距，因此使用单独的采样函数。
   {
     id: 'heatBlobs',
     label: '斑点热力',
@@ -353,7 +362,8 @@ export function colormapPreviewCss(id, options = {}) {
  * @returns {string} 可直接拼进片元着色器的 GLSL 函数定义。
  */
 export function glslJetLadder(name = 'jet1') {
-  const glslFloat = (value) => (Number.isInteger(value) ? `${value}.0` : `${value}`);
+  const glslFloat = (value) =>
+    Number.isInteger(value) ? `${value}.0` : `${value}`;
   const channel = (spec) => {
     if (typeof spec === 'number') return glslFloat(spec);
     const base = spec.slope > 0 ? 0 : 1;
@@ -400,17 +410,22 @@ export function glslStopLadder(name, stops) {
     const rounded = Math.round(value * 1e6) / 1e6;
     return Number.isInteger(rounded) ? `${rounded}.0` : `${rounded}`;
   };
-  const vec3 = (rgb) => `vec3(${rgb.map((c) => glslFloat(c / 255)).join(', ')})`;
+  const vec3 = (rgb) =>
+    `vec3(${rgb.map((c) => glslFloat(c / 255)).join(', ')})`;
 
-  const branches = stops.slice(1).map((upper, index) => {
-    const lower = stops[index];
-    const body = `    float t = (p - ${glslFloat(lower.at)}) `
-      + `/ (${glslFloat(upper.at)} - ${glslFloat(lower.at)});\n`
-      + `    return mix(${vec3(lower.rgb)}, ${vec3(upper.rgb)}, t);`;
-    // 最后一段不写条件，走 else —— 否则 p == 1.0 会掉出链尾。
-    if (index === stops.length - 2) return `  {\n${body}\n  }`;
-    return `  if (p <= ${glslFloat(upper.at)}) {\n${body}\n  } else`;
-  }).join('\n');
+  const branches = stops
+    .slice(1)
+    .map((upper, index) => {
+      const lower = stops[index];
+      const body =
+        `    float t = (p - ${glslFloat(lower.at)}) ` +
+        `/ (${glslFloat(upper.at)} - ${glslFloat(lower.at)});\n` +
+        `    return mix(${vec3(lower.rgb)}, ${vec3(upper.rgb)}, t);`;
+      // 最后一段不写条件，走 else —— 否则 p == 1.0 会掉出链尾。
+      if (index === stops.length - 2) return `  {\n${body}\n  }`;
+      return `  if (p <= ${glslFloat(upper.at)}) {\n${body}\n  } else`;
+    })
+    .join('\n');
 
   return `vec3 ${name}(float pct) {
   float p = clamp(pct, 0.0, 1.0);

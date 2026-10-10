@@ -16,7 +16,7 @@
  * `SRC_ALPHA + ONE` 累加，渲进一张离屏纹理。所以那张纹理的 alpha 就是"热度"。
  *
  * 第二趟（`COMPOSITE_VERTEX_SHADER` / `buildCompositeFragmentShader()`）画一个
- * 铺满屏的四边形，把上一趟的 alpha 当百分比查色带，再做一次 sRGB gamma。
+ * 铺满屏的四边形，把上一趟的 alpha 当百分比查色带。
  *
  * ## 原件里三处**照抄不改**的怪东西
  *
@@ -132,9 +132,8 @@ export const BLOB_ALPHA_CUTOFF = 0.03;
  * 发一段合成片元着色器。
  *
  * 色带从 `core/colormaps.js` 的 `HEAT_BLOB_STOPS` **发码**，不是第二份手抄 ——
- * 和 `numMatrix` 的 jet 阶梯同一个做法。`linearToSRGB` 那句
- * `pow(color * 1.5, 1/2.2)` 逐字保留，`colormaps.js` 的 `sampleHeatBlobsRgb`
- * 在 JS 侧复现了同一道 gamma，所以色卡和出图同色。
+ * 和 `numMatrix` 的 jet 阶梯同一个做法。锚点是最终 sRGB 色值，片元直接输出，
+ * 因而文档色卡与 WebGL 出图保持同色。
  *
  * @param {object} [options] 选项。
  * @param {Array<{at: number, rgb: [number, number, number]}>} [options.stops]
@@ -153,10 +152,6 @@ precision mediump float;
 uniform vec2 u_resolution;
 uniform sampler2D u_Sampler;
 
-vec3 linearToSRGB(vec3 color){
-  return pow(color * 1.5, vec3(1.0/2.2));
-}
-
 ${glslStopLadder('getColorByPercent', stops)}
 
 void main(void){
@@ -165,7 +160,6 @@ void main(void){
   float p_alpha = c.a;
   if(p_alpha > ${cutoff.toFixed(4)}){
     vec3 col = getColorByPercent(p_alpha);
-    col = linearToSRGB(col);
     gl_FragColor = vec4(col, 1.0);
   }else{
     discard;
@@ -174,6 +168,6 @@ void main(void){
 }
 
 /**
- * 默认合成片元着色器 —— 与原件 `fragmentShader1` 等价。
+ * 默认合成片元着色器。
  */
 export const COMPOSITE_FRAGMENT_SHADER = buildCompositeFragmentShader();

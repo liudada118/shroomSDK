@@ -18,8 +18,10 @@ import {
   DEFAULT_SENSOR_PROFILES,
   PROJECT_LINE_ORDER_NAMES,
   ProtocolRegistry,
+  createGlovePacketAssembler,
   createProjectLineOrderRegistry,
 } from '../index.js'
+import { GLOVE_REAL_FRAME_FIXTURES as GLOVE_FIXTURES } from './fixtures/glove-real-frames.mjs'
 
 import { handSinglePoint, jqbed } from '../src/line/builtinLineOrders.js'
 
@@ -37,11 +39,24 @@ test('每个内置 profile 都能解析出一帧', () => {
   const buffer = Buffer.alloc(2048, 7)
 
   for (const sensorType of Object.keys(DEFAULT_SENSOR_PROFILES)) {
+    const profile = DEFAULT_SENSOR_PROFILES[sensorType]
+    const parseProfileFrame = () => {
+      if (profile.parser === 'handGloveFullPacket') {
+        return registry.parse(sensorType, GLOVE_FIXTURES.fullLeft, { channel: 'left' })
+      }
+      if (profile.parser === 'handGloveSplitPacket' || profile.parser === 'handGloveDoublePacket') {
+        const gloveAssembler = createGlovePacketAssembler(sensorType)
+        registry.parse(sensorType, GLOVE_FIXTURES.splitLeft.first, { channel: 'left', gloveAssembler })
+        return registry.parse(sensorType, GLOVE_FIXTURES.splitLeft.second, { channel: 'left', gloveAssembler })
+      }
+      return registry.parse(sensorType, buffer, { channel: 'sit' })
+    }
+
     assert.doesNotThrow(
-      () => registry.parse(sensorType, buffer, { channel: 'sit' }),
+      parseProfileFrame,
       `profile ${sensorType} 解析抛错`,
     )
-    const frame = registry.parse(sensorType, buffer, { channel: 'sit' })
+    const frame = parseProfileFrame()
     assert.ok(frame.data.length > 0, `profile ${sensorType} 解析出空数据`)
   }
 })

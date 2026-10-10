@@ -34,6 +34,7 @@ features:
 | :--- | :--- |
 | 连接后端、打开串口、订阅实时数据 | [后端连接链路](./BACKEND_CLIENT.md) |
 | SDK 自己直接读取串口 | [本地串口链路](./SERIAL_CHAIN.md) |
+| 串口、采集、存储、回放、CSV、算法通道 | [Backend Capabilities](./BACKEND_CAPABILITIES.md) |
 | 前端展示采集报告 | [UI Components](./UI_COMPONENTS.md) |
 | 所有 API 方法 | [API Reference](./API_REFERENCE.md) |
 | 安装和实验室目录建议 | [使用文档](./SDK_GUIDE.md) |

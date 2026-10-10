@@ -30,6 +30,7 @@ import { readValues, parseFrame } from '../src/protocol/parsers.js'
 import { resolveProfile } from '../src/profiles.js'
 import { sanitizeFilename } from '../src/config/PathService.js'
 import { parseMessage } from '../src/backend/BackendCommandRouter.js'
+import { GLOVE_REAL_FRAME_FIXTURES as GLOVE_FIXTURES } from './fixtures/glove-real-frames.mjs'
 
 /* ─── utils/stats ───────────────────────────────────────────────────── */
 
@@ -142,7 +143,11 @@ test('parseFrame 的 data 与 pressureData 是同一个数组', () => {
 })
 
 test('parseFrame 按 pressureLength 截断压力段', () => {
-  const frame = parseFrame(Buffer.alloc(300, 5), resolveProfile('hand0205'), {})
+  const frame = parseFrame(
+    Buffer.alloc(300, 5),
+    resolveProfile('default', { pressureLength: 256 }),
+    {},
+  )
 
   assert.equal(frame.data.length, 256)
 })
@@ -150,7 +155,11 @@ test('parseFrame 按 pressureLength 截断压力段', () => {
 test('parseFrame 取出姿态段', () => {
   const buffer = Buffer.alloc(300, 5)
   buffer[256] = 9
-  const frame = parseFrame(buffer, resolveProfile('hand0205'), {})
+  const frame = parseFrame(
+    buffer,
+    resolveProfile('default', { pressureLength: 256, rotateOffset: 256, rotateLength: 4 }),
+    {},
+  )
 
   assert.equal(frame.rotate.length, 4)
   assert.equal(frame.rotate[0], 9)
@@ -172,11 +181,9 @@ test('profile.parseFrame 优先级最高', () => {
 
 test('handGloveFullPacket 解析器填 extra 字段', () => {
   const profile = resolveProfile('handGloveFullPacket')
-  const buffer = Buffer.alloc(274, 2)
-  buffer[1] = 0x11
-  const frame = parseFrame(buffer, profile, {})
+  const frame = parseFrame(GLOVE_FIXTURES.fullLeft, profile, {})
 
-  assert.equal(frame.extra.packetType, 0x11)
+  assert.equal(frame.extra.packetType, 1)
   assert.equal(frame.extra.packetLengthMatched, true)
 })
 

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 const {
+  createGlovePacketAssembler,
   MemoryCaptureStore,
+  remapGloveFrame,
   ShroomSensorSDK,
 } = require('..');
 
@@ -107,6 +109,23 @@ function buildMockFrame(profile) {
   return Buffer.from(values);
 }
 
+function buildMockFrames(profile) {
+  const pressure = Buffer.from(Array.from({ length: 256 }, (_, index) => index % 64));
+  const imu = Buffer.alloc(16);
+  imu.writeFloatLE(1, 12);
+
+  if (profile.product?.protocol === 'split-130-146') {
+    return [
+      Buffer.concat([Buffer.from([1, 1]), pressure.subarray(0, 128)]),
+      Buffer.concat([Buffer.from([2, 1]), pressure.subarray(128), imu]),
+    ];
+  }
+  if (profile.product?.protocol === 'fixed-274') {
+    return [Buffer.concat([Buffer.from([1, 1]), pressure, imu])];
+  }
+  return [buildMockFrame(profile)];
+}
+
 function logFrame(frameCount, frame) {
   console.log('[serial-demo] frame:', {
     channel: frame.channel,
@@ -122,7 +141,7 @@ function logFrame(frameCount, frame) {
 async function runMock(options) {
   const sdk = createSdk(options);
   const profile = sdk.registry.getProfile(options.sensorType);
-  const rawFrame = buildMockFrame(profile);
+  const rawFrames = buildMockFrames(profile);
   const capture = options.capture === 'none'
     ? null
     : sdk.getStore().createCapture({
@@ -132,17 +151,26 @@ async function runMock(options) {
       metadata: { mode: 'mock', channel: options.channel },
     });
 
-  const frame = sdk.zeroCalibrator.apply(sdk.registry.parse(options.sensorType, rawFrame, {
-    channel: options.channel,
-    profile,
-  }));
+  const gloveAssembler = profile.product?.protocol === 'split-130-146'
+    ? createGlovePacketAssembler(profile)
+    : null;
+  let frame = null;
+  rawFrames.forEach((rawFrame) => {
+    const parsed = sdk.registry.parse(options.sensorType, rawFrame, {
+      channel: options.channel,
+      profile,
+      gloveAssembler,
+    });
+    if (parsed) frame = remapGloveFrame(sdk.zeroCalibrator.apply(parsed));
+  });
+  if (!frame) throw new Error('mock packets did not assemble into a complete frame');
 
   if (capture) {
     sdk.getStore().insertFrame({
       captureId: capture.id,
       sensorType: options.sensorType,
       channel: options.channel,
-      rawFrame,
+      rawFrame: rawFrames.at(-1),
       frame,
     });
   }
@@ -271,6 +299,7 @@ if (require.main === module) {
 
 module.exports = {
   buildMockFrame,
+  buildMockFrames,
   createSdk,
   parseArgs,
   runMock,

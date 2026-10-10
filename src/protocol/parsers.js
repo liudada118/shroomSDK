@@ -1,4 +1,7 @@
 const { calculatePressureStats, normalizeNumericArray } = require('../utils/stats');
+const { buildQuaternion } = require('../glove/imu');
+const { mapGlovePressure } = require('../glove/frame');
+const { createGlovePacketAssembler, parseFullGlovePacket } = require('../glove/protocol');
 
 function readValues(buffer, valueType = 'uint8') {
   const data = Buffer.from(buffer || []);
@@ -110,24 +113,69 @@ function parseDefaultFrame(buffer, profile, context = {}) {
 }
 
 function parseHandGloveFullPacket(buffer, profile, context = {}) {
-  const data = Buffer.from(buffer || []);
-  const packetType = data[1];
-  const pressureData = applyLineOrder([...data.slice(2, 258)].map((value) => Number(value)), profile, context);
-  const rotate = [...data.slice(258, 274)].map((value) => Number(value));
-  const values = [...data].map((value) => Number(value));
+  const packet = parseFullGlovePacket(buffer, profile, context);
+  return buildGloveParsedFrame(buffer, profile, context, packet);
+}
 
-  return buildParsedFrame({
+function buildGloveParsedFrame(buffer, profile, context, packet) {
+  const pressureData = applyLineOrder(packet.pressureData, profile, context);
+  const imu = buildQuaternion(packet.imuBytes);
+  const { mappedData, matrixData } = mapGlovePressure(
+    pressureData,
+    packet.handSide,
+    profile.product,
+  );
+  const values = [...Buffer.from(buffer || [])];
+  const frame = buildParsedFrame({
     buffer,
     profile,
     channel: context.channel || 'sit',
     values,
     pressureData,
-    rotate,
+    rotate: imu.values,
     extra: {
-      packetType,
-      packetLengthMatched: data.length === profile.packetLength,
+      order: packet.order,
+      frameIndex: packet.frameIndex,
+      packetType: packet.packetType,
+      packetLengthMatched: packet.validation.ok,
+      handSideSource: packet.handSideSource,
+      validationWarnings: packet.validation.warnings,
     },
   });
+
+  return {
+    ...frame,
+    handSide: packet.handSide,
+    pressure: {
+      ...profile.dataSemantics?.pressure,
+      values: frame.pressureData,
+    },
+    imu: {
+      ...profile.dataSemantics?.imu,
+      values: imu.values,
+      quaternion: imu,
+      rawBytes: [...packet.imuBytes],
+    },
+    mappedData,
+    matrixData,
+    mapping: {
+      source: 'pressureData',
+      sourceLength: 256,
+      mappedLength: mappedData.length,
+      matrixWidth: 32,
+      matrixHeight: 32,
+      orientation: 'row-major',
+    },
+    product: { ...profile.product },
+    validation: packet.validation,
+  };
+}
+
+function parseHandGloveSplitPacket(buffer, profile, context = {}) {
+  const assembler = context.gloveAssembler || createGlovePacketAssembler(profile);
+  const packet = assembler.push(buffer, context);
+  if (!packet.complete) return null;
+  return buildGloveParsedFrame(buffer, profile, context, packet);
 }
 
 function parseFrame(buffer, profile, context = {}) {
@@ -139,6 +187,10 @@ function parseFrame(buffer, profile, context = {}) {
     return parseHandGloveFullPacket(buffer, profile, context);
   }
 
+  if (profile.parser === 'handGloveSplitPacket' || profile.parser === 'handGloveDoublePacket') {
+    return parseHandGloveSplitPacket(buffer, profile, context);
+  }
+
   return parseDefaultFrame(buffer, profile, context);
 }
 
@@ -147,5 +199,7 @@ module.exports = {
   parseFrame,
   parseDefaultFrame,
   parseHandGloveFullPacket,
+  parseHandGloveSplitPacket,
+  buildGloveParsedFrame,
   applyLineOrder,
 };
