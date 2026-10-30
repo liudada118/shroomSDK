@@ -22,7 +22,7 @@
     "chapters": [
       { "id": "guide-prepare", "label": "安装驱动与运行环境" },
       { "id": "guide-config", "label": "确认产品与串口" },
-      { "id": "guide-run", "label": "安装 SDK 依赖" },
+      { "id": "guide-run", "label": "安装 SDK" },
       { "id": "guide-connect", "label": "激活 SDK 授权" },
       { "id": "guide-verify", "label": "验证取数与采集" },
       { "id": "guide-code", "label": "接入自己的页面" }

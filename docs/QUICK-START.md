@@ -125,7 +125,7 @@ downloadRecording(stream, { format: 'csv' });
 
 整包手套使用 `product: 'glove'`，明确 `side: 'left' | 'right'`；手部检测垫使用 `product: 'pad'`，不传 `side`。也接受正式产品 ID `handGloveFullPacket / hand`。Node.js 可从 `shroom-sdk/node` 导入 `listPorts()` 查询实际 `path`；多端口不猜测产品。产品适配器内置波特率、拆帧和映射。
 
-### 安装 SDK 依赖 {#guide-run}
+### 安装 SDK {#guide-run}
 
 到[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **复制安装命令**，在自己的项目终端执行即可。npm 会自动下载 SDK 并安装 `serialport / ws / better-sqlite3` 等依赖，不需要手动解压。SDK 免登记下载，真实设备密钥另行申请。SQLite 由 SDK 管理，无需安装独立数据库服务。尚未发布 npm 注册表，请使用官网完整命令；离线包和源码 ZIP 用法见[安装说明](NPM.md)。
 
