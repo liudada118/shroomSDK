@@ -7,12 +7,45 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { join, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { createSdkArchives, packSdk } from '../pack-sdk.mjs';
-import { prepareRelease, readZipEntries, releaseNotes, verifyLatestPackages, verifyRelease } from '../sdk-release-artifacts.mjs';
+import { prepareRelease as prepareActualRelease, readZipEntries, releaseNotes, verifyLatestPackages, verifyRelease } from '../sdk-release-artifacts.mjs';
+import { readNpmEntries, verifyNpmArchive } from '../npm-archive.mjs';
 
 const runFile = promisify(execFile);
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const version = '0.1.0';
+
+/** 简单 TAR fixture 验证发布协议；真正 npm pack/安装由 test:npm 覆盖。 */
+function tarFixture(files) {
+  const parts = [];
+  for (const [name, contents] of files) {
+    const bytes = Buffer.from(contents);
+    const header = Buffer.alloc(512);
+    header.write('package/' + name);
+    header.write('0000644\0', 100);
+    header.write(bytes.length.toString(8).padStart(11, '0') + '\0', 124);
+    header.fill(32, 148, 156);
+    header[156] = 48;
+    header.write('ustar\0', 257);
+    const checksum = header.reduce((sum, byte) => sum + byte, 0);
+    header.write(checksum.toString(8).padStart(6, '0') + '\0 ', 148);
+    parts.push(header, bytes, Buffer.alloc((512 - bytes.length % 512) % 512));
+  }
+  return gzipSync(Buffer.concat([...parts, Buffer.alloc(1024)]));
+}
+
+async function fixtureNpm({ projectRoot }) {
+  const source = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8'));
+  const metadata = { name: source.name, version: source.version, type: 'module', private: true,
+    optionalDependencies: source.optionalDependencies, types: './runtime/index.d.ts',
+    exports: { '.': './runtime/web/index.js', './node': './runtime/node/index.js', './quick-flow': './runtime/quick-flow.js' } };
+  const files = new Map([['package.json', JSON.stringify(metadata)], ['README.md', '# npm fixture'], ['runtime/index.d.ts', 'export {};']]);
+  for (const path of ['quick-flow.js', 'node/index.js', 'web/index.js']) files.set('runtime/' + path, await readFile(join(projectRoot, path)));
+  return { bytes: tarFixture(files) };
+}
+
+const prepareRelease = (options) => prepareActualRelease({ ...options, buildNpm: fixtureNpm });
 
 /** 每项测试只在自己的 Git 临时仓库操作，绝不提交或重置项目工作区。 */
 async function fixture(t) {
@@ -33,6 +66,7 @@ async function fixture(t) {
     exports: { '.': './web/index.js', './node': './node/index.js', './quick-flow': './quick-flow.js' },
     optionalDependencies: { ws: '^8.14.2' },
     scripts: { start: 'node start.mjs', 'demo:quick': 'node node/quick-demo.js',
+      prepack: 'node scripts/npm-source-guard.mjs',
       'test:backend': 'node --test tests/a.mjs', 'generate:examples': 'node examples/generate-product-examples.mjs',
       'sdk:release': 'node scripts/sdk-release.mjs', 'pack:sdk': 'node scripts/pack-sdk.mjs' },
   };
@@ -55,6 +89,7 @@ async function fixture(t) {
     await put('' + path, 'do not distribute\n');
   }
   await packSdk({ projectRoot: root, log: () => {} });
+  await put('dist/shroom-sdk-0.1.0.tgz', (await fixtureNpm({ projectRoot: root })).bytes);
   const git = async (...args) => (await runFile('git', ['-C', root, '-c', 'core.hooksPath=' + join(root, '.disabled-hooks'), ...args], { windowsHide: true })).stdout.trim();
   await git('init', '-q', '-b', 'main');
   await git('add', '--all');
@@ -80,7 +115,7 @@ test('customer ZIPs are deterministic across line endings and contain only runna
   assert.ok(![...python.keys()].some((name) => /requirements-test|\/tests\/|\/build\//.test(name)));
 });
 
-test('release freezes three verified ZIPs with real Git provenance, checksums and only the selected notes', async (t) => {
+test('release freezes three ZIPs and a verified npm package with Git provenance and checksums', async (t) => {
   const context = await fixture(t);
   const latest = await verifyLatestPackages({ projectRoot: context.root });
   assert.equal(latest.version, version);
@@ -89,7 +124,9 @@ test('release freezes three verified ZIPs with real Git provenance, checksums an
   assert.equal(verified.manifest.source.commit, await context.git('rev-parse', 'HEAD'));
   assert.equal(verified.manifest.source.dirty, false);
   assert.equal(verified.manifest.tag, 'sdk-v0.1.0');
-  assert.equal((await readdir(prepared.directory)).length, 6);
+  assert.equal(verified.manifest.schema, 'shroom.sdk.release.v2');
+  assert.equal(verified.manifest.artifacts.filter(item => item.kind === 'npm').length, 1);
+  assert.equal((await readdir(prepared.directory)).length, 7);
   for (const artifact of verified.manifest.artifacts) {
     const bytes = await readFile(join(prepared.directory, artifact.file));
     assert.equal(bytes.length, artifact.size);
@@ -112,6 +149,7 @@ test('a changed package cannot overwrite an existing version and leaves no stagi
   const original = await readFile(join(prepared.directory, 'shroom-sdk-node-0.1.0.zip'));
   await context.put('node/index.js', '// changed implementation\nexport const changed = true;\n');
   await context.pack();
+  await context.put('dist/shroom-sdk-0.1.0.tgz', (await fixtureNpm({ projectRoot: context.root })).bytes);
   await assert.rejects(prepareRelease({ projectRoot: context.root }), /不可覆盖|禁止覆盖/);
   assert.deepEqual(await readFile(join(prepared.directory, 'shroom-sdk-node-0.1.0.zip')), original);
   assert.deepEqual(await readdir(context.output), ['0.1.0']);
@@ -172,4 +210,28 @@ test('release notes reject duplicate versions, invalid dates and path-like versi
   assert.throws(() => releaseNotes('## [0.1.0] - 2026-10-29\n\nA\n## [0.1.0] - 2026-10-29\n\nB', version), /只能包含一个/);
   assert.throws(() => releaseNotes('## [0.1.0] - 2026-02-31\n\nA', version), /日期无效/);
   assert.throws(() => releaseNotes('anything', '../outside'), /稳定 SemVer/);
+});
+
+test('a stale npm archive is rejected before freezing a release', async (t) => {
+  const context = await fixture(t);
+  await context.put('quick-flow.js', 'export const changed = true;');
+  await context.pack();
+  await assert.rejects(prepareRelease({ projectRoot: context.root }), /npm 安装包与当前源码不一致/);
+  await assert.rejects(readdir(context.output), { code: 'ENOENT' });
+});
+
+test('npm archive validation rejects traversal, development files and missing exports', async (t) => {
+  const context = await fixture(t);
+  const bytes = (await fixtureNpm({ projectRoot: context.root })).bytes;
+  assert.equal(verifyNpmArchive(bytes, version).name, 'shroom-sdk');
+  const entries = readNpmEntries(bytes);
+  entries.set('../secret.js', Buffer.from('secret'));
+  assert.throws(() => readNpmEntries(tarFixture(entries)), /路径越界/);
+  entries.delete('../secret.js');
+  entries.set('scripts/private.js', Buffer.from('private'));
+  assert.throws(() => verifyNpmArchive(tarFixture(entries), version), /非交付文件/);
+  entries.delete('scripts/private.js');
+  entries.delete('runtime/quick-flow.js');
+  assert.throws(() => verifyNpmArchive(tarFixture(entries), version), /缺少声明入口/);
+  assert.throws(() => readNpmEntries(bytes.subarray(0, bytes.length - 8)));
 });

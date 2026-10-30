@@ -10,13 +10,16 @@ import { basename, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
 import { createSdkArchives, crc32, SDK_ARCHIVES } from './pack-sdk.mjs';
+import { verifyNpmArchive } from './npm-archive.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const runFile = promisify(execFile);
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const COMMIT = /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/;
 const HASH = /^[a-f0-9]{64}$/;
-const SCHEMA = 'shroom.sdk.release.v1';
+const SCHEMA = 'shroom.sdk.release.v2';
+const RELEASE_PACKAGES = [...SDK_ARCHIVES, { kind: 'npm', file: 'shroom-sdk.tgz' }];
+const versionedName = (file, version) => file.replace(/\.(zip|tgz)$/, '-' + version + '.$1');
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const jsonBytes = (value) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 
@@ -137,7 +140,8 @@ export function verifySdkArchive(bytes, kind, version) {
     }
     checkExport(metadata.exports);
     if (metadata.types && !entries.has(definition.prefix + metadata.types.replace(/^\.\//, ''))) throw new Error('SDK ZIP 缺少类型入口。');
-    if (Object.keys(metadata.scripts ?? {}).some((name) => /^(?:test|generate|build|lint|sdk|pack)(?::|$)/.test(name))) throw new Error('SDK ZIP 残留开发脚本。');
+    if (Object.keys(metadata.scripts ?? {}).some((name) => /^(?:test|generate|build|lint|sdk|pack)(?::|$)/.test(name)
+      || ['prepack', 'postpack', 'prepare', 'prepublishOnly'].includes(name))) throw new Error('SDK ZIP 残留开发脚本。');
   }
   if (kind !== 'node') {
     const pyproject = entries.get(definition.prefix + 'python/pyproject.toml').toString('utf8');
@@ -158,6 +162,30 @@ export async function verifyLatestPackages({ projectRoot = ROOT } = {}) {
   return { version, archives };
 }
 
+/** 从当前源码重新生成并比对 npm 包，防止把同版本旧 tgz 混入新 Release。 */
+export async function verifyLatestNpmPackage({ projectRoot = ROOT, buildNpm } = {}) {
+  const version = await sdkVersion(projectRoot);
+  const file = versionedName('shroom-sdk.tgz', version);
+  const bytes = await regularFile(join(projectRoot, 'dist', file));
+  const metadata = verifyNpmArchive(bytes, version);
+  const pkg = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8'));
+  for (const key of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
+    if (!isDeepStrictEqual(metadata[key] ?? {}, pkg[key] ?? {})) throw new Error('npm 包依赖与当前 SDK 不一致：' + key);
+  }
+  const base = resolve(projectRoot, 'dist');
+  const temporary = await mkdtemp(join(base, '.npm-verify-'));
+  try {
+    const build = buildNpm ?? (await import('./pack-npm.mjs')).packNpm;
+    const current = await build({ projectRoot, outputDirectory: temporary, log: () => {} });
+    if (!bytes.equals(current.bytes)) throw new Error('npm 安装包与当前源码不一致，请运行 npm run pack:npm。');
+  } finally {
+    const target = resolve(temporary);
+    if (!target.startsWith(base + sep) || !basename(target).startsWith('.npm-verify-')) throw new Error('npm 校验临时目录越界');
+    await rm(target, { recursive: true, force: true });
+  }
+  return { kind: 'npm', file, bytes };
+}
+
 /** 只读取普通文件，不跟随版本目录内的外部文件链接。 */
 async function regularFile(path) {
   const info = await lstat(path);
@@ -174,21 +202,24 @@ export async function verifyRelease({ directory, expectedVersion, expectedCommit
   const manifestBytes = await regularFile(join(target, 'manifest.json'));
   const manifest = JSON.parse(manifestBytes.toString('utf8'));
   const version = validVersion(manifest.version);
-  if (manifest.schema !== SCHEMA || manifest.tag !== 'sdk-v' + version || (expectedVersion && version !== expectedVersion)
+  if (![SCHEMA, 'shroom.sdk.release.v1'].includes(manifest.schema) || manifest.tag !== 'sdk-v' + version || (expectedVersion && version !== expectedVersion)
     || !COMMIT.test(manifest.source?.commit) || typeof manifest.source?.dirty !== 'boolean') throw new Error('发布清单或源码来源无效。');
   if (requireClean && manifest.source.dirty) throw new Error('正式发布不能使用包含未提交修改的制品。');
   if (requireClean && !expectedCommit) expectedCommit = (await gitSource(projectRoot)).commit;
   if (expectedCommit && manifest.source.commit !== expectedCommit) throw new Error('发布制品来源与目标 Git 提交不一致。');
-  if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length !== SDK_ARCHIVES.length) throw new Error('发布清单必须包含三种 SDK 包。');
+  // v1 历史 Release 仍可校验；新 v2 Release 必须包含精简 npm 包。
+  const definitions = manifest.schema === SCHEMA ? RELEASE_PACKAGES : SDK_ARCHIVES;
+  if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length !== definitions.length) throw new Error('发布清单的 SDK 包数量无效。');
   const expectedFiles = new Map([['manifest.json', manifestBytes]]);
-  for (const definition of SDK_ARCHIVES) {
+  for (const definition of definitions) {
     const matches = manifest.artifacts.filter((entry) => entry.kind === definition.kind);
-    const expectedName = definition.file.replace(/\.zip$/, '-' + version + '.zip');
+    const expectedName = versionedName(definition.file, version);
     if (matches.length !== 1 || matches[0].file !== expectedName || !HASH.test(matches[0].sha256)) throw new Error('发布清单包定义无效。');
     const item = matches[0];
     const bytes = await regularFile(join(target, expectedName));
     if (bytes.length !== item.size || hash(bytes) !== item.sha256) throw new Error('发布包 SHA-256 或大小不匹配：' + expectedName);
-    verifySdkArchive(bytes, definition.kind, version);
+    if (definition.kind === 'npm') verifyNpmArchive(bytes, version);
+    else verifySdkArchive(bytes, definition.kind, version);
     expectedFiles.set(expectedName, bytes);
   }
   if (manifest.notes?.file !== 'RELEASE-NOTES.md' || !HASH.test(manifest.notes.sha256)) throw new Error('发布说明定义无效。');
@@ -203,7 +234,7 @@ export async function verifyRelease({ directory, expectedVersion, expectedCommit
 }
 
 /** 完整验证后一次性冻结目录；同版本同字节可重试，任何变化都要求发布新版本。 */
-export async function prepareRelease({ projectRoot = ROOT, outputRoot, requireClean = false } = {}) {
+export async function prepareRelease({ projectRoot = ROOT, outputRoot, requireClean = false, buildNpm } = {}) {
   const version = await sdkVersion(projectRoot);
   const source = await gitSource(projectRoot);
   if (requireClean && source.dirty) throw new Error('正式发布要求干净的 Git 工作区，请先提交源码和构建产物。');
@@ -217,6 +248,9 @@ export async function prepareRelease({ projectRoot = ROOT, outputRoot, requireCl
     files.set(file, built);
     artifacts.push({ kind: archive.kind, file, size: built.length, sha256: hash(built) });
   }
+  const npmPackage = await verifyLatestNpmPackage({ projectRoot, buildNpm });
+  files.set(npmPackage.file, npmPackage.bytes);
+  artifacts.push({ kind: 'npm', file: npmPackage.file, size: npmPackage.bytes.length, sha256: hash(npmPackage.bytes) });
   const after = await gitSource(projectRoot);
   if (after.commit !== source.commit || after.dirty !== source.dirty) throw new Error('准备发布期间 Git 状态改变，请重试。');
   const manifest = { schema: SCHEMA, version, tag: 'sdk-v' + version, releaseDate: notes.date, source, artifacts,

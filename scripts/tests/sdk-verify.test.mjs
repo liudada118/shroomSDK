@@ -51,6 +51,7 @@ test('standalone gate packages only after language and type checks without websi
   }
   assert.ok(calls.findIndex(args => args.includes('verify-latest')) > pack);
   assert.ok(calls.findIndex(args => args.includes('scripts/check-sdk-packages.mjs')) > pack);
-  assert.equal(calls.at(-1)[0], 'scripts/check-sdk-packages.mjs');
+  assert.ok(calls.findIndex(args => args.includes('scripts/pack-npm.mjs')) > pack);
+  assert.equal(calls.at(-1)[0], 'scripts/check-npm-package.mjs');
   assert.ok(!calls.flat().some(arg => /vinext|build-docs|server\/|check-product-workspace/.test(arg)));
 });

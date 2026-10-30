@@ -64,5 +64,5 @@ jobs:
             exit 1
           fi
           release_dir="$RELEASE_ROOT/$SDK_VERSION"
-          gh release create "$SDK_TAG" "$release_dir"/*.zip "$release_dir/SHA256SUMS" "$release_dir/manifest.json" "$release_dir/RELEASE-NOTES.md" \
+          gh release create "$SDK_TAG" "$release_dir"/*.zip "$release_dir"/*.tgz "$release_dir/SHA256SUMS" "$release_dir/manifest.json" "$release_dir/RELEASE-NOTES.md" \
             --verify-tag --draft --title "Shroom SDK $SDK_VERSION" --notes-file "$release_dir/RELEASE-NOTES.md"

@@ -4,6 +4,7 @@ import { createProductCall } from './product-call.js';
 export function createProductFlow(options) {
   const readCode = createProductCall({ ...options, env: 'node', quickFlow: true });
   const glove = options.product === 'glove';
+  const entry = options.importStyle === 'package' ? 'shroom-sdk/quick-flow' : './quick-flow.js';
   return [
     {
       id: 'flow-read', title: '取数',
@@ -14,13 +15,13 @@ export function createProductFlow(options) {
       id: 'flow-ws', title: '创建 WS',
       blocks: [
         { runtime: 'node', code: [
-          "import { createWS } from './quick-flow.js';", '',
+          `import { createWS } from '${entry}';`, '',
           'const server = await createWS(device, { port: 19999 });',
           'console.log(server.url); // ws://127.0.0.1:19999',
           '// 退出时 await server.close()，会等待文件写完并释放设备。',
         ].join('\n') },
         { runtime: 'web', code: [
-          "import { readProduct, startRecording, stopRecording, downloadRecording } from './quick-flow.js';", '',
+          `import { readProduct, startRecording, stopRecording, downloadRecording } from '${entry}';`, '',
           '// 浏览器连接一次，后面三步复用同一个 stream。',
           'const stream = await readProduct({',
           "  url: 'ws://127.0.0.1:19999',",

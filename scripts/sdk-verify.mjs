@@ -24,7 +24,9 @@ export async function verifySdk({ root = VERSION_ROOT, run = runCommand, log = c
   await node(['scripts/pack-sdk.mjs']);
   await node(['scripts/sdk-release-artifacts.mjs', 'verify-latest']);
   await node(['scripts/check-sdk-packages.mjs']);
-  log('SDK 发布门禁通过：JS、Python、原生依赖、类型、发布工具和客户下载包。');
+  await node(['scripts/pack-npm.mjs']);
+  await node(['scripts/check-npm-package.mjs']);
+  log('SDK 发布门禁通过：JS、Python、原生依赖、类型、发布工具、ZIP 和 npm 安装包。');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

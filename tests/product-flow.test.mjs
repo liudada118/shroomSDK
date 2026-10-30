@@ -12,6 +12,21 @@ import { activateTestLicense } from './license-fixture.mjs';
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const body = code => code.replace(/^import[^\n]+\n/gm, '');
 
+test('npm flow keeps the five public calls and resolves imports through the package', () => {
+  const options = { product: 'pad', platform: 'linux' };
+  const relative = createProductFlow(options);
+  const packaged = createProductFlow({ ...options, importStyle: 'package' });
+  assert.deepEqual(packaged.map(step => step.id), ['flow-read', 'flow-ws', 'flow-start', 'flow-stop', 'flow-download']);
+  for (let index = 0; index < relative.length; index += 1) {
+    assert.equal(packaged[index].blocks.length, relative[index].blocks.length);
+    for (let block = 0; block < relative[index].blocks.length; block += 1) {
+      assert.equal(packaged[index].blocks[block].code,
+        relative[index].blocks[block].code.replaceAll("'./quick-flow.js'", "'shroom-sdk/quick-flow'"));
+    }
+  }
+  assert.equal(packaged.flatMap(step => step.blocks).filter(block => block.code.includes("from 'shroom-sdk/quick-flow'")).length, 3);
+});
+
 test('displayed flow snippets share a real WS connection and download the recording stopped by this client', async t => {
   await activateTestLicense();
   const directory = await mkdtemp(join(tmpdir(), 'shroom-doc-flow-'));

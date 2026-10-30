@@ -62,6 +62,8 @@ jobs:
         env:
           SDK_PYTHON: python
         run: npm run test:python
+      - name: Install and test the compact npm package
+        run: npm run test:npm
 
   full-checks:
     name: Build and validate SDK delivery

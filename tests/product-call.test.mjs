@@ -8,8 +8,11 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
 test('quick calls use an existing product function and deliver its data without protocol or UI setup', async () => {
   for (const product of ['glove', 'pad']) for (const side of ['left', 'right'])
-    for (const env of ['web', 'node']) for (const platform of ['windows', 'macos', 'linux']) {
-      const source = createProductCall({ product, side, env, platform });
+    for (const env of ['web', 'node']) for (const platform of ['windows', 'macos', 'linux'])
+      for (const importStyle of ['relative', 'package']) {
+      const source = createProductCall({ product, side, env, platform, importStyle });
+      const entry = importStyle === 'package' ? `shroom-sdk/${env}` : `./${env}/index.js`;
+      assert.ok(source.includes(`from '${entry}'`));
       const name = product === 'glove' ? 'connectGlove' : 'connectHandPad';
       assert.equal(typeof (env === 'node' ? NodeSdk : WebSdk)[name], 'function');
       assert.match(source, /SDK 授权完成后/);
@@ -33,7 +36,7 @@ test('quick calls use an existing product function and deliver its data without 
 
 test('product call generation rejects unsupported choices instead of inventing an SDK API', () => {
   const base = { product: 'glove', side: 'left', env: 'web', platform: 'windows' };
-  for (const override of [{ product: 'unknown' }, { side: 'auto' }, { env: 'python' }, { platform: 'unknown' }]) {
+  for (const override of [{ product: 'unknown' }, { side: 'auto' }, { env: 'python' }, { platform: 'unknown' }, { importStyle: 'url' }]) {
     assert.throws(() => createProductCall({ ...base, ...override }), TypeError);
   }
 });

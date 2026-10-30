@@ -2,22 +2,22 @@
 
 同一台电脑上，Node.js 连接设备、创建 WS 并保存记录；浏览器连接一次，后面三步复用同一个 `stream`。下面只列 API 调用，放进自己的 Node.js 程序和网页，不需要复制完整 HTML。
 
-**运行前提**：设备驱动可用，SDK 根目录已安装依赖，Node.js 已按 [SDK 授权](LICENSE.md)激活有效 SDK 产品密钥，功能包括 `serial / stream / recording`。安装和授权要点见文末[接入准备](#product-guide)。
+**运行前提**：设备驱动可用，业务项目已通过[官网安装命令](https://sdk.jq-industries.com/#downloads)安装 SDK，Node.js 已按 [SDK 授权](LICENSE.md)激活有效 SDK 产品密钥，功能包括 `serial / stream / recording`。安装和授权要点见文末[接入准备](#product-guide)。
 
-**只用五个函数**：`readProduct`、`createWS`、`startRecording`、`stopRecording`、`downloadRecording`，统一从 SDK 根目录的 `quick-flow.js` 导入。该文件依赖同目录下的 SDK 模块；Node.js 与浏览器分别调用各自的片段。
+**只用五个函数**：`readProduct`、`createWS`、`startRecording`、`stopRecording`、`downloadRecording`，统一从 `shroom-sdk/quick-flow` 导入；Node.js 与浏览器分别调用各自的片段。
 
 它们调用的就是[基础文档中的公开 API](CUSTOM.md#quick-to-base)；参数与生命周期的详细说明统一从该对应表进入。
 
 ## 5 步调用 {#quick-call}
 
-示例文件放在 SDK 根目录，统一导入 `./quick-flow.js`。`COM3` 替换为实际端口，手套 `side` 按实物选择。
+示例放在自己的项目中，统一导入 `shroom-sdk/quick-flow`。`COM3` 替换为实际端口，手套 `side` 按实物选择。网页需使用 Vite 等构建工具；普通 HTML 使用源码 ZIP 并将导入改为 SDK 根目录的 `./quick-flow.js`，见[安装方式](NPM.md)。
 
 ## 1. 取数 {#flow-read}
 
 **Node.js**
 
 ```js
-import { readProduct } from './quick-flow.js';
+import { readProduct } from 'shroom-sdk/quick-flow';
 
 // SDK 授权完成后调用；path 替换为系统中的实际串口。
 const device = await readProduct({
@@ -43,7 +43,7 @@ onData 持续返回产品帧；这一步已开始读取设备，还没有保存�
 **Node.js**
 
 ```js
-import { createWS } from './quick-flow.js';
+import { createWS } from 'shroom-sdk/quick-flow';
 
 const server = await createWS(device, { port: 19999 });
 console.log(server.url); // ws://127.0.0.1:19999
@@ -54,7 +54,7 @@ console.log(server.url); // ws://127.0.0.1:19999
 ```js
 import {
   readProduct, startRecording, stopRecording, downloadRecording,
-} from './quick-flow.js';
+} from 'shroom-sdk/quick-flow';
 
 // 浏览器连接一次，后面三步复用同一个 stream。
 const stream = await readProduct({
@@ -123,15 +123,26 @@ downloadRecording(stream, { format: 'csv' });
 
 ### 确认产品与串口 {#guide-config}
 
-整包手套使用 `product: 'glove'`，明确 `side: 'left' | 'right'`；手部检测垫使用 `product: 'pad'`，不传 `side`。也接受正式产品 ID `handGloveFullPacket / hand`。Node.js 可从 `node/index.js` 导入 `listPorts()` 查询实际 `path`；多端口不猜测产品。产品适配器内置波特率、拆帧和映射。
+整包手套使用 `product: 'glove'`，明确 `side: 'left' | 'right'`；手部检测垫使用 `product: 'pad'`，不传 `side`。也接受正式产品 ID `handGloveFullPacket / hand`。Node.js 可从 `shroom-sdk/node` 导入 `listPorts()` 查询实际 `path`；多端口不猜测产品。产品适配器内置波特率、拆帧和映射。
 
 ### 安装 SDK 依赖 {#guide-run}
 
-下载 [Node.js（含浏览器）SDK ZIP](/shroom-sdk-node.zip)，在包含 `node/`、`web/` 和 `package.json` 的 SDK 根目录执行 `npm install`，安装 `serialport / ws / better-sqlite3` 等依赖。SQLite 采集库由 SDK 管理，无需安装独立数据库服务。尚未发布公共 npm 包，不使用 `npm install shroom-sdk`。
+到[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **复制安装命令**，在自己的项目终端执行即可。npm 会自动下载 SDK 并安装 `serialport / ws / better-sqlite3` 等依赖，不需要手动解压。SDK 免登记下载，真实设备密钥另行申请。SQLite 由 SDK 管理，无需安装独立数据库服务。尚未发布 npm 注册表，请使用官网完整命令；离线包和源码 ZIP 用法见[安装说明](NPM.md)。
 
 ### 激活 SDK 授权 {#guide-connect}
 
 Node.js 打开设备前按 [SDK 授权](LICENSE.md)完成激活，并复用稳定安装标识；SDK 核心不会自动读取环境变量。上位机密钥不能启用 SDK。只取数需要 `serial`，本流程创建服务与采集还需要 `stream / recording`；在线授权按说明持续续验。
+
+```js
+import { Shroom } from 'shroom-sdk/node';
+
+// 由应用读取密钥，并保留稳定的 64 位小写 hex 安装标识；不要每次启动重新生成。
+await Shroom.activateLicense(process.env.SHROOM_LICENSE_KEY, {
+  deviceId: process.env.SHROOM_DEVICE_ID,
+});
+```
+
+标识的保存与配置见[授权说明](LICENSE.md)。精简 npm 包不包含源码示例专用的 `node/license-env.js`。
 
 ### 验证取数与采集 {#guide-verify}
 

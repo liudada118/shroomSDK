@@ -1,15 +1,20 @@
 /** 生成产品取数调用，运行前由宿主项目完成 SDK 授权；不生成界面或重复解析协议。 */
 export function createProductCall(options) {
-  const { product, side, env, platform = 'windows', quickFlow = false } = options ?? {};
+  const { product, side, env, platform = 'windows', quickFlow = false, importStyle = 'relative' } = options ?? {};
   if (!['glove', 'pad'].includes(product)) throw new TypeError('请选择手套或手部检测垫。');
   if (product === 'glove' && !['left', 'right'].includes(side)) throw new TypeError('请明确实物手侧。');
   if (!['web', 'node'].includes(env)) throw new TypeError('请选择浏览器或 Node.js。');
   if (!['windows', 'macos', 'linux'].includes(platform)) throw new TypeError('请选择采集电脑系统。');
+  if (!['relative', 'package'].includes(importStyle)) throw new TypeError('请选择源码相对路径或 npm 包入口。');
   if (quickFlow && env !== 'node') throw new TypeError('产品串口快速调用在 Node.js 中运行。');
   const name = quickFlow ? 'readProduct' : product === 'glove' ? 'connectGlove' : 'connectHandPad';
   const path = platform === 'windows' ? 'COM3' : platform === 'macos' ? '/dev/cu.usbserial-实际端口' : '/dev/ttyUSB0';
+  // 官网 npm 接入与 ZIP 示例共用调用合同，只切换公开模块路径。
+  const entry = importStyle === 'package'
+    ? `shroom-sdk/${quickFlow ? 'quick-flow' : env}`
+    : quickFlow ? './quick-flow.js' : `./${env}/index.js`;
   return [
-    `import { ${name} } from '${quickFlow ? './quick-flow.js' : `./${env}/index.js`}';`, '',
+    `import { ${name} } from '${entry}';`, '',
     env === 'web' ? '// SDK 授权完成后，在“连接”按钮的点击事件中调用。' : '// SDK 授权完成后调用；path 替换为系统中的实际串口。',
     `const device = await ${name}({`,
     ...(quickFlow ? [`  product: '${product}', // 由 SDK 注册表选择对应产品协议`] : []),

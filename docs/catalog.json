@@ -1,5 +1,10 @@
 [
   {
+    "slug": "npm", "file": "docs/NPM.md", "label": "安装 JavaScript SDK", "navLabel": "安装 SDK",
+    "summary": "从官网下载区复制一条安装命令，直接将 JavaScript SDK 安装到自己的项目；也可下载 TGZ。",
+    "forAi": false, "area": "guides", "group": "guides"
+  },
+  {
     "slug": "drivers", "file": "docs/DRIVERS.md", "label": "安装串口驱动", "navLabel": "串口驱动",
     "summary": "下载 Windows / macOS 串口驱动，安装后确认端口，排查找不到串口的问题。",
     "forAi": false, "area": "guides", "group": "guides"

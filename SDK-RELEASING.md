@@ -18,6 +18,8 @@
 | `npm run sdk:version -- bump 0.2.0` | 明确指定更高的稳定版本 |
 | `npm run sdk:check` | 快速检查发布配置的一致性 |
 | `npm run pack:sdk` | 构建并生成当前版本的三个兼容 ZIP |
+| `npm run pack:npm` | 生成可由 npm 安装的精简 `dist/shroom-sdk-<版本>.tgz` |
+| `npm run test:npm` | 在独立客户项目实际安装 `.tgz`，检查入口、类型、浏览器构建及采集下载 |
 | `npm run sdk:verify` | 运行完整发布门禁 |
 | `npm run sdk:release` | 完整门禁通过后生成本地版本制品 |
 | `npm run sdk:release -- --require-clean` | 正式发布检查：干净 Git 工作区、匹配版本标签与当前提交 |
@@ -45,9 +47,23 @@ macOS/Linux 将虚拟环境解释器换成 `.venv/bin/python`，环境变量使�
 
 根 `package-lock.json` 固定 JavaScript SDK 的维护环境，`python/requirements-test.lock` 固定 Python 测试环境。Python 客户包的可选运行依赖由 `python/pyproject.toml` 声明。修改依赖后要更新对应锁文件并重新跑门禁；不要直接编辑锁文件中的解析结果。
 
-`sdk:verify` 检查版本、原生模块加载、JS 测试、发布工具测试、Python 测试和 TypeScript 类型，再生成 ZIP。官网文档渲染、页面测试和构建由官网仓库验证，不是 SDK 发布的依赖。
+`sdk:verify` 检查版本、原生模块加载、JS 测试、发布工具测试、Python 测试和 TypeScript 类型，再生成 ZIP 与 npm `.tgz`。官网文档渲染、页面测试和构建由官网仓库验证，不是 SDK 发布的依赖。
 
 完整门禁还会把实际 ZIP 解压到临时目录，按客户安装方式运行 `npm ci` 与 Python 本地安装，验证五步采集/下载及 Python 模拟取数，再清理临时目录。这一步需要能够下载 SDK 的锁定依赖；维护环境和客户安装结果分开验证。
+
+`.tgz` 单独在仓库之外的客户项目安装，测试通过 `shroom-sdk/quick-flow` 等公开包入口调用，覆盖模拟设备、WS、SQLite 与 HTTP 导出，以及浏览器打包和 TypeScript 类型解析。不能用源码目录的测试成功替代安装包验证。
+
+## npm 安装包的交付边界
+
+使用 `npm run pack:npm`，不要直接在源码根目录运行 `npm pack` 或 `npm publish`。根包的 `prepack` 会拒绝直接打包并提示正确命令，避免把开发仓库作为客户包交付。
+
+打包工具从公开入口收集运行依赖，在独立临时目录压缩 JavaScript 并生成安装用清单，再调用 npm 生成 `.tgz`。保留类型声明和公开入口；Node.js 模块保留共享状态，浏览器使用独立条件入口和共享代码块。安装包不含开发脚本、测试、示例生成器、Python、用户采集数据、私钥或 source map；原有 ZIP 仍提供源码和示例。
+
+客户使用 `npm install --save-exact ./shroom-sdk-<版本>.tgz`；示例和本地文件依赖的保存方式见[npm 安装说明](docs/NPM.md)。`docs/NPM.md` 同时作为安装包内的 README，修改交付方式时同步维护该文件。
+
+当前源码与安装包保留 `private: true`，防止误发布到 npm 注册表；它不影响本地 `.tgz` 安装，也不代表 GitHub 仓库私有。尚未设置 npm 注册表发布账号、包名归属或自动发布流程，不能将本地打包描述为 npm 已上线。后续启用注册表发布时，先确认发布身份、包名与分发权限，再更新发布配置并验证目标制品。
+
+压缩和不附 source map 只能减少误改与内部实现的直接暴露，不能保证防止破解。安装分发与授权校验是独立机制，本次不改变设备协议、授权权益或收费功能。
 
 ## 制作本地候选包
 
@@ -55,20 +71,21 @@ macOS/Linux 将虚拟环境解释器换成 `.venv/bin/python`，环境变量使�
 2. 在 [CHANGELOG.md](CHANGELOG.md) 添加唯一的版本小节，格式为 `## [0.2.0] - YYYY-MM-DD`，写清用户可见变化、迁移要求和语言差异。
 3. 执行 `npm run sdk:release`，检查测试输出与生成的文件。
 
-普通 `pack:sdk` 输出 `dist/shroom-sdk.zip`、`dist/shroom-sdk-node.zip` 和 `dist/shroom-sdk-python.zip`。版本制品输出目录为 `dist/releases/<版本>/`，包含：
+普通 `pack:sdk` 输出 `dist/shroom-sdk.zip`、`dist/shroom-sdk-node.zip` 和 `dist/shroom-sdk-python.zip`；`pack:npm` 输出 `dist/shroom-sdk-<版本>.tgz`。版本制品输出目录为 `dist/releases/<版本>/`，包含：
 
 | 文件 | 内容 |
 | --- | --- |
 | `shroom-sdk-<版本>.zip` | 完整 SDK |
 | `shroom-sdk-node-<版本>.zip` | Node.js 与浏览器 SDK |
 | `shroom-sdk-python-<版本>.zip` | Python SDK |
+| `shroom-sdk-<版本>.tgz` | JavaScript 精简 npm 安装包，供客户项目作为依赖安装 |
 | `manifest.json` | 版本、Git 来源、候选状态与制品信息 |
 | `SHA256SUMS` | 文件校验值 |
 | `RELEASE-NOTES.md` | 从对应更新日志小节提取的发布说明 |
 
 工作区有未提交修改时，只能得到候选制品，清单会记录 `source.dirty: true`。它能用于本地检查，不能作为正式发布依据；修改需要先提交，再由 CI 的干净工作区生成正式制品。
 
-同一版本的六个文件全部一致时，可重复执行而不改写内容。文件内容、来源提交或候选状态改变都会拒绝覆盖。已生成的候选目录不应复制到正式 CI 工作区；正式发布使用匹配标签的新工作区构建。已有正式版本需要修正时，升到新版本。
+同一版本的七个文件全部一致时，可重复执行而不改写内容。文件内容、来源提交或候选状态改变都会拒绝覆盖。已生成的候选目录不应复制到正式 CI 工作区；正式发布使用匹配标签的新工作区构建。已有正式版本需要修正时，升到新版本。
 
 ## 正式发布到 GitHub
 
@@ -85,9 +102,9 @@ git push origin "sdk-v$sdkVersion"
 
 3. 查看 `.github/workflows/sdk-release.yml` 对应的 **SDK release draft** 工作流。标签必须严格等于 `sdk-v<SDK版本>`，并指向当前发布提交；已有同名 Release 不会被覆盖。
 4. 等 Windows、macOS、Linux 检查通过。Linux 执行完整门禁并打包，后续发布任务重新校验文件哈希、干净状态和来源提交，再创建带附件的 GitHub Release 草稿。
-5. 在 GitHub 检查版本、更新说明和三个 ZIP，确认后点击 **Publish release**。草稿不是已经对外发布的版本。
+5. 在 GitHub 检查版本、更新说明、三个 ZIP 与一个 `.tgz`，确认后点击 **Publish release**。草稿不是已经对外发布的版本。
 
-日常分支或 PR 使用 `.github/workflows/sdk-ci.yml` 的 **SDK checks**。发布配置不会自动发布到 npm 或 PyPI；当前客户交付方式是官网 ZIP 与 GitHub Release 附件。
+日常分支或 PR 使用 `.github/workflows/sdk-ci.yml` 的 **SDK checks**。发布配置不会自动发布到 npm 或 PyPI；客户可安装已交付的 `.tgz`，或使用官网 ZIP 与已发布的 GitHub Release 附件。
 
 ## 官网下载与回退
 

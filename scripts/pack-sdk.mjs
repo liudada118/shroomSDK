@@ -84,7 +84,8 @@ async function archiveContent(file, sdkRoot) {
     const metadata = JSON.parse(raw.toString('utf8'));
     // 客户包不附带开发测试与生成器，因此不能留下指向缺失文件的 npm 脚本。
     metadata.scripts = Object.fromEntries(Object.entries(metadata.scripts ?? {})
-      .filter(([name]) => !/^(?:test|generate|build|lint|sdk|pack)(?::|$)/.test(name)));
+      .filter(([name]) => !/^(?:test|generate|build|lint|sdk|pack)(?::|$)/.test(name)
+        && !['prepack', 'postpack', 'prepare', 'prepublishOnly'].includes(name)));
     return Buffer.from(`${JSON.stringify(metadata, null, 2)}\n`);
   }
   return TEXT_EXTENSIONS.has(extname(file).toLowerCase())

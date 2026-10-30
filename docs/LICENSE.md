@@ -17,7 +17,7 @@ SDK 产品密钥默认包含 `serial`、`serial.raw`、`stream`、`recording`，
 ## Node.js 激活
 
 ```js
-import { Shroom } from './node/index.js';
+import { Shroom } from 'shroom-sdk/node';
 
 await Shroom.activateLicense(process.env.SHROOM_LICENSE_KEY, {
   deviceId: process.env.SHROOM_DEVICE_ID, // 限定电脑数量时必填：稳定的 64 位小写 hex
@@ -28,6 +28,8 @@ device.onData(console.log);
 ```
 
 应用负责提供并保留稳定的 `deviceId`，同一次安装重启后不能重新随机生成。这个标识用于后台名额登记，不是 SDK 证明物理电脑身份的硬件凭证。更换标识会占用新名额；迁移电脑时在后台解绑旧登记。
+
+以上为 npm 安装后的包名入口。源码 ZIP 在 SDK 根目录运行时改为 `./node/index.js`；下面的演示启动器和环境变量 helper 仅随源码 ZIP 交付，npm 项目直接使用上述公开激活 API。SDK 免登记下载，真实设备密钥单独申请。
 
 内置 `node/demo.js`、`product-demo.js`、`quick-demo.js` 从环境变量读取授权。PowerShell 示例：
 

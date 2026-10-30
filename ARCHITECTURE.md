@@ -20,7 +20,7 @@
 | 采集 | `better-sqlite3`，`sessions / frames` 表，批量事务与分页导出 |
 | 通信 | `ws`，同端口 HTTP 下载；应用后端通过独立 `BackendSdkClient` 访问 |
 | 依赖与类型 | npm 锁文件、Python 测试锁文件、TypeScript 声明与类型测试 |
-| 验证与发布 | Node 内置测试、Python unittest、确定性 ZIP、SHA256；GitHub Actions |
+| 验证与发布 | Node 内置测试、Python unittest、esbuild 运行包压缩、ZIP / npm TGZ、SHA256；GitHub Actions |
 | 维护环境 | Node.js 22.22.0 / npm 10.9.4；Python 测试 3.11+，CI 3.12 |
 
 ## 3. 目录结构
@@ -43,18 +43,22 @@ shroomSDK/
 │  ├─ tests/                Python 与跨语言测试
 │  └─ requirements-test.lock
 ├─ examples/                 五步调用生成器和演示
-├─ docs/                     SDK 接入与基础 API 文档，供官网读取
+├─ docs/                     SDK 接入与基础 API 文档，供官网读取；NPM.md 同时作为安装包 README
 ├─ tests/                    JS、协议、授权、采集和类型测试
 ├─ scripts/                  版本、构建、打包、制品校验及安装验证
 ├─ .github/workflows/        跨平台检查和版本标签发布
-├─ dist/                     生成的兼容 ZIP，不跟踪到 Git
-│  └─ releases/<version>/    版本 ZIP、清单、校验值、发布说明
+├─ dist/                     生成的兼容 ZIP 与 shroom-sdk-<版本>.tgz，不跟踪到 Git
+│  └─ releases/<version>/    版本 ZIP / TGZ、清单、校验值、发布说明
 ├─ CHANGELOG.md              当前包版本更新记录
 ├─ MIGRATION.md              原仓库实现的迁移边界
 └─ SDK-RELEASING.md           维护与发布流程
 ```
 
 SDK 源文件直接位于仓库根目录下，没有第二层 `sdk/`。客户 ZIP 采用交付白名单，排除测试、构建脚本、依赖目录、开发缓存及用户采集记录；源码仓库保留这些开发工具。网页 bundle 和内联示例由源码构建，修改模块后应重新生成。
+
+JavaScript 集成优先使用 `scripts/pack-npm.mjs` 生成的 `.tgz` 安装包。它根据公开入口收集实际运行模块，在独立临时目录压缩并保留类型，再交给 npm 打包；客户从 `shroom-sdk/quick-flow` 导入五个函数。Node.js 保留相对模块结构，避免复制授权会话与模拟设备身份；浏览器通过条件导出选择独立入口，并用共享代码块保持同一环境内的模块状态。包中不含开发工具、测试、Python 或 source map。根目录直接 `npm pack` / `npm publish` 会由 `prepack` 阻止，提示使用受控打包命令。
+
+`examples/product-call.js` 与 `product-flow.js` 接受 `importStyle: 'package'`，官网由此生成 `shroom-sdk/quick-flow` 和 `shroom-sdk/node|web` 的公开包名导入；默认 `relative` 保持 ZIP 示例可运行。客户安装文档纳入 `docs/catalog.json` 的 `npm` 页面，快速接入与 AI 上下文默认使用包入口，源码 ZIP 的路径转换单独说明。
 
 ## 4. 核心模块与数据流
 
@@ -96,9 +100,11 @@ flowchart LR
 
 ## 6. 版本、发布与官网集成
 
-根 `package.json.version` 同步到 `core/version.js`、Python 包元数据和 `_version.py`。发布检查包含原生依赖加载、JS/发布工具/Python 测试、类型检查及客户 ZIP 独立安装验证。SDK 不运行官网的页面或服务测试。
+根 `package.json.version` 同步到 `core/version.js`、Python 包元数据和 `_version.py`。发布检查包含原生依赖加载、JS/发布工具/Python 测试、类型检查及客户 ZIP 和 npm TGZ 独立安装验证。npm 消费测试从真实安装后的包名入口调用五步流程，并验证浏览器打包与类型解析。SDK 不运行官网的页面或服务测试。
 
-构建输出 `dist/shroom-sdk.zip`、`dist/shroom-sdk-node.zip`、`dist/shroom-sdk-python.zip`。正式版本目录有六个文件：三个带版本 ZIP、`manifest.json`、`SHA256SUMS`、`RELEASE-NOTES.md`。清单记录真实 Git 提交与脏状态；相同版本不允许被不同内容或不同来源覆盖。
+构建输出 `dist/shroom-sdk.zip`、`dist/shroom-sdk-node.zip`、`dist/shroom-sdk-python.zip` 和 `dist/shroom-sdk-<版本>.tgz`。正式版本目录有七个文件：三个带版本 ZIP、一个 npm TGZ、`manifest.json`、`SHA256SUMS`、`RELEASE-NOTES.md`。清单记录真实 Git 提交与脏状态；相同版本不允许被不同内容或不同来源覆盖。
+
+源码包与 npm 安装包保留 `private: true`，仅阻止 npm 注册表发布，不限制文件或 URL 安装，也不代表 GitHub 仓库私有。当前未启用注册表发布；客户从官网复制包含安装包完整 URL 的命令，直接安装到业务项目 `node_modules`，无需解压或登记。真实设备密钥另行申请。下载 `.tgz` 后手动安装仍可用，本地文件依赖需要随项目保存安装包与锁文件。压缩并隐藏内部导入路径用于交付管理，不能作为防篡改或授权不可绕过的保证。
 
 GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运行检查；`sdk-vX.Y.Z` 标签触发 Windows/macOS/Linux 检查，Linux 打包并保存附件，具有写权限的后续任务重新验证附件再创建 Release 草稿。同名 Release 不覆盖。工作流不自动发布 npm、PyPI 或部署官网。
 
@@ -106,7 +112,7 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 
 ## 7. 环境变量
 
-以下授权变量由示例显式调用 `activateLicenseFromEnv()` 时读取，仅导入 SDK 不会自动激活。
+以下授权变量由源码 ZIP 的示例启动器显式调用 `activateLicenseFromEnv()` 时读取。精简 npm 包不交付该 helper；应用自行读取配置，再从 `shroom-sdk/node` 调用 `Shroom.activateLicense(key, { deviceId })`，保存稳定的安装标识。仅导入 SDK 不会自动激活。
 
 | 变量 | 用途 |
 | --- | --- |
@@ -127,6 +133,8 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | --- | --- | --- |
 | 2026-10-30 | 独立五步 SDK 仓库 | 当前 Node/Web/Python SDK、适配器、授权、SQLite、文档与测试迁入根目录；官网固定提交引用 |
 | 2026-10-30 | 独立构建与发布 | 版本、依赖锁、类型校验、客户 ZIP 验证、跨平台 CI 与 Release 草稿均在 SDK 仓库完成 |
+| 2026-10-30 | npm 依赖安装交付 | 生成压缩运行代码与类型组成的 TGZ，保持五函数入口；增加客户安装、浏览器构建与类型验证，保留 ZIP 源码交付 |
+| 2026-10-30 | 官网一步安装接入说明 | 客户从官网复制安装命令；示例支持包名与 ZIP 两种导入，快速文档及 AI 上下文采用公开包入口和授权 API |
 
 ## 9. 更新日志
 
@@ -134,6 +142,8 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | --- | --- | --- |
 | 2026-10-30 | 优化重构 | 按决定直接替换原主线 SDK，保留旧标签与历史；建立五步 SDK 和官网的独立仓库边界 |
 | 2026-10-30 | 文档更新 | 更新根目录安装与发布说明，明确包身份、旧接口和数据库的迁移边界 |
+| 2026-10-30 | 优化重构 | 增加 npm 精简安装包、受控打包与发布附件；文档区分客户安装和源码维护，说明注册表尚未发布及压缩的保护边界 |
+| 2026-10-30 | 文档更新 | 新增安装 SDK 导航，统一官网命令安装、免登记下载与密钥另行申请；保留源码 ZIP 示例的相对路径兼容 |
 
 ## 10. 原 SDK 历史记录
 

@@ -27,7 +27,10 @@
       "node": "./node/backend.js",
       "default": "./backend/client.js"
     },
-    "./core": "./core/frame.js"
+    "./core": {
+      "types": "./core/frame.d.ts",
+      "default": "./core/frame.js"
+    }
   },
   "scripts": {
     "generate:examples": "node examples/generate-product-examples.mjs",
@@ -49,7 +52,10 @@
     "sdk:check": "node scripts/sdk-check.mjs",
     "sdk:verify": "node scripts/sdk-verify.mjs",
     "sdk:release": "node scripts/sdk-release.mjs",
-    "pack:sdk": "npm run sdk:check && npm run build && node scripts/pack-sdk.mjs && node scripts/sdk-release-artifacts.mjs verify-latest"
+    "pack:sdk": "npm run sdk:check && npm run build && node scripts/pack-sdk.mjs && node scripts/sdk-release-artifacts.mjs verify-latest",
+    "pack:npm": "npm run sdk:check && node scripts/pack-npm.mjs",
+    "test:npm": "npm run pack:npm && node scripts/check-npm-package.mjs",
+    "prepack": "node scripts/npm-source-guard.mjs"
   },
   "optionalDependencies": {
     "better-sqlite3": "^11.10.0",

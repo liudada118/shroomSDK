@@ -6,15 +6,15 @@
 
 ## 1. 准备 SDK 和设备 {#prepare}
 
-1. 下载 Node.js（含浏览器）SDK，安装 Node.js 18+，在 SDK 根目录执行 `npm install`；实机取数使用 `serialport`，采集服务使用 `ws / better-sqlite3`。
+1. 安装 Node.js 18+，到[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **复制安装命令**，在自己的项目终端执行；无需先解压源码。也可下载 `.tgz`，安装方式见[npm 安装说明](docs/NPM.md)。SDK 免登记下载，密钥单独申请。
 2. CH34x 设备先确认驱动可用：[Windows 驱动](https://shroom.jq-industries.com/drive/CH341SER.EXE) · [macOS 驱动](https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip)。安装后重新插拔，确认系统能识别串口；没有串口先查[驱动说明](docs/DRIVERS.md)。
 3. 确认产品、左右手和实际串口；准备有效的 **Shroom SDK** 密钥，按[授权说明](docs/LICENSE.md)在 Node.js 中激活。上位机密钥不能用于 SDK，密钥不要发进聊天或写进公开代码。
 
-手套需要选左手或右手；检测垫不用选。授权不限制设备型号，但 SDK 仍需有该产品的协议适配。SDK 文件夹中有内部模块，不用逐个理解，也不要只取出 `quick-flow.js` 一个文件。
+手套需要选左手或右手；检测垫不用选。授权不限制设备型号，但 SDK 仍需有该产品的协议适配。安装后直接通过包名调用，不需要阅读或移动 `node_modules` 内部文件。当前尚未发布 npm 注册表，使用官网复制的完整命令。
 
 ## 2. 把说明与需求交给 AI {#give-context}
 
-在能读取项目文件的工具中，让 AI 先读 `sdk/AI-CONTEXT.md`；使用聊天工具时上传这份文件，或从文档中心“给 AI 的上下文”复制全文。涉及基础接口时再补充对应文档。
+从文档中心“给 AI 的上下文”复制全文，或将本仓库／源码 ZIP 中的 `AI-CONTEXT.md` 交给 AI。精简 npm 包不附带整套源码文档，不要让 AI 在 `node_modules` 内寻找该文件。涉及基础接口时再补充对应文档。
 
 下面这段可直接发送，替换方括号内容：
 
@@ -23,6 +23,7 @@
 > 产品是：[触觉手套 / 手部检测垫]；手套左右手是：[左 / 右]。
 > 连接设备的电脑系统是：[Windows / macOS / Linux]，实际串口是：[COM3 或其他路径]。
 > 我的项目是：[已有网页 / Node.js 程序]，希望展示：[需要的产品数据]。
+> SDK 已通过官网命令安装，函数从 shroom-sdk/quick-flow 导入，Node 基础 API 从 shroom-sdk/node 导入。
 >
 > 先给 Node.js 取数调用，带中文注释，通过 onData 把数据交给我的业务。处理调用失败和运行中报错，不先搭整套页面或采集服务。
 > 先给调用片段，不需要生成完整 HTML 或演示工程。授权从我的本地配置读取，不在代码中写真实密钥。
@@ -41,11 +42,11 @@
 | ④ 停止采集 | `stopRecording(stream)` | 网页“停止采集”按钮，等待结果写入完成 |
 | ⑤ 下载 | `downloadRecording(stream, { format: 'csv' })` | 网页“下载”按钮，也可选 `jsonl` |
 
-具体参数与带错误处理的片段见 [AI 五步说明](AI-CONTEXT.md#flow-read)。五个函数统一从 `quick-flow.js` 导入；网页的三个按钮共用一个 `stream`，SDK 会记住本次停止的记录 ID。
+具体参数与带错误处理的片段见 [AI 五步说明](AI-CONTEXT.md#flow-read)。五个函数统一从 `shroom-sdk/quick-flow` 导入；网页的三个按钮共用一个 `stream`，SDK 会记住本次停止的记录 ID。授权使用 `shroom-sdk/node` 的 `Shroom.activateLicense(key, { deviceId })`，稳定安装标识按[授权说明](docs/LICENSE.md)保存，不从精简包导入源码示例 helper。
 
 采集数据实际保存在 Node 电脑上的 SQLite，默认文件为 `.shroom-recordings/recordings.sqlite`。SDK 负责批量入库，停止时等待已接收帧写入完成；下载时再从数据库生成 CSV / JSONL。你不需要管理表结构或另写一套采集逻辑。
 
-仅在 Node.js 中取数时，第 1 步就已完成。需要网页接收时，先运行 Node.js 的设备与 WS 代码，再从同一台电脑的 localhost 网页连接。已有网页项目使用自己的开发服务器；需要 SDK 自带静态服务时，在 SDK 根目录执行 `node start.mjs --no-open`，用终端打印的地址访问自己的页面。这个命令只提供网页文件，**不会替你创建设备 WS 服务**。网页 HTTP 地址与 `ws://127.0.0.1:19999` 各有用途，不要互换，也不要双击 HTML。
+仅在 Node.js 中取数时，第 1 步就已完成。需要网页接收时，先运行 Node.js 的设备与 WS 代码，再从同一台电脑的 localhost 网页连接。npm 网页项目使用 Vite 等构建工具与自己的开发服务器；普通 HTML 则使用源码 ZIP，把导入改为 SDK 根目录的 `./quick-flow.js`，通过 ZIP 的 `node start.mjs --no-open` 启动静态服务。静态服务**不会替你创建设备 WS 服务**。网页 HTTP 地址与 `ws://127.0.0.1:19999` 各有用途，不要互换，也不要双击 HTML。
 
 不要在页面加载时连续开始、停止和下载。先观察实际按压能更新数据，再由用户点击各步骤。
 

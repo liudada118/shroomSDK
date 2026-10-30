@@ -1,16 +1,16 @@
 # Shroom SDK · 给 AI 的一步取数与五步调用说明
 
-**先用 `readProduct()` 一个函数拿到产品数据。** 用户只要实时取数时，完成第 1 步即可，不要求先建 WS 或开始采集。需要网页接收、保存与下载时，再按需使用 `quick-flow.js` 的其余函数，组成 **取数 → 创建 WS → 开始采集 → 停止采集 → 下载**。
+**先用 `readProduct()` 一个函数拿到产品数据。** 用户只要实时取数时，完成第 1 步即可，不要求先建 WS 或开始采集。需要网页接收、保存与下载时，再按需使用 `shroom-sdk/quick-flow` 的其余函数，组成 **取数 → 创建 WS → 开始采集 → 停止采集 → 下载**。
 
 按下面的运行位置给用户短调用片段，接入已有程序与按钮；只有用户要求时才生成完整页面或工程。Node.js 连接 USB 设备，浏览器可通过 WS 接收数据并控制采集。本文的五步接口适用于 JavaScript；Python 的能力见文末。
 
 ## 接入前确认 {#prepare}
 
 - **驱动**：CH34x 设备需有可用串口驱动，安装在连接 USB 的电脑上。[Windows CH341SER.EXE](https://shroom.jq-industries.com/drive/CH341SER.EXE) · [macOS CH34xVCPDriver.zip](https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip)。安装后重新插拔，确认系统能列出串口；Linux 检查驱动与权限，见[驱动排查](docs/DRIVERS.md)。
-- **依赖**：Node.js 18+，下载 Node.js（含浏览器）SDK，在 SDK 根目录运行 `npm install`，安装 `serialport / ws / better-sqlite3` 等按功能使用的依赖。采集服务使用 `better-sqlite3` 保存记录；只取数不需要创建采集数据库。尚未发布公共 npm 包，不使用 `npm install shroom-sdk`。
-- **授权**：在 Node.js 连接实机前，按 [SDK 授权](docs/LICENSE.md)调用 `await Shroom.activateLicense(key, { deviceId })`；`Shroom` 从 `./node/index.js` 导入。应用保存稳定的安装标识，不能每次启动重新生成。仅取数需要 `serial`，完整五步还需 `stream / recording`；浏览器连接此 Node 服务时无需重复激活。
+- **安装**：Node.js 18+，从[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)复制当前版本的安装命令，在业务项目终端执行，自动下载 SDK 并安装 `serialport / ws / better-sqlite3` 等依赖。SDK 免登记下载，密钥另行申请。尚未发布 npm 注册表，不要编造 `npm install shroom-sdk` 已可用；其他方式见[npm 安装](docs/NPM.md)。
+- **授权**：在 Node.js 连接实机前，按 [SDK 授权](docs/LICENSE.md)调用 `await Shroom.activateLicense(key, { deviceId })`；`Shroom` 从 `shroom-sdk/node` 导入。应用保存稳定的安装标识，不能每次启动重新生成。仅取数需要 `serial`，完整五步还需 `stream / recording`；浏览器连接此 Node 服务时无需重复激活。不要导入精简安装包未交付的 `node/license-env.js`。
 - **产品**：手套 `product: 'glove'`，必须指定 `side: 'left' | 'right'`；检测垫 `product: 'pad'`，不传 `side`。正式 ID 分别为 `handGloveFullPacket / hand`。端口枚举不会自动识别产品。
-- **运行位置**：以下示例文件位于 SDK 根目录，导入 `./quick-flow.js`；在 SDK 外改用实际相对路径。网页以 ESM 加载，通过本机 `http://localhost` 访问；不要双击 HTML。该入口依赖 SDK 内部目录，不能只复制一个文件。
+- **运行位置**：以下示例放在客户项目，统一从 `shroom-sdk/quick-flow` 导入；Node 使用 ESM，网页使用 Vite 等构建工具解析包名，并通过本机 `http://localhost` 访问。普通 HTML 无法直接解析包名：使用源码 ZIP，将导入改为 SDK 根目录的 `./quick-flow.js`，保留其依赖目录并以模块方式加载；不要双击 HTML。
 
 SDK 密钥与上位机密钥互不通用。SDK 授权不限制传感器型号，但仍校验有效期、电脑名额与功能权限；授权不限制型号不等于所有协议已适配。在线及限定电脑数量的 RSA 授权需要持续联网复核。授权失效会中断实机与录制，已保存记录仍可查询下载。
 
@@ -19,7 +19,7 @@ SDK 密钥与上位机密钥互不通用。SDK 授权不限制传感器型号，
 **运行在 Node.js。** 以下片段共享 `device`；`reportSdkError` 使用文末的[错误处理函数](#errors)。
 
 ```js
-import { readProduct } from './quick-flow.js';
+import { readProduct } from 'shroom-sdk/quick-flow';
 
 let device;
 try {
@@ -45,7 +45,7 @@ try {
 **Node.js 发布第 1 步的设备。** 创建失败会尝试释放设备；成功后交由 `server.close()` 统一关闭。
 
 ```js
-import { createWS } from './quick-flow.js';
+import { createWS } from 'shroom-sdk/quick-flow';
 
 let server;
 if (device) { // 只有取数连接成功才继续
@@ -63,7 +63,7 @@ if (device) { // 只有取数连接成功才继续
 ```js
 import {
   readProduct, startRecording, stopRecording, downloadRecording,
-} from './quick-flow.js';
+} from 'shroom-sdk/quick-flow';
 
 let stream;
 try {

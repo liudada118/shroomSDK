@@ -1,18 +1,17 @@
 # Shroom SDK
 
-这是 SDK 的独立源码仓库：[liudada118/shroomSDK](https://github.com/liudada118/shroomSDK)。官网与文档站在 [shroomSDKWEB](https://github.com/liudada118/shroomSDKWEB)，本仓库可以单独安装、测试和打包。
+**一步拿到产品数据。** 在[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **复制安装命令**，粘贴到自己项目的终端执行，即可自动下载并安装到 `node_modules`。不需要查找仓库、解压或复制源码；也可直接下载 `.tgz` 安装包备用。
 
-```bash
-git clone https://github.com/liudada118/shroomSDK.git
-cd shroomSDK
-npm ci
+```js
+import { readProduct, createWS, startRecording, stopRecording, downloadRecording }
+  from 'shroom-sdk/quick-flow';
 ```
+
+**当前尚未发布到 npm 注册表，请使用官网复制的完整安装命令，不要直接运行 `npm install shroom-sdk`。** SDK 免登记下载，真实设备密钥单独申请。安装包只含压缩运行代码、类型与说明；保存项目依赖和锁文件，以便重复安装。入口、升级和本地包安装见[npm 安装说明](docs/NPM.md)。压缩不等于加密，也不能防止有意修改代码。
 
 当前包为 `shroom-sdk`，首次受管版本为 `0.1.0`。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)，这不是原包的兼容升级。
 
-维护者运行 `npm run sdk:verify` 检查 SDK，运行 `npm run sdk:release` 生成本地版本包；Python 测试环境需先按[发布指南](https://github.com/liudada118/shroomSDK/blob/main/SDK-RELEASING.md)安装。源码、测试与发布在本仓库完成，官网通过固定提交引用 SDK。
-
-**取数 → 创建 WS → 开始采集 → 停止采集 → 下载**：从 `quick-flow.js` 导入 `readProduct / createWS / startRecording / stopRecording / downloadRecording` 五个函数。Node.js 连接设备并创建服务，网页连接一次后复用同一 `stream`。直接查看[五步 API 调用](docs/QUICK-START.md#quick-call)，分别接入自己的程序与按钮。
+**取数 → 创建 WS → 开始采集 → 停止采集 → 下载**：五个函数保持不变。Node.js 连接设备并创建服务，网页连接一次后复用同一 `stream`。直接查看[五步 API 调用](docs/QUICK-START.md#quick-call)，使用上面的包名导入，接入自己的程序与按钮；源码 ZIP 的相对路径示例作为另一种交付方式保留。
 
 五个函数复用[基础文档里的公开 API](docs/CUSTOM.md#quick-to-base)，需要定制参数或生命周期时按对应关系查阅。
 
@@ -30,7 +29,7 @@ Node.js 通过 `readProduct({ product: 'glove' | 'pad', path, side, onData })` �
 
 升级前查看包内 [CHANGELOG.md](CHANGELOG.md)。Node.js / 浏览器用 `Shroom.version` 查询当前运行版本；Python 用 `shroom_sdk.__version__`。同一发行版本中的不同语言能力以各自文档为准。
 
-Node.js 快速服务内置带标签会话录制与 **SQLite 持久化**，停止后从数据库导出 CSV / JSONL。新记录位于录制目录的 `recordings.sqlite`，使用 `sessions / frames` 表；旧版 JSONL 记录仍可读取下载。曲线、回放、报表、算法及业务数据库由应用实现。Python 不提供产品级连接、WS 服务或本次快速录制接口。下载包含 `package-lock.json`，进入 SDK 根目录执行 `npm ci`，按锁定版本安装 `serialport / ws / better-sqlite3` 等依赖；将 SDK 集成到已有项目时，按该项目的依赖管理方式安装，详见[数据存储](docs/STORAGE.md)。
+Node.js 快速服务内置带标签会话录制与 **SQLite 持久化**，停止后从数据库导出 CSV / JSONL。新记录位于录制目录的 `recordings.sqlite`，使用 `sessions / frames` 表；旧版 JSONL 记录仍可读取下载。曲线、回放、报表、算法及业务数据库由应用实现。Python 不提供产品级连接、WS 服务或本次快速录制接口。源码 ZIP 包含 `package-lock.json`，在解压后的 SDK 根目录执行 `npm ci`；`.tgz` 则作为业务项目的依赖安装，由业务项目锁文件管理。两种方式都需要正确安装 `serialport / ws / better-sqlite3` 等运行依赖，详见[数据存储](docs/STORAGE.md)。
 
 已有主项目后端时，可读取状态、订阅实时帧，并显式调用后端的串口／采集控制接口，见 [后端连接指南](BACKEND.md)。这是客户端，不包含后端服务，也不等于 Shroom Monitor；Python 本次未增加后端客户端。
 
@@ -45,9 +44,23 @@ Node.js 快速服务内置带标签会话录制与 **SQLite 持久化**，停止
 
 ## 选择接入方式 {#routes}
 
+- **[npm 安装](docs/NPM.md)**：已有 Node.js 或前端构建项目，将 SDK 作为依赖使用。
 - **[五步 API 调用](docs/QUICK-START.md#quick-call)**：产品取数、创建 WS、开始采集、停止采集、下载，主路径只展示需要调用的接口。
 - **[接入准备](docs/QUICK-START.md#product-guide)**：确认驱动、产品、串口、依赖和 SDK 授权。
 - **[基础与自定义](docs/CUSTOM.md)**：适配新硬件与协议；参数和错误码查[后端 API](docs/BACKEND-GUIDE.md)、[前端通讯](docs/FRONTEND-COMMUNICATION.md)，文件字段查[数据存储](docs/STORAGE.md)。
+
+## 维护 SDK {#maintain}
+
+这是 SDK 的独立源码仓库：[liudada118/shroomSDK](https://github.com/liudada118/shroomSDK)。维护者修改协议、适配器或 SDK 本身时使用源码；官网与文档站在 [shroomSDKWEB](https://github.com/liudada118/shroomSDKWEB)。
+
+```bash
+git clone https://github.com/liudada118/shroomSDK.git
+cd shroomSDK
+npm ci
+npm run pack:npm
+```
+
+`pack:npm` 生成 `dist/shroom-sdk-<版本>.tgz`，`test:npm` 验证实际安装结果。正式交付前运行 `npm run sdk:verify`，发布候选使用 `npm run sdk:release`；Python 测试环境及发布步骤见[发布指南](SDK-RELEASING.md)。官网通过固定提交引用 SDK，打包不会自动发布或部署。
 
 ## 中文源码导航 {#source-map}
 
@@ -78,12 +91,14 @@ Node.js 快速服务内置带标签会话录制与 **SQLite 持久化**，停止
 | 停止采集 | 浏览器停止按钮 | `await stopRecording(stream)` |
 | 下载 | 浏览器下载按钮 | `downloadRecording(stream, { format: 'csv' })` |
 
-五个函数统一从 `./quick-flow.js` 具名导入。后三步共享同一 `stream`，分别由按钮触发；SDK 记住停止结果的记录 ID，再次成功开始后清除旧 ID。下载函数同步触发浏览器下载并返回 URL；需要完整帧结构时选择 JSONL。
+五个函数在 npm 项目统一从 `shroom-sdk/quick-flow` 具名导入；源码 ZIP 使用 `./quick-flow.js`。后三步共享同一 `stream`，分别由按钮触发；SDK 记住停止结果的记录 ID，再次成功开始后清除旧 ID。下载函数同步触发浏览器下载并返回 URL；需要完整帧结构时选择 JSONL。
 
 结束采集要明确停止，网页关闭不会自动停止后台录制。浏览器调用 `await stream.close()`；Node.js 调用 `await server.close()`，由 `createWS` 一并释放设备。三个采集函数也可传 Node.js 的 `server`，下载返回 HTTP URL。服务默认仅本机使用，准备和调用见[快速接入](docs/QUICK-START.md)。
 
 ---
 ## 浏览器直连：独立取数 {#s2}
+
+以下相对路径适用于源码 ZIP；npm 构建项目将 `./web/index.js` 换成 `shroom-sdk/web`。
 
 ```js
 import { Shroom } from './web/index.js';
@@ -132,6 +147,8 @@ JS / Python Mock 的 `fps` 必须是有限数值，范围为 `1000 / 2147483647`
 ---
 
 ## Node / Electron 里用 {#s3}
+
+以下相对路径适用于源码 ZIP；npm 项目将 `./node/index.js` 换成 `shroom-sdk/node`。
 
 ```bash
 npm i serialport

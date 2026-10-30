@@ -4,6 +4,8 @@ import type { ProductExampleOptions } from './product-examples.js';
 export type ProductCallOptions = Omit<ProductExampleOptions, 'kind'> & {
   /** 五步文档使用统一 readProduct；仅适用于 Node 取数。 */
   quickFlow?: boolean;
+  /** 官网 npm 示例使用 package；默认 relative 保留源码 ZIP 的可运行导入路径。 */
+  importStyle?: 'relative' | 'package';
 };
 
 /** 返回一个产品连接函数的调用代码；宿主项目需先完成授权，浏览器需从点击事件调用。 */
