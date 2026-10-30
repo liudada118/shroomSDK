@@ -1,0 +1,115 @@
+name: SDK checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      release:
+        description: Validate a release tag and retain the tested release artifacts
+        type: boolean
+        required: false
+        default: false
+
+# PR 检查不授予仓库写权限；正式发布由独立工作流的发布任务完成。
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/sdk-v') }}
+
+jobs:
+  sdk-platforms:
+    name: SDK on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.22.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: python/requirements-test.lock
+      - name: Install locked dependencies
+        run: |
+          npm ci
+          python -m pip install -r python/requirements-test.lock
+          python -m pip install --no-build-isolation --no-deps -e python
+      - name: Check versions and dependency locks
+        run: npm run sdk:check
+      - name: Check installed native SDK dependencies
+        run: node scripts/check-sdk-node.mjs
+      - name: Test SDK and native SQLite on this platform
+        run: npm run test:sdk
+      - name: Test Python SDK
+        env:
+          SDK_PYTHON: python
+        run: npm run test:python
+
+  full-checks:
+    name: Build and validate SDK delivery
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SDK_PYTHON: python
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.22.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: python/requirements-test.lock
+      - name: Check release tag before building
+        if: inputs.release
+        run: node scripts/sdk-release-git.mjs
+      - name: Install locked dependencies
+        run: |
+          npm ci
+          python -m pip install -r python/requirements-test.lock
+          python -m pip install --no-build-isolation --no-deps -e python
+      - name: Run all quality checks
+        if: ${{ !inputs.release }}
+        run: npm run sdk:verify
+      - name: Validate and prepare immutable release artifacts
+        if: inputs.release
+        run: npm run sdk:release -- --require-clean
+      - name: Check source stayed unchanged during release preparation
+        if: inputs.release
+        run: node scripts/sdk-release-git.mjs
+      - name: Retain the artifacts tested in this run
+        if: inputs.release
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sdk-release-${{ github.sha }}
+          path: dist/releases/*/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

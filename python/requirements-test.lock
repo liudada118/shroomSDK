@@ -1,0 +1,12 @@
+# SDK 发布测试环境；运行依赖范围仍由 pyproject.toml 定义。
+# 更新时在隔离虚拟环境解析、验证后统一提交，不从开发者全局环境导出。
+build==1.6.1
+cffi==2.1.1
+colorama==0.4.6
+cryptography==50.0.2
+packaging==26.3
+pycparser==3.12
+pyproject_hooks==1.3.3
+pyserial==3.5
+setuptools==84.2.1
+wheel==0.48.0

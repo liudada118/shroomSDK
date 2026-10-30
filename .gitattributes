@@ -1,0 +1,33 @@
+# 行尾与二进制声明。别删 —— 开发在 Windows（core.autocrlf=true），部署在 Linux，
+# 不钉住行尾的话 shell 脚本会带着 CRLF 被 clone 下去。
+
+# 默认按内容自动判断文本/二进制，文本在仓库里统一存 LF
+* text=auto
+
+# SDK 发布源码与生成文档在各平台保持一致，避免同版本 ZIP 内容漂移。
+.gitattributes text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.py text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# shell 脚本必须是 LF。CRLF 会让 "#!/usr/bin/env bash" 在 Linux 上变成
+# bad interpreter: /usr/bin/env bash^M；也会破坏 SDK zip 的字节可复现
+# （见 scripts/pack-sdk.mjs 开头关于产物不产生 diff 的说明）
+*.sh text eol=lf
+
+# 批处理反过来，Windows 的 cmd 要 CRLF
+*.bat text eol=crlf
+
+# 二进制，不做任何行尾转换
+*.zip binary
+*.png binary

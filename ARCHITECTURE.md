@@ -1,154 +1,143 @@
-# Shroom SDK Architecture
+# Shroom SDK 架构
 
-最后更新于：2026-08-28
+最后更新于：2026-10-30
 
-## 项目概述
+## 1. 项目概述
 
-Shroom SDK 是一个独立传感器 SDK，用于把主项目中的后端 HTTP/WebSocket 控制能力、本地串口读取链路、采集回放导出能力，以及前端展示组件抽离成可复用包。
+本仓库维护独立的 `shroom-sdk`：读取传感器数据、按需创建 WebSocket 服务、采集到 SQLite、停止采集并导出 CSV / JSONL。快速入口只导出五个函数，产品协议和点位映射由内部适配器管理。Node.js、浏览器和 Python 共享版本号，但语言能力按各自文档定义。
 
-## 技术栈
+官网与文档展示位于独立的 `shroomSDKWEB` 仓库，通过 `sdk/` Git 子模块固定本仓库的具体提交。SDK 的安装、测试、构建和发布均不依赖官网。官网构建使用固定提交中的文档、示例生成函数及下载包，不自动跟随 SDK 主分支。
 
-| 分类 | 技术 |
-| :--- | :--- |
-| 后端运行时 | Node.js, CommonJS |
-| 串口 | `serialport`, `@serialport/parser-delimiter` |
-| 存储与导出 | `better-sqlite3`, `csv-writer` |
-| 实时通信 | `ws` |
-| 文档与测试 | VitePress、Vue-to-React 实时示例桥接、Vitest |
-| 前端 UI | React, Ant Design, MobX React, styled-components, i18next, react-i18next, Three.js, React Three Fiber, SCSS |
+仓库原来的 `shroom-backend-sdk@0.2.0` 已由当前五步 SDK 替换，旧实现保留在 `legacy-backend-sdk-0.2.0` 标签及 Git 历史。旧接口、组件、数据库不能被视作当前包的兼容能力；具体差异见 [MIGRATION.md](MIGRATION.md)。本文末尾保留旧项目进度与更新记录，作为历史记录。
 
-## 目录结构
+## 2. 技术栈
+
+| 分类 | 技术与边界 |
+| --- | --- |
+| JavaScript | ES Module；Node.js 运行时要求见根 `package.json`；浏览器使用 Web Serial 或 WebSocket |
+| Python | Python 3.10+，同步迭代与通用矩阵接口；不提供 JS 五步 WS/SQLite 服务 |
+| 串口 | Node `serialport`、浏览器 Web Serial、Python `pyserial` |
+| 采集 | `better-sqlite3`，`sessions / frames` 表，批量事务与分页导出 |
+| 通信 | `ws`，同端口 HTTP 下载；应用后端通过独立 `BackendSdkClient` 访问 |
+| 依赖与类型 | npm 锁文件、Python 测试锁文件、TypeScript 声明与类型测试 |
+| 验证与发布 | Node 内置测试、Python unittest、确定性 ZIP、SHA256；GitHub Actions |
+| 维护环境 | Node.js 22.22.0 / npm 10.9.4；Python 测试 3.11+，CI 3.12 |
+
+## 3. 目录结构
 
 ```text
-E:\ShroomSDK
-├─ index.js                 SDK 后端根入口
-├─ src\                     后端 SDK 模块
-│  ├─ capture\              采集限频、批量队列、flush 与存储故障状态
-│  ├─ algorithm\            同步轻量算法注册、执行与结果隔离
-│  ├─ glove\                手套产品 Profile、组帧、IMU、左右手 Mapping
-│  ├─ replay\               静态时间线与可控回放播放器
-│  ├─ storage\              SQLite/内存采集存储、分页筛选与删除
-│  └─ serial\               串口管理、会话、错误模型、波特率探测与写入
-├─ examples\                后端和本地串口 demo
-├─ docs\                    VitePress 中文文档
-│  ├─ .vitepress\theme\     React 组件实时示例挂载与文档样式
-│  └─ components\           每个 UI 组件的独立中文文档页
-└─ UI\
-   ├─ index.js              UI 聚合入口
-   ├─ package.json          UI 子目录 ESM 配置
-   ├─ frontend\             可独立使用的矩阵渲染前端包
-   │  ├─ core\              注册表、帧总线、颜色和矩阵公共逻辑
-   │  ├─ renderers\         五套 core/react 分层矩阵渲染器
-   │  └─ styles\            渲染器宿主基础样式
-   ├─ render\               矩阵与 Three.js 地形渲染 SDK
-   ├─ qxui\                 动态报告和回放展示组件
-   └─ shroomui\             基础 UI 组件库
+shroomSDK/
+├─ package.json              SDK 版本唯一来源、公开导出与维护命令
+├─ package-lock.json         JavaScript 锁定依赖
+├─ quick-flow.js / .d.ts      五个快速函数入口与类型
+├─ flow/                     连接、采集会话和生命周期编排
+├─ core/
+│  ├─ products/              产品适配器、注册表、字段校验
+│  ├─ framer.js / frame.js   拆帧和通用矩阵
+│  └─ license.js             SDK 产品授权与运行期权限检查
+├─ node/                     Node 串口、WS/HTTP 服务、SQLite 录制
+├─ web/                      浏览器串口、WS 控制、二维显示及演示
+├─ backend/                  已运行主项目后端的 HTTP/WS 客户端
+├─ python/
+│  ├─ src/shroom_sdk/        Python 运行源码
+│  ├─ tests/                Python 与跨语言测试
+│  └─ requirements-test.lock
+├─ examples/                 五步调用生成器和演示
+├─ docs/                     SDK 接入与基础 API 文档，供官网读取
+├─ tests/                    JS、协议、授权、采集和类型测试
+├─ scripts/                  版本、构建、打包、制品校验及安装验证
+├─ .github/workflows/        跨平台检查和版本标签发布
+├─ dist/                     生成的兼容 ZIP，不跟踪到 Git
+│  └─ releases/<version>/    版本 ZIP、清单、校验值、发布说明
+├─ CHANGELOG.md              当前包版本更新记录
+├─ MIGRATION.md              原仓库实现的迁移边界
+└─ SDK-RELEASING.md           维护与发布流程
 ```
 
-## 核心模块与数据流
+SDK 源文件直接位于仓库根目录下，没有第二层 `sdk/`。客户 ZIP 采用交付白名单，排除测试、构建脚本、依赖目录、开发缓存及用户采集记录；源码仓库保留这些开发工具。网页 bundle 和内联示例由源码构建，修改模块后应重新生成。
+
+## 4. 核心模块与数据流
 
 ```mermaid
 flowchart LR
-  M["SerialManager"] --> T["serialTools / connection policy"]
-  T --> A["SerialPort"]
-  A --> B["DelimiterParser"]
-  B --> C["ProtocolRegistry / Glove assembler"]
-  C --> D["ZeroCalibrator"]
-  D --> H["Glove Mapping"]
-  H --> J["AlgorithmChannel"]
-  J --> E["SensorSession frame event"]
-  E --> I["CaptureController"]
-  I --> F["CaptureStore / MemoryCaptureStore"]
-  F --> G["ReplayService / ReplayPlayer / CsvExporter"]
+  A[产品适配器与注册表] --> B[Node 串口解析]
+  B --> C[readProduct 产品数据]
+  C --> D[createWS]
+  D --> E[浏览器 readProduct]
+  E --> F[startRecording / stopRecording]
+  F --> G[SQLite sessions / frames]
+  G --> H[downloadRecording CSV / JSONL]
+  L[SDK 授权] --> B
+  L --> D
+  L --> F
 ```
 
-`SerialManager` 参考 `E:\shroom\server\serial\SerialManager.js` 与 `E:\shroom\sdk\node\serial.js`，作为通用 SDK 的串口聚合层。手动连接直接使用指定 Profile/端口；一键连接执行 WCH/CH34 筛选、分隔符与帧长波特率探测、临时口释放等待、稳定重试和部分失败聚合。管理器持有所有当前 `SensorSession`、通道在线/断流状态与最新帧，并统一提供重扫、写串口和断开方法。
+五函数复用基础 API：`readProduct` 调用 Node `connectProduct` 或浏览器 `connectStream`；`createWS` 调用 `serveDevice`；采集和下载委托已有连接或服务方法。返回对象与 `stream` 保存当前会话，成功开始新采集时清除旧下载 ID。
 
-`SensorSession` 默认每个通道尝试 3 次、单次 2 秒超时、重试间隔 500ms，且在串口仍 open 但 5 秒无数据时标记 `stale`。会话保留每通道的最新帧、收包/好帧/坏帧计数和数据质量，支持 `write`、`writeAll`、`reconnectChannel` 和 `closeChannel`。`errors.js` 将操作系统字符串归一为 `PORT_BUSY`、`PORT_NOT_FOUND`、`BAUD_FAIL`、`STALE_CONNECTION` 等稳定错误码；主项目特有的 MAC 在线查询和授权没有被写死，而是通过 `resolveDevice` 回调由宿主注入。
+产品代码集中在 `core/products/`。增加产品通过适配器与注册表扩展协议、映射和 WS 字段校验，不改五个函数签名。产品扩展测试会在临时副本注册测试产品，验证串口、五步调用、录制、导出和浏览器 bundle 的一致性。
 
-这条链路上的每一步都在 `handleRawFrame` 的独立 try/catch 里，`error` 事件的 `phase` 指明出错阶段（`rawFrame` / `parse` / `frame` / `capture`）。解析失败只丢当前帧，下一帧照常处理——采集程序不该因为一帧脏数据而退出。`error` 在没有监听者时降级为 `console.error` 而不是抛出（`EventEmitter` 对该事件名的默认行为是抛出，在 I/O 回调里即进程退出），但也不静默吞掉。
+录制使用 SQLite 事务批量写入；停止与关闭等待待写队列落库，导出按页读取。记录目录有独占所有权；异常退出记录可恢复为中断状态。兼容读取旧 JSONL 文件，不兼容原 `shroom-backend-sdk` 的 `captures / frames` 数据库。
 
-`CaptureController` 参考 `E:\shroom1` 的生产采集方式，将采集生命周期从串口会话和数据库实现中拆出。`custom` 模式以每个通道独立时钟按 1..200Hz 取样，`serial` 模式保存全部有效帧；默认 200 帧或 250ms 触发一次批量写。`CaptureStore.insertFrames()` 使用预编译语句和单事务落库，停止采集或关闭 `SensorSession` 时强制 flush。调用方可通过 `dataField` / `frameSelector` 明确保存线序后数据、手套 Mapping 或 32×32 矩阵；采集参数和 Profile 同时快照到 metadata。可选 `minFreeBytes` 使用数据库目录可用空间做保护，写库失败或空间不足只停止当前采集并发出 `captureError`，串口实时帧继续运行。
+授权区分 SDK 与上位机产品密钥，检查有效期、电脑名额和功能权限，不按传感器型号限制。JS/Python 均提供结构化错误；连接阶段的拒绝由调用方捕获，连接后的运行错误通过订阅反馈。模拟数据源用于无硬件验证。
 
-`AlgorithmChannel` 位于线序、Mapping 和清零之后，`frame` 事件与采集之前。算法同步接收标准数组并把可序列化结果写入 `frame.algorithmResults`；单个算法默认隔离错误，不会中断串口链路。该结果随标准帧进入 SQLite/内存存储、回放和 CSV。历史帧传 `applyAlgorithms: true` 时可重新执行当前算法，实时与回放共用同一算法定义。
+## 5. 快速服务端点
 
-`CaptureStore` 与 `MemoryCaptureStore` 对齐分页、通道筛选、时间区间、计数和级联删除接口。SQLite 删除在一个事务中清理采集记录及所属帧。`ReplayService` 保留静态时间线，并通过 `ReplayPlayer` 提供播放、暂停、定位、逐帧、倍速和循环；播放间隔按原始帧时间戳差计算。`CsvExporter` 支持相同查询条件，并把算法结果作为独立 JSON 列导出。
+`createWS` 默认在 `127.0.0.1:19999` 创建本机服务，浏览器经同一服务获取数据和下载。跨主机使用必须显式指定允许的网页来源。
 
-pnpm 通过 `pnpm.onlyBuiltDependencies` 明确允许 `better-sqlite3` 执行安装脚本，保证新工作区在 `pnpm install` 时能准备 SQLite 原生绑定，而不会被 pnpm 的依赖构建安全策略静默跳过。
+| 协议 | 路径或消息 | 用途 |
+| --- | --- | --- |
+| HTTP GET | `/health` | 服务、产品与采集状态 |
+| HTTP GET | `/recordings/<id>.csv` | 导出已停止的采集记录 |
+| HTTP GET | `/recordings/<id>.jsonl` | 导出完整帧记录 |
+| WebSocket | `/` 或 `/ws` | 实时帧、状态与控制响应 |
+| WS JSON | `recording.start / stop / status / list` | 带 `requestId` 的采集控制 |
 
-线序实现随包提供（`src/line/builtinLineOrders.js`），逐字搬自主项目的 `openWeb.js`。上游 SDK 是从主项目根目录动态 require 线序的，抽成独立包时那条 require 指向包外被移除，而 profile 里的线序声明留着，导致三个 profile 首帧抛错——`tests/backend-line-orders.test.mjs` 现在断言「声明了线序名的 profile，那个名字必须真的注册过」，防止同类回归。
+这些端点属于快速本机服务；`BackendSdkClient` 访问的主项目 HTTP/WS 协议另见 [BACKEND.md](BACKEND.md)。
 
-### 手套协议与标准帧
+## 6. 版本、发布与官网集成
 
-手套能力集中在 `src/glove`，不再把产品型号、协议、IMU 和线序散落在串口回调中。`catalog.js` 以主项目真实产品菜单标识作为稳定型号：`hand0205`、`hand0205Double`、`handGlove115200`、`handGloveFullPacket`。前三者使用 130+146 分包，整包型号使用 274 字节定长包；`hand0205Double` 按 `packetType` 的 `1=left / 2=right` 路由，其余型号按连接通道定侧，保留了生产运行时实际差异。
+根 `package.json.version` 同步到 `core/version.js`、Python 包元数据和 `_version.py`。发布检查包含原生依赖加载、JS/发布工具/Python 测试、类型检查及客户 ZIP 独立安装验证。SDK 不运行官网的页面或服务测试。
 
-分包解析器是每个 `SensorSession` 独享的有状态组帧器，并按左右手分别缓存首包，允许双手包交错到达。首包只触发 `packetPending`，不会产生伪完整帧；尾包缺首包、包长错误和压力点数错误通过 `GloveFrameError.code` 明确上报。274 整包严格校验 274 字节，字段为 2 字节头、256 个 uint8 压力 ADC、16 字节 IMU。
+构建输出 `dist/shroom-sdk.zip`、`dist/shroom-sdk-node.zip`、`dist/shroom-sdk-python.zip`。正式版本目录有六个文件：三个带版本 ZIP、`manifest.json`、`SHA256SUMS`、`RELEASE-NOTES.md`。清单记录真实 Git 提交与脏状态；相同版本不允许被不同内容或不同来源覆盖。
 
-标准手套帧保留兼容字段 `pressureData` 和 `rotate`，并增加 `handSide`、`pressure`、`imu`、`mappedData`、`matrixData`、`product`、`validation`。压力值语义是 0..255 的未标定 ADC count，不冒充 N/kPa；IMU 是 little-endian float32 四元数，顺序为 `x,y,z,w`。分包手套的左右手 256 点 Mapping 以 `GLOVE_HAND_MAPPING` 结构化点位表为唯一数据源，保留五指、指腹和手掌分组，再自动生成 137 通道线序；整包型号输出 195 点，最终都提供 32×32 row-major 矩阵。清零后会重新执行 Mapping，保证实时显示、采集和回放引用同一份压力语义。
+GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运行检查；`sdk-vX.Y.Z` 标签触发 Windows/macOS/Linux 检查，Linux 打包并保存附件，具有写权限的后续任务重新验证附件再创建 Release 草稿。同名 Release 不覆盖。工作流不自动发布 npm、PyPI 或部署官网。
 
-`ShroomSensorSDK.connectGlove()` 和根导出 `connectGlove()` 统一处理手动端口、一键查口、Profile 选择、回调预绑定和错误分类。返回的仍是 `SensorSession`，可继续使用采集、关闭和 `getState()`；连接错误使用 `NO_GLOVE_PORT`、`PORT_BUSY`、`PORT_NOT_FOUND`、`OPEN_FAILED` 等稳定错误码。
+官网只在明确更新子模块指针后采用新的 SDK 提交；文档、产品示例、版本展示及兼容 ZIP 下载都来自该固定来源。SDK 发布和官网部署分别执行。
 
-前端 UI 组件不从 SDK 根入口加载，避免后端项目在 `require('shroom-backend-sdk')` 时引入 React 依赖。根 `package.json` 的 `exports` 为前端提供短路径（`shroom-backend-sdk/renderers/<id>`、`/core`、`/qxui`、`/shroomui`、`/render`），并把 `UI/render/index.d.ts` 接为 `types`。`UI/frontend` 子包自带的 exports 映射只服务子包直接消费者，根包这一层是给外部使用方的等价出口。
+## 7. 环境变量
 
-`exports` 是收口动作：声明之后未列出的子路径全部被封死，所以目录型入口必须逐条显式声明（`./UI/*` 这类通配不会为目录补 `index.js`），且通配范围收窄到已发布子树，避免触达 `files` 用 `!UI/render/prototypes` 排除掉的迁移参考件。全部已文档化的旧深路径由 `tests/package-exports.test.mjs` 用 Node 真实解析器逐条守住，只能增不能减。
+以下授权变量由示例显式调用 `activateLicenseFromEnv()` 时读取，仅导入 SDK 不会自动激活。
 
-## UI 组件结构
+| 变量 | 用途 |
+| --- | --- |
+| `SHROOM_LICENSE_KEY` | SDK 密钥字符串，优先于文件 |
+| `SHROOM_LICENSE_FILE` | SDK 密钥文件路径 |
+| `SHROOM_DEVICE_ID` | 覆盖本机稳定安装标识 |
+| `SHROOM_LICENSE_MODE` | `online` 或 `offline` |
+| `SHROOM_LICENSE_SERVER` | 授权服务地址 |
+| `SHROOM_LICENSE_PUBLIC_KEY_FILE` | 离线验证公钥文件 |
+| `SDK_PYTHON` | 维护测试使用的 Python 解释器 |
+| `GITHUB_REF / GITHUB_SHA` | CI 发布的标签和提交校验来源 |
 
-```mermaid
-flowchart TD
-  A["UI/index.js"] --> B["UI/qxui"]
-  A --> C["UI/shroomui"]
-  A --> D["UI/render"]
-  A --> E["UI/frontend"]
-  B --> B1["DynamicReportCard"]
-  B --> B2["ComparePlay"]
-  B --> B3["PlaybackControls"]
-  B --> B4["ReportMetrics"]
-  C --> C1["ChartPanel / MetricValue"]
-  C --> C2["Drawer / DraggablePanel"]
-  C --> C3["ExportDialog / ExportProgressDialog"]
-  C --> C4["Select / SettingControlRow / ToolbarAction"]
-  D --> D1["TerrainMap / matrix algorithms"]
-  E --> E1["numMatrix"]
-  E --> E2["pointGrid"]
-  E --> E3["handPoints"]
-  E --> E4["webglHeatmap"]
-  E --> E5["blobHeatmap"]
-```
+## 8. 项目进度
 
-`UI/qxui` 偏业务展示，主要承接动态报告和压力热力图回放。`UI/shroomui` 偏基础展示，不直接请求后端、不读取设备 Store，业务状态通过 props 传入。`UI/render` 负责规范化矩阵的二维/三维渲染，不连接串口、不解析协议，也不执行线序转换。
+旧实现的累积完成记录保留在下方历史区，不代表当前包仍包含那些接口。
 
-### 矩阵渲染数据流
+| 完成日期 | 完成的功能/工作 | 说明 |
+| --- | --- | --- |
+| 2026-10-30 | 独立五步 SDK 仓库 | 当前 Node/Web/Python SDK、适配器、授权、SQLite、文档与测试迁入根目录；官网固定提交引用 |
+| 2026-10-30 | 独立构建与发布 | 版本、依赖锁、类型校验、客户 ZIP 验证、跨平台 CI 与 Release 草稿均在 SDK 仓库完成 |
 
-```mermaid
-flowchart LR
-  A["SerialManager"] --> B["协议解析"]
-  B --> C["线序与清零"]
-  C --> D["normalized matrix"]
-  D --> E["TerrainMap 原始矩阵预览与统计"]
-  D --> I["Matrix renderer core pipeline"]
-  I --> J["NumMatrix / PointGrid / HandPoints"]
-  I --> K["WebGL / Canvas blob heatmap"]
-  D --> F["插值 / 高斯平滑 / 增益"]
-  F --> G["Three.js 地形"]
-  D --> H["采集 / 回放 / 下载"]
-```
+## 9. 更新日志
 
-`TerrainMap` 的统计和矩阵缩略图使用输入的原始规范化矩阵；插值、高斯平滑和增益只作用于 Three.js 地形，不会写回输入数据。原项目版 `TerrainMapPage` 保存在 `UI/render/prototypes` 作为迁移参考，并从发布包中排除。
+| 日期 | 变更类型 | 描述 |
+| --- | --- | --- |
+| 2026-10-30 | 优化重构 | 按决定直接替换原主线 SDK，保留旧标签与历史；建立五步 SDK 和官网的独立仓库边界 |
+| 2026-10-30 | 文档更新 | 更新根目录安装与发布说明，明确包身份、旧接口和数据库的迁移边界 |
 
-`UI/frontend/renderers` 下的五套渲染器同样只消费 normalized matrix。常规矩阵统一遵循 row-major 方向契约：`data[row * cols + col]` 直接对应显示位置，不在渲染器内部旋转、镜像或转置；专用手套、足底等物理线序仍由各自的显式命令入口处理。实时帧和回放帧进入同一 core pipeline；插值、阈值、配色和视角状态仅服务展示，不写回采集、回放或下载所持有的原始规范化帧。`registerBuiltinRenderers()` 只注册动态导入描述符，React、Three.js 和 WebGL 实现不会进入纯 core 的静态依赖图。
+## 10. 原 SDK 历史记录
 
-五个渲染器同时提供声明式和命令式两条帧入口。声明式 `frame`（`pointGrid` 另有 `backFrame`）由 `renderers/shared/react/useDeclarativeFrame.js` 推给各自的 `sitData` / `backData`，入参归一化在 `core/framePayload.js`（普通数组原样透传不复制，TypedArray 转一次，`{ wsPointData }` 保留额外字段）。prop 名不用 `data` —— 该键已被宿主回调 ref 占用。会整场重建的三个渲染器把 `paramsKey` 作为重推标记，参数变化后当前帧会用新参数重画一次；`pointGrid` 的标记额外拼上 `spriteUrl`，因为贴图不在归一化参数里。命令式 ref 通路一个方法都没有移除，两条可以在同一个实例上同时用。
-
-点阵渲染器除等距网格外还支持按物理点位成形。`core/coordinateGrid.js` 把实测的稀疏坐标表（`{X,Y,Z}`，一个传感点一条）扩成与渲染网格等长的密集表，顺序是**先插值再补边**——与压力管线的 `interpSmall → addSide` 一致，因此第 N 个坐标与第 N 个压力值指向同一物理点位。参考实现 `carQXFbx.jsx` 的 `objdupli()` 是先补边，点数不同（16×16 / interp 2 / order 4 下 2304 与 1600），直接搬会让坐标与压力错位。坐标表的 `Z` 作为点的基础高度，压力叠加在它之上，弧面座垫与鞋垫起伏在无压力时即可见；`Z` 以整表均值为零点（实测值常带大偏置）并与 `X`/`Y` 共用缩放系数。`sparsePoints` 长度与 `num1 × num2` 不符时静默退回规则矩阵，而不是拿尺寸不符的表插值。
-
-React 渲染器以宿主容器为尺寸边界：Three.js 点阵通过 `ResizeObserver` 同步相机和画布，Canvas 热力图在宿主短边内调整 backing store 并重绘最后一帧。GLB 手模是显式传入的可选运行时资源，SDK 默认只渲染手部点云；参数变化或卸载后到达的旧模型会被丢弃并释放。
-
-地形曲面使用插值后的高密度几何体；网格层由 `buildTerrainWireSegments` 按输入矩阵的原始行列数独立生成，只连接有效区域的横向和纵向相邻点。网格不包含 Three.js 三角面线框的对角线，也不随插值倍数加密。
-
-VitePress 文档通过 `UiComponentDemo.vue` 在客户端创建 React root，再由 `ComponentDemo.jsx` 按组件名加载真实 SDK 组件和模拟业务状态。组件独立页直接展示真实交互，静态构建阶段只渲染挂载容器，不执行浏览器 API。
-
-六个矩阵渲染组件示例共享可折叠的 `ParamsEditor`：编辑区只接受 JSON 对象，解析失败时保留上一次有效配置。`UI/frontend/renderers` 的五个组件将对象作为 `params`；`TerrainMap` 将顶层字段映射为组件 props，并将 `options` 作为受控渲染配置。示例输入统一使用从 1 到矩阵元素数量的连续数组，元素数量由已应用的行列参数决定。两种热力图的 32×32 示例使用 `max: 1024`，点半径不超过相邻点间距的主要范围，避免递增数据和 alpha 重叠造成整图饱和。文档示例使用紧凑的响应式舞台，并覆盖旧渲染器的固定定位和固有画布尺寸，避免数值浮层及矩阵画布超出可视区域。`PointGridRenderer` 额外将点高度倍率和色阶上限纳入公开 `params`，文档工具栏可直接调节。
+以下记录原样保留自替换前的架构文档，对应 `shroom-backend-sdk` 与旧 `src/`、`UI/` 布局。当前代码以本文第 1–9 节及当前 API 文档为准。
 
 ## 更新日志
 

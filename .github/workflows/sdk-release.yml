@@ -1,0 +1,68 @@
+name: SDK release draft
+
+# 推送精确版本标签才会准备发布；普通提交只运行 SDK checks。
+on:
+  push:
+    tags: ['sdk-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/sdk-ci.yml
+    with:
+      release: true
+
+  draft:
+    name: Create a draft from the verified artifacts
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.22.0
+          package-manager-cache: false
+      - name: Resolve the verified tag
+        id: release
+        run: |
+          node scripts/sdk-release-git.mjs
+          node --input-type=module -e 'import { appendFileSync, readFileSync } from "node:fs"; const {version} = JSON.parse(readFileSync("package.json", "utf8")); appendFileSync(process.env.GITHUB_OUTPUT, "version=" + version + "\ntag=sdk-v" + version + "\n");'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sdk-release-${{ github.sha }}
+          path: ${{ runner.temp }}/sdk-release
+      - name: Verify checksums and source commit after transport
+        env:
+          SDK_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_ROOT: ${{ runner.temp }}/sdk-release
+        run: node scripts/sdk-release-artifacts.mjs verify --directory "$RELEASE_ROOT/$SDK_VERSION" --require-clean --expected-commit "$GITHUB_SHA"
+      - name: Create release draft without replacing any previous release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SDK_VERSION: ${{ steps.release.outputs.version }}
+          SDK_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_ROOT: ${{ runner.temp }}/sdk-release
+        run: |
+          if gh release view "$SDK_TAG" --json tagName >/dev/null 2>&1; then
+            echo "Release $SDK_TAG already exists; refusing to replace its assets."
+            exit 1
+          fi
+          release_dir="$RELEASE_ROOT/$SDK_VERSION"
+          gh release create "$SDK_TAG" "$release_dir"/*.zip "$release_dir/SHA256SUMS" "$release_dir/manifest.json" "$release_dir/RELEASE-NOTES.md" \
+            --verify-tag --draft --title "Shroom SDK $SDK_VERSION" --notes-file "$release_dir/RELEASE-NOTES.md"

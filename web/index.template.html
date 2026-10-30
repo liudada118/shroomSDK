@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shroom SDK · 最小示例</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 24px 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0b0f14;
+        color: #e6edf3;
+        font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+      }
+      .app { width: min(920px, 92vw); }
+      h1 { font-size: 18px; margin: 0 0 4px; font-weight: 600; }
+      .sub { color: #7d8590; margin: 0 0 20px; }
+      .bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+      .license-panel { border: 1px solid #30363d; border-radius: 6px; padding: 16px; margin: 16px 0; }
+      .license-panel label { display: block; margin: 8px 0 4px; }
+      .license-panel input { width: 100%; padding: 10px; color: #e6edf3; background: #0b0f14; border: 1px solid #7d8590; border-radius: 4px; }
+      .license-panel button, .license-panel select { min-height: 44px; }
+      .license-panel .bar { margin: 12px 0 0; }
+      .license-panel p { margin-bottom: 0; color: #b1bac4; }
+      .driver-panel { margin: 16px 0; padding: 16px; border: 1px solid #9e6a03; border-left-width: 3px; border-radius: 6px; background: #1c1810; color: #d8c3a0; }
+      .driver-panel h2 { margin: 0 0 8px; color: #f0d9aa; font-size: 16px; }
+      .driver-panel p { margin: 8px 0; }
+      .driver-links { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+      .driver-links a { display: inline-flex; min-height: 44px; align-items: center; color: #a5d6ff; text-underline-offset: 4px; }
+      .driver-panel ol { margin: 8px 0 0; padding-left: 20px; }
+      :focus-visible { outline: 2px solid #79c0ff; outline-offset: 3px; }
+      button {
+        padding: 8px 16px;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        background: #21262d;
+        color: #e6edf3;
+        font: inherit;
+        cursor: pointer;
+      }
+      button:hover { background: #30363d; }
+      button.primary { background: #238636; border-color: #238636; }
+      button.primary:hover { background: #2ea043; }
+      select { padding: 8px; border-radius: 6px; background: #21262d; color: #e6edf3; border: 1px solid #30363d; font: inherit; }
+      .stage { display: grid; grid-template-columns: 1fr 200px; gap: 16px; }
+      canvas {
+        width: 100%;
+        aspect-ratio: 1;
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        display: block;
+      }
+      .stats { border: 1px solid #30363d; border-radius: 8px; padding: 12px 14px; }
+      .stats dt { color: #7d8590; font-size: 12px; }
+      .stats dd { margin: 0 0 10px; font-size: 18px; font-variant-numeric: tabular-nums; }
+      #status { color: #7d8590; max-width: 46ch; }
+      #status.warn { color: #f0883e; }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      .note {
+        display: none;
+        margin: 0 0 16px;
+        padding: 10px 14px;
+        border: 1px solid #9e6a03;
+        border-left-width: 3px;
+        border-radius: 6px;
+        background: #1c1810;
+        color: #d8c3a0;
+      }
+      .note.show { display: block; }
+      .note code { color: #fde68a; font-family: ui-monospace, Consolas, monospace; }
+      .gain { display: flex; align-items: center; gap: 6px; color: #7d8590; }
+      .gain input { width: 90px; }
+      .gain b { color: #e6edf3; font-variant-numeric: tabular-nums; min-width: 2ch; }
+      .stats dd.diag { font-size: 13px; line-height: 1.5; color: #7d8590; }
+      .stats dd.diag span { color: #e6edf3; font-variant-numeric: tabular-nums; }
+      .stats dd.hint { font-size: 12px; color: #f0883e; margin-top: -4px; }
+      @media (max-width: 700px) { .stage { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <h1>Shroom SDK · 最小示例</h1>
+      <p class="sub">连接串口 → 拿到数据 → 画成热力图。整个页面的逻辑就是下面那段 script。</p>
+      <p><a href="./quick-start.html" style="color:#79c0ff">完整快速接入：WS → 产品展示 → 标签录制 → 下载</a></p>
+
+      <section class="driver-panel" aria-labelledby="driver-title">
+        <h2 id="driver-title">先安装串口驱动</h2>
+        <p>缺少匹配的驱动时，系统可能无法识别设备，本页也无法读取该串口。请在连接设备的这台电脑安装驱动。</p>
+        <div class="driver-links">
+          <a href="https://shroom.jq-industries.com/drive/CH341SER.EXE" target="_blank" rel="noreferrer">Windows 驱动 · EXE</a>
+          <a href="https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip" target="_blank" rel="noreferrer">macOS 驱动 · ZIP（解压后按说明安装）</a>
+        </div>
+        <ol>
+          <li>连接列表没有串口时，先安装对应系统驱动。</li>
+          <li>安装后重插设备，并重启浏览器。</li>
+          <li>重新点击“连接设备”，查看串口选择列表；仍不可见时检查 USB 数据线与系统串口识别情况。</li>
+        </ol>
+      </section>
+
+      <p class="note" id="filenote">
+        你是双击打开这个文件的（<code>file://</code>）。模拟数据能正常跑，但<b>连不了真实设备</b>——
+        浏览器规定串口只在 <code>https</code> 或 <code>localhost</code> 下开放，这条绕不过去。
+        要连设备：回到 SDK 根目录，双击 <code>start-demo.bat</code>（macOS / Linux 是 <code>sh start.sh</code>）。
+      </p>
+
+      <form id="license-form" class="license-panel" aria-describedby="license-help">
+        <label for="license-key">SDK 产品密钥</label>
+        <input id="license-key" type="password" required maxlength="16384" autocomplete="off" spellcheck="false" />
+        <label for="license-device">电脑标识（同一浏览器自动保留）</label>
+        <input id="license-device" pattern="[a-f0-9]{64}" autocomplete="off" spellcheck="false" />
+        <div class="bar">
+          <label for="license-mode">密钥格式</label>
+          <select id="license-mode"><option value="online">在线密钥</option><option value="offline">RSA 离线码</option></select>
+          <button id="license-activate" type="submit">激活授权</button>
+          <button id="license-clear" type="button">清除授权</button>
+          <span id="license-status" role="status" aria-live="polite">尚未激活；模拟数据可直接使用</span>
+        </div>
+        <p id="license-help">真实设备需要有效 SDK 产品密钥，SDK 授权不限制设备型号；协议与解码配置仍需与设备匹配。限定电脑数量的密钥需联网。密钥只在本次页面内使用。</p>
+      </form>
+
+      <div class="bar">
+        <button class="primary" id="connect">连接设备</button>
+        <button id="mock">用模拟数据</button>
+        <button id="stop">断开</button>
+        <select id="baud" title="波特率：连上但没画面时换这个">
+          <option value="1000000">1000000（默认）</option>
+          <option value="921600">921600（手套 / 机器人）</option>
+          <option value="1500000">1500000</option>
+          <option value="3000000">3000000</option>
+          <option value="460800">460800</option>
+          <option value="115200">115200</option>
+        </select>
+        <select id="layout" title="选你手里那款产品。串口里的字节是采集板扫描顺序，不等于垫子上的位置，选对了画面才和实物对得上">
+          <option value="raw">原始扫描顺序</option>
+        </select>
+        <select id="mode">
+          <option value="heat">热力</option>
+          <option value="dots">点阵</option>
+          <option value="grid">网格</option>
+        </select>
+        <select id="colormap">
+          <option value="shroom">上位机同款</option>
+          <option value="jet">jet 彩虹</option>
+          <option value="jetWhite">jetWhite 白底</option>
+          <option value="grey">grey 灰度</option>
+        </select>
+        <label class="gain">增益 <input id="gain" type="range" min="1" max="8" step="0.5" value="1" /><b id="gainv">1</b></label>
+        <label class="gain" id="tiltbox" style="display: none" title="俯视角：越大越像正俯视，方阵看着越方">
+          视角 <input id="tilt" type="range" min="45" max="85" step="5" value="70" /><b id="tiltv">70°</b>
+          <input id="flip" type="checkbox" checked title="按下面却是上面鼓起来，就点掉它" />前后翻转
+        </label>
+        <span id="status" role="status" aria-live="polite">未连接</span>
+      </div>
+
+      <div class="stage">
+        <canvas id="view"></canvas>
+        <dl class="stats">
+          <dt>最大值</dt><dd id="max">—</dd>
+          <dt>平均值</dt><dd id="avg">—</dd>
+          <dt>受力点数</dt><dd id="area">—</dd>
+          <dt>帧率</dt><dd id="fps">—</dd>
+          <dt>数据流</dt>
+          <dd class="diag">
+            <span id="bytes">0</span> 字节<br />
+            <span id="frames">0</span> 帧 / 丢 <span id="dropped">0</span>
+          </dd>
+          <dd class="hint" id="diaghint"></dd>
+        </dl>
+      </div>
+    </div>
+
+    <!--@INLINE_BUNDLE@-->
+
+    <script>
+      // 网页测试台的界面逻辑；SDK 会由构建脚本插入上方标记，修改应在此模板进行。
+      (function () {
+        var $ = function (id) { return document.getElementById(id); };
+
+        // 正常情况下 SDK 代码就内联在这个文件里，走不到这里；留个兜底免得白屏
+        if (typeof Shroom === 'undefined') {
+          $('status').textContent = 'SDK 代码没加载起来，按 F12 打开 Console 看报错';
+          $('status').className = 'warn';
+          $('connect').disabled = true;
+          $('mock').disabled = true;
+          return;
+        }
+
+        // 默认就按 Shroom 桌面端那一套来：热力图 + 同款色标 + 灰底
+        var heatmap = Shroom.createHeatmap('#view', {
+          mode: 'heat',
+          colormap: 'shroom',
+          background: '#666',
+        });
+
+        // 连接参数整个对象传给 SDK，SDK 每帧都按这个对象解码 ——
+        // 所以改 layout 直接改这里就生效，不用断开重连。
+        // 行列不用写：选了产品，产品自己知道这块垫子是几行几列
+        var opts = { layout: 'mat32' };
+
+        // 下拉里的选项直接从 SDK 里读，加了新产品这里不用跟着改。
+        // 列的是**产品**不是线序：好几款产品共用一条走线，
+        // 用户手里拿的是「宠物看护」，不是「通用压力垫」
+        // 下拉里只写产品名，跟桌面端菜单一样，不带行列——行列是解码的事，
+        // 用户挑的是手里那台设备
+        Shroom.listProducts().forEach(function (p) {
+          var o = document.createElement('option');
+          o.value = p.name;
+          o.textContent = p.label;
+          $('layout').appendChild(o);
+        });
+        $('layout').value = 'hand';
+        var device = null;
+        var frames = 0;
+        var lastTick = performance.now();
+        var shape = null;
+        var connecting = false;
+
+        // 同源保存稳定安装标识用于电脑名额绑定；仅保存标识，不持久保存用户密钥。
+        try {
+          var deviceId = localStorage.getItem('shroom-sdk-device-id');
+          if (!deviceId || !/^[a-f0-9]{64}$/.test(deviceId)) {
+            deviceId = Array.from(crypto.getRandomValues(new Uint8Array(32)), function (value) { return value.toString(16).padStart(2, '0'); }).join('');
+            localStorage.setItem('shroom-sdk-device-id', deviceId);
+          }
+          $('license-device').value = deviceId;
+        } catch (error) { $('license-status').textContent = '无法保存电脑标识；限定数量的密钥需手动填写稳定标识。'; }
+        // 激活与选串口分开，后者必须保留浏览器用户手势。
+        $('license-form').onsubmit = async function (event) {
+          event.preventDefault();
+          $('license-activate').disabled = true;
+          $('license-form').setAttribute('aria-busy', 'true');
+          $('license-status').textContent = '正在校验授权…';
+          try {
+            var license = await Shroom.activateLicense($('license-key').value, {
+              mode: $('license-mode').value,
+              deviceId: $('license-device').value || undefined,
+            });
+            $('license-key').value = '';
+            $('license-status').textContent = 'SDK 授权已通过，有效至 ' + new Date(license.expiresAt).toLocaleString();
+          } catch (error) { $('license-status').textContent = '[' + (error.code || 'ERROR') + '] ' + error.message; }
+          finally { $('license-activate').disabled = false; $('license-form').removeAttribute('aria-busy'); }
+        };
+        $('license-clear').onclick = function () {
+          Shroom.clearLicense();
+          $('license-key').value = '';
+          $('license-status').textContent = '授权已清除；模拟数据可直接使用';
+        };
+
+        function showError(err) {
+          $('status').textContent = err.code === 'USER_CANCELLED'
+            ? '你取消了选择；需要时可再次点击连接。'
+            : '[' + (err.code || 'ERROR') + '] ' + err.message + (err.suggestion ? ' ' + err.suggestion : '');
+          $('status').className = 'warn';
+        }
+
+        function setConnecting(value) {
+          connecting = value;
+          $('connect').disabled = value || !Shroom.isSupported();
+          $('mock').disabled = $('stop').disabled = value;
+        }
+
+        // 将新连接的帧接到视图；布局参数与显示设置由各自控件维护。
+        function attach(dev, label) {
+          device = dev;
+          $('status').textContent = label;
+          $('status').className = '';
+          dev.onError(function (err) {
+            if (device === dev) showError(err);
+          });
+          dev.onFrame(function (frame) {
+            heatmap.render(frame);
+            shape = frame;
+            $('max').textContent = frame.max.toFixed(3);
+            $('avg').textContent = frame.avg.toFixed(3);
+            $('area').textContent = frame.area;
+            frames += 1;
+          });
+        }
+
+        // 测试台的“停止”释放串口或模拟源；这里不是服务端的 stopRecording。
+        function stop() {
+          var closing = device ? device.close() : Promise.resolve();
+          device = null;
+          shape = null;
+          return Promise.resolve(closing).finally(function () {
+            heatmap.clear();
+            $('status').textContent = '未连接';
+            $('status').className = '';
+            ['max', 'avg', 'area', 'fps'].forEach(function (id) {
+              $(id).textContent = '—';
+            });
+            $('bytes').textContent = $('frames').textContent = $('dropped').textContent = '0';
+            $('diaghint').textContent = '';
+          });
+        }
+
+        $('connect').onclick = function () {
+          if (connecting) return;
+          setConnecting(true);
+          $('status').textContent = '请选择串口，正在等待连接…';
+          $('status').className = '';
+          // 第一件事就是弹串口选择框，前面别 await，否则可能丢掉用户手势
+          opts.baudRate = Number($('baud').value);
+          Shroom.connect(opts).then(
+            function (dev) {
+              return stop().then(function () { attach(dev, '已连接串口'); }, function (error) {
+                return dev.close().catch(function () {}).then(function () { throw error; });
+              });
+            }
+          ).catch(showError).finally(function () { setConnecting(false); });
+        };
+
+        $('mock').onclick = function () {
+          if (connecting) return;
+          setConnecting(true);
+          stop().then(function () {
+            attach(Shroom.mock({ rows: 32, cols: 32, fps: 30 }), '模拟数据运行中');
+          }).catch(showError).finally(function () { setConnecting(false); });
+        };
+
+        $('stop').onclick = function () { void stop().catch(showError); };
+        window.addEventListener('pagehide', function () { void stop().catch(console.error); });
+        $('layout').onchange = function (e) {
+          // 下拉里的 value 是产品名，解码要的是线序名，这里换一道。
+          // 「高速」那几款不需要换线序，产品表里记的就是 'raw'
+          var p = Shroom.getProduct(e.target.value);
+          opts.layout = p ? p.layout : 'raw';
+          // 走线序的产品，行列由线序自己决定，这里给了也会被忽略；
+          // 'raw' 的没有线序可问，不给就只能按点数猜，所以把产品表里的行列带上
+          if (p && p.layout === 'raw') {
+            opts.rows = p.rows;
+            opts.cols = p.cols;
+          } else {
+            delete opts.rows;
+            delete opts.cols;
+          }
+        };
+        $('colormap').onchange = function (e) {
+          heatmap.setOptions({ colormap: e.target.value });
+        };
+        $('mode').onchange = function (e) {
+          heatmap.setOptions({ mode: e.target.value });
+          // 视角只对点阵有意义，换成热力/网格就把它收起来
+          $('tiltbox').style.display = e.target.value === 'dots' ? '' : 'none';
+        };
+        $('tilt').oninput = function (e) {
+          $('tiltv').textContent = e.target.value + '°';
+          heatmap.setOptions({ tilt: Number(e.target.value) });
+        };
+        $('flip').onchange = function (e) {
+          heatmap.setOptions({ flipY: e.target.checked });
+        };
+        $('gain').oninput = function (e) {
+          $('gainv').textContent = e.target.value;
+          heatmap.setOptions({ gain: Number(e.target.value) });
+        };
+
+        // 「连上了但没画面」全靠这几个数字定位：
+        // 这些是累计观测，只用于缩小范围，不保证设备仍在持续输出或线序配置正确。
+        function diagnose() {
+          if (!device || device.bytesReceived === undefined) {
+            $('diaghint').textContent = '';
+            return;
+          }
+          var diagnostic = device.getDiagnostics();
+          $('bytes').textContent = diagnostic.bytesReceived;
+          $('frames').textContent = diagnostic.frameCount;
+          $('dropped').textContent = diagnostic.droppedCount;
+          if (diagnostic.status !== 'streaming') {
+            $('diaghint').textContent = diagnostic.hint;
+          } else if (shape && shape.rows === 1 && shape.cols > 64) {
+            // 帧长不是完全平方数，推断不出方阵，退化成了 1×N 一条横线
+            $('diaghint').textContent =
+              '帧长 ' + shape.cols + ' 字节，不是完全平方数，画成了一条横线 —— ' +
+              '在 connect() 里显式写上 rows / cols';
+          } else {
+            $('diaghint').textContent = (diagnostic.source === 'mock' ? '模拟生成数据；' : '') + diagnostic.hint;
+          }
+        }
+
+        setInterval(function () {
+          var now = performance.now();
+          $('fps').textContent = device ? Math.round((frames * 1000) / (now - lastTick)) : '—';
+          frames = 0;
+          lastTick = now;
+          diagnose();
+        }, 1000);
+
+        // 串口用不了的三种情况，说法不一样，解决办法也不一样
+        if (!Shroom.isSupported()) {
+          $('connect').disabled = true;
+          if (location.protocol === 'file:') {
+            $('filenote').className = 'note show';
+            $('status').textContent = '双击打开的，串口用不了；点「用模拟数据」照样能看效果';
+          } else if (!window.isSecureContext) {
+            $('status').textContent = '当前地址不是 https 或 localhost，浏览器不开放串口，可以先点「用模拟数据」';
+          } else {
+            $('status').textContent = '此浏览器没有 Web Serial（需要 Chrome / Edge），可以先点「用模拟数据」';
+          }
+          $('status').className = 'warn';
+        }
+      })();
+    </script>
+  </body>
+</html>

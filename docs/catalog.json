@@ -1,0 +1,210 @@
+[
+  {
+    "slug": "drivers", "file": "docs/DRIVERS.md", "label": "安装串口驱动", "navLabel": "串口驱动",
+    "summary": "下载 Windows / macOS 串口驱动，安装后确认端口，排查找不到串口的问题。",
+    "forAi": false, "area": "guides", "group": "guides"
+  },
+  {
+    "slug": "license", "file": "docs/LICENSE.md", "label": "SDK 授权", "navLabel": "SDK 授权",
+    "summary": "激活不限制设备型号的 SDK 产品密钥，配置电脑名额、有效期与在线或离线校验。",
+    "forAi": false, "area": "guides", "group": "guides"
+  },
+  {
+    "slug": "quick-start", "file": "docs/QUICK-START.md", "label": "快速接入文档", "navLabel": "快速接入文档",
+    "summary": "按取数、创建 WS、开始采集、停止采集和下载五步调用 API；Node.js 与网页共享一条采集链路。",
+    "navSummary": "取数 → 创建 WS → 开始采集 → 停止采集 → 下载。",
+    "forAi": false, "area": "guides", "group": "guides", "route": "quick",
+    "chapters": [
+      { "id": "guide-prepare", "label": "安装驱动与运行环境" },
+      { "id": "guide-config", "label": "确认产品与串口" },
+      { "id": "guide-run", "label": "安装 SDK 依赖" },
+      { "id": "guide-connect", "label": "激活 SDK 授权" },
+      { "id": "guide-verify", "label": "验证取数与采集" },
+      { "id": "guide-code", "label": "接入自己的页面" }
+    ]
+  },
+  {
+    "slug": "custom", "file": "docs/CUSTOM.md", "label": "基础文档", "navLabel": "基础文档",
+    "summary": "为新设备与自定义展示选择串口、解析、数据结构、通讯、存储和渲染能力。",
+    "forAi": false, "area": "guides", "group": "guides", "route": "custom",
+    "tocDescriptions": { "quick-to-base": "五个快速函数与基础 API 的对应关系" }
+  },
+  {
+    "slug": "python", "file": "python/README.md", "label": "Python SDK", "navLabel": "Python",
+    "summary": "安装 Python 包，读取串口与模拟数据，接入数据分析和算法。",
+    "forAi": false, "area": "backend", "group": "languages", "hidden": true
+  },
+  {
+    "slug": "node", "file": "docs/NODE.md", "label": "Node.js SDK", "navLabel": "Node.js",
+    "summary": "按产品连接整包手套或手部检测垫，进阶使用通用串口与已有后端。",
+    "forAi": false, "area": "backend", "group": "languages", "hidden": true
+  },
+  {
+    "slug": "serial", "file": "docs/SERIAL.md", "label": "串口接入", "navLabel": "串口",
+    "summary": "优先按产品连接手套或手部检测垫，进阶配置通用串口并排查错误。",
+    "forAi": false, "area": "backend", "group": "features", "hidden": true
+  },
+  {
+    "slug": "backend", "file": "docs/BACKEND-GUIDE.md", "label": "后端文档", "navLabel": "后端",
+    "summary": "优先查阅 Node.js 产品连接，或切换 Python 通用串口；保留模拟、解析、后端通讯与存储 API 的参数和示例。",
+    "forAi": false, "area": "backend", "group": "features", "apiReference": true,
+    "chapters": [
+      { "id": "serial", "label": "串口" },
+      { "id": "communication", "label": "通讯" },
+      { "id": "storage", "label": "存储" }
+    ],
+    "tocDescriptions": {
+      "node-connect-glove": "连接整包手套并选择左右手",
+      "node-connect-hand-pad": "连接手部检测垫",
+      "node-connect-product": "按产品类型连接设备",
+      "node-serve-device": "创建独立 WS 与下载服务",
+      "node-server": "控制采集、获取下载地址与关闭服务",
+      "node-device-products": "列出已封装的设备产品",
+      "node-on-data": "订阅高层产品数据",
+      "node-product-data": "读取产品压力矩阵与手套整包字段",
+      "node-list-ports": "列出可用串口",
+      "node-connect": "连接串口设备",
+      "node-mock": "生成模拟传感器数据",
+      "node-on-frame": "订阅每一帧数据",
+      "node-on-error": "订阅设备运行错误",
+      "node-diagnostics": "读取设备状态与诊断快照",
+      "node-errors": "识别与处理结构化错误",
+      "node-close": "关闭设备并释放连接",
+      "node-framer": "创建字节流拆帧器",
+      "node-framer-push": "提取完整帧与重置缓存",
+      "node-decode-frame": "将原始字节解码为数据帧",
+      "node-resolve-shape": "推断矩阵行列数",
+      "node-layout": "查询点位排列配置",
+      "node-products": "查询支持的产品配置",
+      "node-ascii": "在终端显示热力图",
+      "python-list-ports": "列出可用串口",
+      "python-connect": "连接串口设备",
+      "python-mock": "生成模拟传感器数据",
+      "python-read-frame": "读取单帧数据",
+      "python-frames": "连续读取数据帧",
+      "python-write": "向串口发送字节",
+      "python-close": "关闭设备与自动释放资源",
+      "python-diagnostics": "读取设备状态与诊断快照",
+      "python-errors": "捕获同步结构化错误",
+      "python-framer": "创建字节流拆帧器",
+      "python-framer-push": "提取完整帧与重置缓存",
+      "python-decode-frame": "将原始字节解码为数据帧",
+      "python-resolve-shape": "推断矩阵行列数",
+      "python-layout": "读取点位排列配置",
+      "python-ascii": "在终端显示热力图",
+      "backend-client": "创建后端连接客户端",
+      "backend-contract": "获取后端接口约定",
+      "backend-realtime": "连接实时数据通道",
+      "backend-subscriptions": "订阅通道与发送消息",
+      "backend-events": "监听与移除事件",
+      "backend-request": "自定义请求与接口路径",
+      "python-to-dict": "转换为可保存的字典",
+      "python-matrix": "转换为二维数据矩阵"
+    }
+  },
+  {
+    "slug": "backend-api", "file": "BACKEND.md", "label": "后端通讯 API 参考", "navLabel": "HTTP / WebSocket API",
+    "summary": "通过 HTTP 查询与控制已有后端，通过 WebSocket 订阅实时数据。",
+    "forAi": false, "area": "backend", "group": "features", "hidden": true, "apiReference": true,
+    "tocDescriptions": {
+      "client-options": "创建后端连接客户端",
+      "get-contract": "获取后端接口约定",
+      "request": "发送自定义请求",
+      "route": "生成接口请求路径",
+      "get-channels": "查询数据通道列表",
+      "get-ws-status": "查询实时通讯状态",
+      "list-display-systems": "查询展示系统列表",
+      "get-display-system": "查询单个展示系统",
+      "list-serial-ports": "查询后端可用串口",
+      "get-serial-status": "查询后端串口状态",
+      "get-current-sensor": "查询当前传感器",
+      "set-sensor-type": "切换传感器类型",
+      "open-serial": "打开后端串口",
+      "close-serial": "关闭后端串口",
+      "start-collection": "启动后端数据采集",
+      "stop-collection": "停止后端数据采集",
+      "websocket": "实时网络通讯",
+      "connect-realtime": "连接实时数据通道",
+      "disconnect-realtime": "断开实时数据连接",
+      "subscribe": "订阅指定数据通道",
+      "unsubscribe": "取消通道订阅",
+      "send-realtime": "发送实时消息",
+      "handle-realtime-message": "解析并分发实时消息",
+      "on": "注册持续或单次事件监听",
+      "off": "移除指定事件监听",
+      "remove-all-listeners": "清空事件监听"
+    }
+  },
+  {
+    "slug": "storage", "file": "docs/STORAGE.md", "label": "数据存储", "navLabel": "存储",
+    "summary": "按会话录制带标签数据、导出 CSV / JSONL，并了解基础文件保存和数据库边界。",
+    "forAi": false, "area": "backend", "group": "features", "hidden": true,
+    "tocDescriptions": {
+      "recording-api": "开始、停止与查询录制的基础 API",
+      "recording-url": "按记录 ID 生成地址或触发下载"
+    }
+  },
+  {
+    "slug": "frontend-communication", "file": "docs/FRONTEND-COMMUNICATION.md", "label": "前端通讯", "navLabel": "通讯",
+    "summary": "按产品连接手套或手部检测垫，查阅浏览器串口、数据订阅与后端网络接口。",
+    "forAi": false, "area": "frontend", "group": "features", "apiReference": true,
+    "tocDescriptions": {
+      "sdk-stream": "连接 Node SDK 数据服务",
+      "connect-stream": "创建 WS 订阅连接",
+      "stream-device": "订阅数据、控制采集与关闭连接",
+      "web-serial": "浏览器串口通讯",
+      "connect-glove": "连接整包手套并选择左右手",
+      "connect-hand-pad": "连接手部检测垫",
+      "connect-product": "按产品连接与查询支持清单",
+      "product-data": "读取产品数据与订阅数据回调",
+      "supported": "检测浏览器串口支持",
+      "connect": "连接串口设备",
+      "on-frame": "订阅每一帧数据",
+      "on-error": "订阅设备运行错误",
+      "close": "关闭设备并释放连接",
+      "mock-device": "生成模拟传感器数据",
+      "backend-client": "连接已有后端服务"
+    }
+  },
+  {
+    "slug": "rendering", "file": "docs/RENDERING.md", "label": "前端渲染", "navLabel": "渲染",
+    "summary": "查阅 Canvas 热力图、render / setOptions / resize / clear 和调色板 API，附完整选项与运行示例。",
+    "forAi": false, "area": "frontend", "group": "features", "apiReference": true,
+    "tocDescriptions": {
+      "create-heatmap": "创建热力图画布",
+      "heatmap-options": "配置热力图显示参数",
+      "render": "绘制最新数据帧",
+      "set-options": "更新热力图显示参数",
+      "resize": "调整画布分辨率",
+      "clear": "清空画布内容",
+      "canvas-property": "获取画布元素",
+      "get-colormap": "选择调色板",
+      "builtin-colormaps": "查看内置配色方案"
+    }
+  },
+  {
+    "slug": "ai-context", "file": "AI-CONTEXT.md", "label": "给 AI 的上下文", "navLabel": "SDK Skill",
+    "summary": "让 AI 先用一个函数获取产品数据，按需扩展完整五步，包含错误处理与资源释放。",
+    "forAi": true, "area": "guides", "group": "guides"
+  },
+  {
+    "slug": "ai-guide", "file": "怎么用AI开发.md", "label": "怎么用 AI 来开发", "navLabel": "AI 开发指南",
+    "summary": "先让 AI 完成一步取数，再按需增加 WS、采集和下载，并验证生成的代码。",
+    "forAi": false, "area": "guides", "group": "guides"
+  },
+  {
+    "slug": "changelog", "file": "CHANGELOG.md", "label": "SDK 更新日志", "navLabel": "更新日志",
+    "summary": "查看 SDK 各版本的功能变化、语言支持范围与兼容说明。",
+    "forAi": false, "area": "guides", "group": "guides", "hidden": true
+  },
+  {
+    "slug": "migration", "file": "MIGRATION.md", "label": "旧 SDK 迁移说明", "navLabel": "迁移说明",
+    "summary": "说明独立仓库替换前后的接口、组件与采集数据库差异，以及旧版本的位置。",
+    "forAi": false, "area": "guides", "group": "guides", "hidden": true
+  },
+  {
+    "slug": "readme", "file": "README.md", "label": "SDK 说明与排错", "navLabel": "API 与排错",
+    "summary": "查阅完整 API、统一数据帧、产品点位排列和常见连接问题。",
+    "forAi": false, "area": "guides", "group": "guides"
+  }
+]

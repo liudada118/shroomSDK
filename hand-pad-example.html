@@ -1,0 +1,363 @@
+<!doctype html>
+<!-- 用途：首次运行的完整浏览器产品取数示例；按驱动准备、激活授权、连接验收的顺序使用。 -->
+<!-- 前置条件：安装对应驱动，使用支持 Web Serial 的浏览器，通过 localhost/HTTPS 运行。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>手部检测垫 · 首次取数</title>
+<!-- 页面样式只负责示例布局和状态反馈，不影响 SDK 协议、解析或采样。 -->
+<style>
+:root{color-scheme:light;font:16px/1.6 system-ui,sans-serif;color:#17243b;background:#f5f7fa}*{box-sizing:border-box}body{max-width:900px;margin:32px auto;padding:0 20px}h1{font-size:28px;margin-bottom:8px}h2{font-size:19px;margin-top:0}p{margin:8px 0 16px}section{background:white;border:1px solid #d8e0ec;border-radius:12px;padding:22px;margin:18px 0}a{color:#144c9e;text-underline-offset:3px}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #6399ef;outline-offset:3px}label{display:block;font-weight:600;margin-top:12px}input,select,textarea,button{font:inherit}textarea,select{padding:10px;border:1px solid #aebbd0;border-radius:6px;max-width:100%}textarea{display:block;width:100%;min-height:88px}button{padding:10px 16px;min-height:44px;border-radius:6px;background:#184b8d;color:white;border:1px solid #184b8d;cursor:pointer}button.secondary{background:white;color:#184b8d}button:disabled{cursor:default;background:#e5eaf2;color:#536176;border-color:#d5ddea}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}.note{font-size:14px;color:#495b72}.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.stats dt{font-size:14px;color:#495b72}.stats dd{margin:4px 0 0;font-weight:600;overflow-wrap:anywhere}pre{background:#f3f6fa;padding:14px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;border-radius:6px}#last-error{color:#9b272d}#next-step{min-height:2em}@media(max-width:560px){body{margin-top:20px}.stats{grid-template-columns:1fr}section{padding:16px}}
+</style>
+</head>
+<body>
+<h1>手部检测垫 · 首次取数</h1>
+<p>将 <code>hand-pad-example.html</code> 放在解压后的 SDK 根目录，与 <code>web/</code> 同级。执行 <code>node start.mjs --no-open</code>，打开 <code>http://localhost:5178/hand-pad-example.html</code>；若终端显示了其他端口，请替换地址中的端口。使用支持 Web Serial 的浏览器，通过 localhost 或 HTTPS 访问。</p>
+<p class="note">当前示例使用 Windows 的驱动与端口提示；其他系统可在产品接入页面选择实际系统后重新生成。</p>
+<!-- 准备区：系统先识别串口，SDK 才能选择和打开设备；串口可见并不代表型号已识别。 -->
+<section aria-labelledby="prepare-title">
+<h2 id="prepare-title">1. 安装驱动，确认系统串口</h2>
+<p><strong>CH34x 设备未安装驱动时，系统可能无法识别串口。</strong>先安装对应驱动，重新插拔设备，再核对系统中的端口。</p>
+<p><a href="https://shroom.jq-industries.com/drive/CH341SER.EXE">Windows 驱动（EXE）</a> · <a href="https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip">macOS 驱动（ZIP）</a></p>
+<p class="note">Windows：在设备管理器的“端口（COM 和 LPT）”中确认设备。 关闭占用端口的上位机或其他采集程序。</p>
+<p class="note">当前示例配置：<strong>手部检测垫</strong>。这来自你选择的配置，尚未识别实物；请确认实物使用手部检测垫协议。</p>
+</section>
+<!-- 授权区：独立点击激活，不把远程激活和串口选择塞进同一次点击流程。 -->
+<section aria-labelledby="license-title">
+<h2 id="license-title">2. 激活 SDK 授权</h2>
+<p>SDK 使用独立产品密钥，许可不限制传感器型号；仍需满足有效期、电脑名额与已适配的硬件协议。离线码使用 SDK 默认信任的公钥验证。</p>
+<label for="license-mode">密钥类型</label><select id="license-mode"><option value="online">在线密钥</option><option value="offline">离线授权码</option></select>
+<label for="key">SDK 密钥</label><textarea id="key" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="粘贴 Shroom SDK 产品密钥"></textarea>
+<p id="installation-state" class="note"></p>
+<p class="note">示例不持久保存密钥，激活完成后会清空输入框。名额已满、换机或密钥未获取时，请联系发放密钥的管理员。</p>
+<div class="actions"><button id="activate" type="button">激活授权</button><span id="license-state" role="status">请先激活 SDK 授权</span></div>
+</section>
+<!-- 采集与验收区：区分端口打开、首帧到达和触点映射验证，错误信息可供辅助技术读取。 -->
+<section aria-labelledby="connect-title">
+<h2 id="connect-title">3. 连接并验证触点</h2>
+<p>授权成功后单独点击连接，以保留串口选择所需的用户手势。示例不会自动重连。</p>
+<div class="actions"><button id="connect" type="button" disabled>连接设备</button><button id="disconnect" class="secondary" type="button" disabled>断开</button></div>
+<dl class="stats"><div><dt>连接状态</dt><dd id="connection-state" role="status">未连接</dd></div><div><dt>有效帧数</dt><dd id="frame-count">0</dd></div><div><dt>最后一帧</dt><dd id="last-frame">尚未收到</dd></div></dl>
+<p id="next-step" role="status">先确认驱动与串口，再激活授权。</p>
+<p class="note">ADC 是原始相对读数，不是 Pa / N。收到首帧后，仍需触按已知位置验证映射；物理单位需要针对实际硬件标定。</p>
+<pre id="data">尚未收到数据。</pre>
+<h2>最后错误</h2><pre id="last-error" role="alert">无</pre>
+<div class="actions"><button id="copy-diagnostics" class="secondary" type="button">复制无密钥诊断 JSON</button></div><p id="diagnostic-status" class="note" role="status"></p><pre id="diagnostics" hidden></pre>
+</section>
+<!-- 模块区：下方代码管理授权、单个设备会话、数据显示、错误恢复及页面生命周期。 -->
+<script type="module">
+// SDK 导入：这是浏览器入口，路径相对本 HTML；不要直接通过 file:// 打开模块。
+import { Shroom } from './web/index.js';
+// 当前产品配置：hand，手部检测垫使用内置 32×32 映射，不传手侧参数。
+// 此配置只声明应用要使用的协议和映射，不表示 SDK 已自动识别实物。
+(function webRuntime(Shroom, configuration) {
+  // 一、连接状态：一个页面只保留一个当前会话，按钮状态由授权、连接和清理进度共同决定。
+  // configuration 是文末的产品配置；改接其他实物时，先核对产品协议及手套手侧。
+  const $ = (id) => document.getElementById(id);
+  // 与同源 SDK 示例共用安装标识，避免同一浏览器打开不同示例时重复占用电脑名额。
+  const installationStorageKey = 'shroom-sdk-device-id';
+  let installationId;
+  let installationError;
+  let activeSession = null;
+  const closingSessions = new Set();
+  let pendingConnections = 0;
+  let activating = false;
+  let hidden = false;
+  let activationRevision = 0; // 识别过期的异步激活，防止旧请求覆盖后来操作或返回后的页面状态。
+  let connectionState = '未连接';
+  let frames = 0;
+  let lastFrameAt = null;
+  let lastError = null;
+  let lastViewTime = 0;
+
+  // 二、错误与界面：展示可操作的错误信息，诊断仅保留明确允许公开的字段。
+  function errorInfo(error) {
+    // 不复制密钥、安装标识、请求详情或异常上下文，避免把授权信息带进诊断 JSON。
+    return {
+      code: String(error?.code || 'APPLICATION_ERROR'),
+      stage: String(error?.stage || ''),
+      message: String(error?.message || '操作失败。'),
+      suggestion: String(error?.suggestion || ''),
+    };
+  }
+
+  function report(error) {
+    lastError = errorInfo(error);
+    $('last-error').textContent = [lastError.code, lastError.message, lastError.suggestion].filter(Boolean).join('\n');
+  }
+
+  function licenseStatus() {
+    try { return Shroom.getLicenseStatus(); }
+    catch { return { valid: false, code: 'LICENSE_REQUIRED' }; }
+  }
+
+  function refresh() {
+    if (hidden) return;
+    // 按钮禁用用于防止误操作；真实采集是否获准仍由 SDK 的授权检查决定。
+    const licensed = licenseStatus().valid;
+    $('connection-state').textContent = connectionState;
+    $('frame-count').textContent = String(frames);
+    $('last-frame').textContent = lastFrameAt || '尚未收到';
+    $('license-state').textContent = activating ? '正在激活…' : licensed ? '授权有效' : '请先激活 SDK 授权';
+    $('activate').disabled = activating || Boolean(installationError) || closingSessions.size > 0;
+    $('connect').disabled = !licensed || activating || pendingConnections > 0 || Boolean(activeSession) || closingSessions.size > 0;
+    $('disconnect').disabled = !activeSession || activating;
+  }
+
+  function clearWaitingTimer(session) {
+    if (session?.waitingTimer) clearTimeout(session.waitingTimer);
+    if (session) session.waitingTimer = null;
+  }
+
+  // 三、关闭与竞态：先把会话标记为失效，再等待串口释放，旧回调就不能继续更新页面。
+  async function closeSession(session) {
+    if (!session) return;
+    session.retired = true;
+    clearWaitingTimer(session);
+    if (activeSession === session) activeSession = null;
+    // 串口选择/打开仍可能尚未完成；设备稍后返回时，连接代码会识别失效会话并立即关闭。
+    if (!session.device) { refresh(); return; }
+    if (!session.closePromise) {
+      // 多个错误或操作可能同时要求关闭；共用同一个 Promise，避免重复关闭端口。
+      closingSessions.add(session);
+      refresh();
+      session.closePromise = Promise.resolve().then(() => session.device.close()).catch((error) => {
+        report(error);
+      }).finally(() => {
+        session.device = null;
+        closingSessions.delete(session);
+        refresh();
+      });
+    }
+    await session.closePromise;
+  }
+
+  // 手动断开必须等待 close() 完成，清除旧设备引用后才允许用户重新连接。
+  async function disconnect() {
+    connectionState = '已断开';
+    const session = activeSession;
+    await closeSession(session);
+    refresh();
+  }
+
+  function handleRuntimeError(session, error) {
+    if (session.retired || activeSession !== session) return;
+    report(error);
+    // CALLBACK_FAILED 是应用回调异常，不等于串口掉线；应修复回调，保留仍健康的连接。
+    if (error?.code === 'CALLBACK_FAILED') { refresh(); return; }
+    connectionState = '已断开';
+    $('next-step').textContent = String(error?.code || '').startsWith('LICENSE_')
+      ? '采集已停止。重新激活 SDK 授权后，再点击连接设备。'
+      : '采集已停止。确认设备、驱动和端口状态，再点击连接设备。';
+    void closeSession(session);
+    refresh();
+  }
+
+  // 四、onData 数据：每次收到的是 SDK 已完成分帧和产品映射的一帧，不要再按串口包解码。
+  function showFrame(session, data) {
+    if (session.retired || activeSession !== session) return;
+    clearWaitingTimer(session);
+    frames += 1;
+    lastFrameAt = new Date().toISOString(); // 页面接收时间，不是设备采样时钟或实时采样率。
+    connectionState = '正在取数';
+    const now = Date.now();
+    // 每帧都计数，只限制屏幕刷新频率，避免大量 DOM/JSON 更新拖慢串口处理。
+    if (frames !== 1 && now - lastViewTime < 100) return;
+    lastViewTime = now;
+    // pressure：原始扫描顺序的 ADC（0～255）；pressureMatrix：映射后的 ADC，一维按行展开。
+    // values 是同一映射的 0～1 相对值。上述字段都不是 Pa/N，物理单位需按实际硬件标定。
+    const raw = Array.from(data.pressure || []);
+    const matrix = Array.from(data.pressureMatrix || []);
+    let peakIndex = 0;
+    for (let i = 1; i < matrix.length; i += 1) if (matrix[i] > matrix[peakIndex]) peakIndex = i;
+    const sample = {
+      product: data.product,
+      ...(configuration.side ? { side: data.side } : {}),
+      rawADCFirst16: raw.slice(0, 16),
+      ...(configuration.side ? {
+        // 手套：五指 raw 是主体点，pulp.raw 是独立指腹点；不要把指腹混入主体点序号。
+        fingersADC: Object.fromEntries(Object.entries(data.fingers || {}).map(([name, region]) => [name, {
+          body: Array.from(region.raw || []), pulp: Array.from(region.pulp?.raw || []),
+        }])),
+        // 手掌 matrix 共 72 点，首行 12 点，其余四行各 15 点，不能假定为等宽矩阵。
+        palmADC: Array.from(data.palm?.matrix || [], (row) => Array.from(row)),
+      } : {
+        // 手垫：展示完整 32×32 映射；峰值仅作辅助，弱于已有峰值的新触点也要核对其行列。
+        peakMatrixPoint: matrix.length ? { row: Math.floor(peakIndex / 32), column: peakIndex % 32, adc: matrix[peakIndex] } : null,
+        pressureMatrixADC: Array.from({ length: 32 }, (_, row) => matrix.slice(row * 32, (row + 1) * 32)),
+      }),
+    };
+    // 只压缩数字行的显示格式，保留完整数据，让每个触点都能逐行验收。
+    $('data').textContent = JSON.stringify(sample, null, 2).replace(/\[\n((?:\s+\d+,?\n)+)\s*\]/g, (_match, values) => '[' + values.trim().split(/,\s*/).join(', ') + ']');
+    $('next-step').textContent = configuration.side
+      ? '已收到首帧。完整五指（含指腹）与 72 点手掌矩阵见下方；逐一触按已知位置，确认分区变化，若不对应请核对实物手侧。'
+      : '已收到首帧。完整 32 × 32 ADC 矩阵见下方；分别触按已知位置，比较对应行列变化，行列索引从 0 开始。峰值仅用于辅助定位。';
+    refresh();
+  }
+
+  // 五、稳定安装标识：只生成一次并保存到当前来源的 localStorage，不保存密钥。
+  // 这用于电脑名额登记，并非硬件身份凭证；换来源/浏览器或清除存储前需先处理名额。
+  try {
+    installationId = localStorage.getItem(installationStorageKey);
+    if (!/^[a-f0-9]{64}$/.test(installationId || '')) {
+      installationId = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem(installationStorageKey, installationId);
+      if (localStorage.getItem(installationStorageKey) !== installationId) throw new Error('安装标识保存失败。');
+    }
+    $('installation-state').textContent = '安装标识已自动保存到当前浏览器，无需手动填写。换浏览器或清除站点数据前，请先处理电脑名额。';
+  } catch {
+    installationError = { code: 'INSTALLATION_STORAGE_UNAVAILABLE', message: '无法持久保存安装标识。请允许当前站点存储，刷新后再激活，避免重复占用电脑名额。' };
+    report(installationError);
+    $('installation-state').textContent = installationError.message;
+  }
+
+  // 六、独立激活：网络授权可能耗时，先激活再点击连接，避免丢失串口选择所需的用户手势。
+  $('activate').onclick = async () => {
+    if (activating || installationError || hidden) return;
+    activating = true;
+    const revision = ++activationRevision;
+    const key = $('key').value.trim();
+    const mode = $('license-mode').value;
+    connectionState = activeSession ? '已断开' : connectionState;
+    const previousSession = activeSession;
+    refresh();
+    try {
+      // 换密钥前先关闭旧会话；清空旧授权，防止新密钥输入失败后仍误用原授权。
+      await closeSession(previousSession);
+      if (hidden || revision !== activationRevision) return;
+      Shroom.clearLicense();
+      // deviceId 来自上面的持久标识。offline 表示 RSA 码格式；限定电脑名额的离线码仍需联网复核。
+      // 未传 publicKey 时使用 SDK 默认信任公钥，不能从不可信授权码中接受一个新公钥。
+      await Shroom.activateLicense(key, { deviceId: installationId, mode });
+      if (hidden || revision !== activationRevision) return;
+      lastError = null;
+      $('last-error').textContent = '无';
+      $('next-step').textContent = '授权已激活。请点击连接设备，并选择实物对应的串口。';
+    } catch (error) {
+      if (!hidden && revision === activationRevision) {
+        report(error);
+        $('next-step').textContent = '核对 SDK 产品密钥、有效期、电脑名额与网络，再重新激活。';
+      }
+    } finally {
+      // 只让当前请求收尾；从页面缓存返回后，旧请求不能清空用户刚输入的新密钥。
+      if (revision === activationRevision) {
+        $('key').value = '';
+        activating = false;
+      }
+      refresh();
+    }
+  };
+
+  // 七、连接设备：产品入口内置波特率、分帧和映射；不要额外覆盖这些协议参数。
+  $('connect').onclick = async () => {
+    if ($('connect').disabled || hidden) return;
+    const session = { device: null, retired: false, closePromise: null, waitingTimer: null };
+    activeSession = session;
+    pendingConnections += 1;
+    frames = 0;
+    lastFrameAt = null;
+    lastError = null;
+    $('last-error').textContent = '无';
+    $('data').textContent = '等待设备输出有效帧…';
+    connectionState = '连接中';
+    refresh();
+    try {
+      // 在点击中直接调用 connectProduct，前面不能先 await 远程激活或其他异步工作。
+      // 浏览器由用户选择实际串口，不传 Node 的 path；串口列表也不会识别产品型号。
+      session.device = await Shroom.connectProduct({
+        // product 必须与实物协议一致：handGloveFullPacket 为整包手套，hand 为手部检测垫。
+        product: configuration.product,
+        // side 仅手套需要，来自实物左右手选择，SDK 不会从串口或包类型猜测。
+        ...(configuration.side ? { side: configuration.side } : {}),
+        // onData 在收到有效帧时调用；这里统一处理真实字段、计数和触点验收。
+        onData: (data) => showFrame(session, data),
+        // onError 接收连接后的拔线、读取、授权失效及应用回调错误，连接前失败由 catch 处理。
+        onError: (error) => handleRuntimeError(session, error),
+      });
+      // 等待串口打开时用户可能已断开、换密钥或离开页面，迟到的设备不能成为新会话。
+      if (session.retired || hidden || activeSession !== session) { await closeSession(session); return; }
+      if (session.device.state && session.device.state !== 'open') {
+        handleRuntimeError(session, { code: 'DISCONNECTED', message: '设备在连接完成前已关闭，请确认连接后重试。' });
+        return;
+      }
+      // 端口打开不等于收到有效数据；首帧可能已在 connectProduct 返回前进入 onData。
+      connectionState = frames ? '正在取数' : '等待首帧';
+      if (!frames) {
+        $('next-step').textContent = '端口已打开，等待有效帧；这还不代表产品与触点映射已经验证。';
+        session.waitingTimer = setTimeout(() => {
+          if (activeSession !== session || session.retired || frames) return;
+          $('next-step').textContent = '仍未收到有效帧。确认设备正在输出当前产品协议；也可断开后核对产品、供电与端口。';
+        }, 10000);
+      }
+    } catch (error) {
+      // 包括取消串口选择、驱动/占用、配置和授权错误；先清理再允许手动重试，不自动重连。
+      if (!session.retired && !hidden) {
+        report(error);
+        connectionState = '已断开';
+        $('next-step').textContent = '确认驱动、端口和 SDK 授权后，点击连接设备重试。';
+      }
+      await closeSession(session);
+    } finally {
+      pendingConnections -= 1;
+      refresh();
+    }
+  };
+
+  $('disconnect').onclick = disconnect;
+  // 八、支持诊断：只复制状态和计数，不复制密钥、安装标识或串口请求详情。
+  $('copy-diagnostics').onclick = async () => {
+    let source;
+    try { source = activeSession?.device?.getDiagnostics(); } catch { /* 诊断失败不能影响正在进行的采集。 */ }
+    const license = licenseStatus();
+    const diagnostic = {
+      product: configuration.product,
+      ...(configuration.side ? { side: configuration.side } : {}),
+      runtime: 'web', sdkVersion: Shroom.version,
+      connectionState, frameCount: frames, lastFrameAt, lastError,
+      license: { valid: Boolean(license.valid), ...(license.valid ? { mode: license.mode, expiresAt: license.expiresAt } : { code: license.code }) },
+      ...(source ? { serial: {
+        source: source.source, state: source.state, status: source.status,
+        bytesReceived: source.bytesReceived, frameCount: source.frameCount,
+        droppedCount: source.droppedCount, frameLength: source.frameLength,
+      } } : {}),
+    };
+    const text = JSON.stringify(diagnostic, null, 2);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(text);
+      $('diagnostic-status').textContent = '诊断信息已复制，不含密钥或安装标识。';
+    } catch {
+      $('diagnostics').hidden = false;
+      $('diagnostics').textContent = text;
+      $('diagnostic-status').textContent = '浏览器未允许复制，请手动复制下面的诊断 JSON。';
+    }
+  };
+  // 九、页面生命周期：离开时清理设备与许可；即使页面进入浏览器往返缓存，也不保留采集。
+  window.addEventListener('pagehide', () => {
+    hidden = true;
+    activationRevision += 1;
+    $('key').value = '';
+    void closeSession(activeSession);
+    Shroom.clearLicense();
+  });
+  window.addEventListener('pageshow', () => {
+    if (!hidden) return;
+    // 从往返缓存恢复时重置界面，要求重新激活并手动连接；不自动重连或重放任何命令。
+    hidden = false;
+    activating = false;
+    Shroom.clearLicense();
+    connectionState = '已断开';
+    frames = 0;
+    lastFrameAt = null;
+    lastViewTime = 0;
+    $('key').value = '';
+    $('data').textContent = '页面已恢复，尚未连接设备。';
+    $('next-step').textContent = '页面已恢复。请重新激活 SDK 授权，再点击连接设备；上一次采集会话已关闭，不会自动恢复。';
+    refresh();
+  });
+  refresh();
+})(Shroom, {"product":"hand","env":"web","platform":"windows","kind":"complete","label":"手部检测垫","filename":"hand-pad-example.html"});
+</script>
+</body>
+</html>
