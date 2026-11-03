@@ -1,5 +1,5 @@
 import { generateKeyPairSync, sign, webcrypto } from 'node:crypto';
-import { activateLicense } from '../core/license.js';
+import { activateLicense } from '../src/core/license.js';
 
 // A test-only issuer exercises the same signature validation as a delivered offline key.
 const testIssuer = generateKeyPairSync('rsa', { modulusLength: 2048 });

@@ -9,7 +9,7 @@
  */
 import { readdir, readFile, writeFile, mkdir, stat } from 'node:fs/promises';
 import { deflateRawSync } from 'node:zlib';
-import { extname, join, relative, sep, resolve } from 'node:path';
+import { extname, join, relative, sep, resolve, posix } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -17,14 +17,30 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SKIP = new Set([
   'node_modules', '.git', '.DS_Store', 'index.template.html',
   '__pycache__', '.venv', 'venv', 'build', 'dist', '.pytest_cache', '.ruff_cache',
-  '.shroom-recordings', 'recordings', 'tests', 'coverage', 'scripts',
+  '.shroom-recordings', 'recordings', 'tests', 'coverage',
   'generate-product-examples.mjs', 'requirements-test.lock',
 ]);
 const TEXT_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.mts', '.json', '.md', '.html', '.css', '.py', '.toml', '.txt', '.sh', '.bat', '.in', '.typed', '.yml', '.yaml']);
-const DELIVERY_DIRECTORIES = new Set(['backend', 'core', 'docs', 'examples', 'flow', 'node', 'python', 'web']);
-const DELIVERY_FILES = new Set(['package.json', 'package-lock.json', 'index.d.ts', 'quick-flow.js', 'quick-flow.d.ts',
-  'README.md', 'AI-CONTEXT.md', '怎么用AI开发.md', 'BACKEND.md', 'CHANGELOG.md', 'MIGRATION.md', 'start.mjs', 'start.sh', 'start-demo.bat',
+const DELIVERY_DIRECTORIES = new Set(['src', 'docs', 'examples', 'python', 'scripts']);
+const DELIVERY_FILES = new Set(['package.json', 'package-lock.json',
+  'README.md', 'CHANGELOG.md', 'MIGRATION.md',
   'LICENSE', 'LICENSE.md', 'LICENSE.txt']);
+const LEGACY_ROOT_DOCS = new Set(['AI-CONTEXT.md', '怎么用AI开发.md', 'BACKEND.md']);
+const LAUNCHERS = new Set(['start.mjs', 'start.sh', 'start-demo.bat']);
+
+/** 仓库按职责归档；兼容 ZIP 在交付时映射旧路径，不在源码中保留重复实现。 */
+export function sdkDeliveryPath(source) {
+  if (/^src\/(?:backend|core|flow|node|web)\//.test(source)
+    || /^src\/(?:index\.d\.ts|quick-flow\.(?:js|d\.ts))$/.test(source)) return source.slice(4);
+  if (source.startsWith('scripts/')) return LAUNCHERS.has(source.slice(8)) ? source.slice(8) : null;
+  if (source === 'docs/SDK-RELEASING.md') return null;
+  if (source.startsWith('docs/') && LEGACY_ROOT_DOCS.has(source.slice(5))) return source.slice(5);
+  if (/^examples\/(?:node|web)\//.test(source)) return source.slice('examples/'.length);
+  if (/^examples\/products\/(?:hand-pad|glove-left|glove-right)-example\.(?:html|mjs)$/.test(source)) return posix.basename(source);
+  if (source.startsWith('examples/products/')) return null;
+  if (/^(?:docs|examples|python)\//.test(source) || DELIVERY_FILES.has(source)) return source;
+  return null;
+}
 
 export const SDK_ARCHIVES = Object.freeze([
   { kind: 'combined', file: 'shroom-sdk.zip', prefix: 'shroom-sdk/' },
@@ -64,7 +80,7 @@ async function walk(dir, out = [], topLevel = true) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     // 根目录只交付明确的 SDK 内容，自定义数据目录和随手保存的文件不会被自动发布。
     if (topLevel && !(entry.isDirectory() ? DELIVERY_DIRECTORIES.has(entry.name)
-      : DELIVERY_FILES.has(entry.name) || /^(?:hand-pad|glove-left|glove-right)-example\.(?:html|mjs)$/.test(entry.name))) continue;
+      : DELIVERY_FILES.has(entry.name))) continue;
     if (SKIP.has(entry.name) || entry.name.startsWith('.') || /\.(?:pyc|pyo|egg-info|whl)$/.test(entry.name)) continue;
     // 自定义录制目录中的 SQLite 数据与日志也不能进入客户源码包。
     if (/\.(?:sqlite3?|db3?)(?:-(?:wal|shm|journal))?$/i.test(entry.name)
@@ -77,31 +93,72 @@ async function walk(dir, out = [], topLevel = true) {
   return out;
 }
 
+/** 文件挪动后重算真实模块和文档链接；模板中不存在的虚拟相对路径保持原样。 */
+function rewriteLinks(text, source, destination, paths) {
+  const mapped = (reference) => {
+    if (/^(?:[a-z]+:|\/|#)/i.test(reference)) return reference;
+    const [, path, suffix = ''] = /^([^?#]*)(.*)$/.exec(reference);
+    const original = posix.normalize(posix.join(posix.dirname(source), path));
+    if (original === 'docs/SDK-RELEASING.md') return 'https://github.com/liudada118/shroomSDK/blob/main/docs/SDK-RELEASING.md' + suffix;
+    const target = paths.get(original);
+    if (!target) return reference;
+    const next = posix.relative(posix.dirname(destination), target);
+    return (next.startsWith('.') ? next : './' + next) + suffix;
+  };
+  return text.replace(/(['"])(\.{1,2}\/[^'"\r\n]+)\1/g, (_match, quote, path) => quote + mapped(path) + quote)
+    .replace(/(\]\()([^\s)]+)(\))/g, (_match, before, path, after) => before + mapped(path) + after);
+}
+
 /** 文本统一 LF，避免 Windows 与 Linux 从相同 Git 内容生成不同 ZIP。 */
-async function archiveContent(file, sdkRoot) {
+async function archiveContent(file, sdkRoot, paths) {
   const raw = await readFile(file);
-  if (relative(sdkRoot, file) === 'package.json') {
+  const source = relative(sdkRoot, file).split(sep).join('/');
+  if (source === 'docs/catalog.json') {
+    const catalog = JSON.parse(raw.toString('utf8'));
+    return Buffer.from(JSON.stringify(catalog.map(entry => ({ ...entry, file: paths.get(entry.file) ?? entry.file })), null, 2) + '\n');
+  }
+  if (source === 'package.json') {
     const metadata = JSON.parse(raw.toString('utf8'));
     // 客户包不附带开发测试与生成器，因此不能留下指向缺失文件的 npm 脚本。
     metadata.scripts = Object.fromEntries(Object.entries(metadata.scripts ?? {})
       .filter(([name]) => !/^(?:test|generate|build|lint|sdk|pack)(?::|$)/.test(name)
-        && !['prepack', 'postpack', 'prepare', 'prepublishOnly'].includes(name)));
+        && !['prepack', 'postpack', 'prepare', 'prepublishOnly'].includes(name))
+      .map(([name, command]) => [name, command.replace(/\bscripts\/(start\.(?:mjs|sh)|start-demo\.bat)\b/g, '$1')
+        .replace(/\bexamples\/node\//g, 'node/')]));
+    const remap = (value) => typeof value === 'string' ? value.replace(/^\.\/src\//, './')
+      : Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, remap(entry)]));
+    if (metadata.exports) metadata.exports = remap(metadata.exports);
+    if (metadata.types) metadata.types = metadata.types.replace(/^(?:\.\/)?src\//, '');
     return Buffer.from(`${JSON.stringify(metadata, null, 2)}\n`);
   }
-  return TEXT_EXTENSIONS.has(extname(file).toLowerCase())
-    ? Buffer.from(raw.toString('utf8').replace(/\r\n/g, '\n')) : raw;
+  if (!TEXT_EXTENSIONS.has(extname(file).toLowerCase())) return raw;
+  let text = rewriteLinks(raw.toString('utf8').replace(/\r\n/g, '\n'), source, paths.get(source), paths);
+  if (source.startsWith('examples/products/')) text = text
+    .replaceAll('在仓库根目录 npm install', '在 SDK 根目录 npm install')
+    .replaceAll('文件放在仓库 examples/products/ 时使用此路径', '文件放在 SDK 根目录时使用此路径')
+    .replaceAll('本文件位于 examples/products/；先在仓库根目录执行 npm install。', '把本文件放在 SDK 根目录，与 node/ 同级，先 npm install。')
+    .replaceAll('位于仓库 <code>examples/products/</code>；先在仓库根目录安装依赖。', '放在解压后的 SDK 根目录，与 <code>web/</code> 同级。')
+    .replaceAll('examples/products/', '').replaceAll('scripts/start.mjs', 'start.mjs');
+  if (source.startsWith('examples/node/')) text = text.replaceAll('examples/node/', 'node/')
+    .replaceAll('scripts/start.mjs', 'start.mjs').replaceAll('examples/web/', 'web/');
+  if (source === 'scripts/start.mjs') text = text.replace("new URL('..', import.meta.url)", "new URL('.', import.meta.url)")
+    .replaceAll("join(ROOT, 'examples', 'web',", "join(ROOT, 'web',")
+    .replaceAll('examples/web', 'web').replaceAll('scripts/start.mjs', 'start.mjs')
+    .replaceAll('请在仓库根目录运行 npm run build，生成示例后再执行 npm start。', '请完整解压 SDK 安装包，再在解压目录执行 npm start。');
+  if (source === 'scripts/start.sh') text = text.replaceAll('sh scripts/start.sh', 'sh start.sh');
+  return Buffer.from(text);
 }
 
 /** 生成确定性的 ZIP 字节；普通打包不写版本目录，不修改已发布历史。 */
-async function pack(files, prefix, sdkRoot) {
+async function pack(files, prefix, sdkRoot, paths) {
   const locals = [];
   const centrals = [];
   let offset = 0;
 
   for (const file of files) {
-    const name = prefix + relative(sdkRoot, file).split(sep).join('/');
+    const name = prefix + paths.get(relative(sdkRoot, file).split(sep).join('/'));
     const nameBuf = Buffer.from(name, 'utf8');
-    const raw = await archiveContent(file, sdkRoot);
+    const raw = await archiveContent(file, sdkRoot, paths);
     const deflated = deflateRawSync(raw, { level: 9 });
     // 压完反而更大的（比如小图片）就原样存
     const useDeflate = deflated.length < raw.length;
@@ -157,14 +214,16 @@ async function pack(files, prefix, sdkRoot) {
 /** 返回三种客户包，供兼容下载和正式版本制品复用同一套打包规则。 */
 export async function createSdkArchives({ sdkRoot = ROOT } = {}) {
   await stat(sdkRoot);
-  const files = (await walk(sdkRoot)).sort();
   const pathFor = (file) => relative(sdkRoot, file).split(sep).join('/');
+  const files = (await walk(sdkRoot)).filter(file => sdkDeliveryPath(pathFor(file)) !== null).sort();
+  const paths = new Map(files.map(file => [pathFor(file), sdkDeliveryPath(pathFor(file))]));
+  if (new Set(paths.values()).size !== paths.size) throw new Error('SDK 交付路径重复，请检查源码目录映射。');
   return Promise.all(SDK_ARCHIVES.map(async (archive) => {
     // Node 保留 Python 说明作为文档交叉引用，但不附带 Python 源码或依赖。
     const selected = archive.kind === 'node'
       ? files.filter((file) => !pathFor(file).startsWith('python/') || pathFor(file) === 'python/README.md')
       : archive.kind === 'python' ? files.filter((file) => pathFor(file).startsWith('python/') || pathFor(file) === 'CHANGELOG.md') : files;
-    return { ...archive, count: selected.length, bytes: await pack(selected, archive.prefix, sdkRoot) };
+    return { ...archive, count: selected.length, bytes: await pack(selected, archive.prefix, sdkRoot, paths) };
   }));
 }
 

@@ -11,6 +11,7 @@ import { gzipSync } from 'node:zlib';
 import { createSdkArchives, packSdk } from '../pack-sdk.mjs';
 import { prepareRelease as prepareActualRelease, readZipEntries, releaseNotes, verifyLatestPackages, verifyRelease } from '../sdk-release-artifacts.mjs';
 import { readNpmEntries, verifyNpmArchive } from '../npm-archive.mjs';
+import { createProductExample, getProductExampleFilename } from '../../examples/product-examples.js';
 
 const runFile = promisify(execFile);
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -41,7 +42,7 @@ async function fixtureNpm({ projectRoot }) {
     optionalDependencies: source.optionalDependencies, types: './runtime/index.d.ts',
     exports: { '.': './runtime/web/index.js', './node': './runtime/node/index.js', './quick-flow': './runtime/quick-flow.js' } };
   const files = new Map([['package.json', JSON.stringify(metadata)], ['README.md', '# npm fixture'], ['runtime/index.d.ts', 'export {};']]);
-  for (const path of ['quick-flow.js', 'node/index.js', 'web/index.js']) files.set('runtime/' + path, await readFile(join(projectRoot, path)));
+  for (const path of ['quick-flow.js', 'node/index.js', 'web/index.js']) files.set('runtime/' + path, await readFile(join(projectRoot, 'src', path)));
   return { bytes: tarFixture(files) };
 }
 
@@ -63,9 +64,9 @@ async function fixture(t) {
   }
   const metadata = {
     name: 'shroom-sdk', version, private: true, type: 'module',
-    exports: { '.': './web/index.js', './node': './node/index.js', './quick-flow': './quick-flow.js' },
+    exports: { '.': './src/web/index.js', './node': './src/node/index.js', './quick-flow': './src/quick-flow.js' }, types: './src/index.d.ts',
     optionalDependencies: { ws: '^8.14.2' },
-    scripts: { start: 'node start.mjs', 'demo:quick': 'node node/quick-demo.js',
+    scripts: { start: 'node scripts/start.mjs', 'demo:quick': 'node examples/node/quick-demo.js',
       prepack: 'node scripts/npm-source-guard.mjs',
       'test:backend': 'node --test tests/a.mjs', 'generate:examples': 'node examples/generate-product-examples.mjs',
       'sdk:release': 'node scripts/sdk-release.mjs', 'pack:sdk': 'node scripts/pack-sdk.mjs' },
@@ -73,7 +74,7 @@ async function fixture(t) {
   await put('.gitignore', '/dist/\n');
   await put('package.json', JSON.stringify(metadata, null, 2));
   await put('package-lock.json', JSON.stringify({ name: metadata.name, version, lockfileVersion: 3, packages: { '': { name: metadata.name, version, optionalDependencies: metadata.optionalDependencies } } }));
-  for (const path of ['quick-flow.js', 'node/index.js', 'web/index.js', 'node/quick-demo.js', 'start.mjs']) {
+  for (const path of ['src/quick-flow.js', 'src/node/index.js', 'src/web/index.js', 'src/index.d.ts', 'examples/node/quick-demo.js', 'scripts/start.mjs']) {
     await put('' + path, '// SDK fixture\r\nexport {};\r\n');
   }
   await put('CHANGELOG.md', '# SDK 更新日志\n\n## [0.1.0] - 2026-10-29\n\n- 新增五步函数和 SQLite 采集。\n\n## [0.0.1] - 2026-10-01\n\n- 初始测试。\n');
@@ -85,7 +86,7 @@ async function fixture(t) {
   for (const path of ['tests/private.test.mjs', 'node_modules/native.node', 'python/tests/test_private.py',
     'python/build/lib/stale.py', 'python/src/shroom_sdk.egg-info/PKG-INFO', 'examples/generate-product-examples.mjs',
     'python/requirements-test.lock', 'captures/user.sqlite', 'captures/user.sqlite-wal', 'captures/private.txt',
-    'node/user.jsonl', 'node/user.meta.json', 'node/user.db3', '.env.local']) {
+    'src/node/user.jsonl', 'src/node/user.meta.json', 'src/node/user.db3', '.env.local']) {
     await put('' + path, 'do not distribute\n');
   }
   await packSdk({ projectRoot: root, log: () => {} });
@@ -143,11 +144,41 @@ test('release freezes three ZIPs and a verified npm package with Git provenance 
   assert.match(stdout, /版本制品校验通过/);
 });
 
+test('organized repository delivers compatible product examples, module imports and documentation links', async (t) => {
+  const context = await fixture(t);
+  await context.put('examples/node/license-env.js', "import { Shroom } from '../../src/node/index.js';\nexport { Shroom };\n");
+  await context.put('docs/NPM.md', '# install\n');
+  await context.put('docs/AI-CONTEXT.md', '[安装](./NPM.md#install)\n[五步](../src/quick-flow.js)\n');
+  await context.put('docs/catalog.json', JSON.stringify([{ file: 'docs/AI-CONTEXT.md' }, { file: 'docs/NPM.md' }]));
+  await context.put('docs/SDK-RELEASING.md', 'maintenance-only-marker');
+  await context.put('README.md', '[维护](docs/SDK-RELEASING.md)\n');
+  await context.put('examples/node/quick-demo.js', "console.log('node scripts/start.mjs http://localhost:5178/examples/web/quick-start.html');\n");
+  const options = [{ product: 'glove', side: 'left' }, { product: 'glove', side: 'right' }, { product: 'pad' }]
+    .flatMap(product => ['web', 'node'].map(env => ({ ...product, env, platform: 'windows', kind: 'complete' })));
+  for (const option of options) await context.put('examples/products/' + getProductExampleFilename(option),
+    createProductExample({ ...option, layout: 'repository' }));
+  const archive = (await createSdkArchives({ sdkRoot: context.root })).find(item => item.kind === 'node');
+  const entries = readZipEntries(archive.bytes);
+  for (const option of options) assert.equal(entries.get('shroom-sdk-node/' + getProductExampleFilename(option)).toString(),
+    createProductExample(option), 'ZIP 中的完整示例应与旧版下载布局完全一致');
+  assert.equal(entries.get('shroom-sdk-node/node/license-env.js').toString(), "import { Shroom } from './index.js';\nexport { Shroom };\n");
+  assert.equal(entries.get('shroom-sdk-node/AI-CONTEXT.md').toString(), '[安装](./docs/NPM.md#install)\n[五步](./quick-flow.js)\n');
+  assert.equal(entries.get('shroom-sdk-node/README.md').toString(), '[维护](https://github.com/liudada118/shroomSDK/blob/main/docs/SDK-RELEASING.md)\n');
+  assert.equal(entries.get('shroom-sdk-node/node/quick-demo.js').toString(), "console.log('node start.mjs http://localhost:5178/web/quick-start.html');\n");
+  assert.deepEqual(JSON.parse(entries.get('shroom-sdk-node/docs/catalog.json')).map(entry => entry.file), ['AI-CONTEXT.md', 'docs/NPM.md']);
+  assert.ok(![...entries.keys()].some(path => path.includes('/src/') || path.endsWith('SDK-RELEASING.md')));
+  const metadata = JSON.parse(entries.get('shroom-sdk-node/package.json'));
+  assert.equal(metadata.exports['./quick-flow'], './quick-flow.js');
+  assert.equal(metadata.types, 'index.d.ts');
+  assert.equal(metadata.scripts.start, 'node start.mjs');
+  assert.equal(metadata.scripts['demo:quick'], 'node node/quick-demo.js');
+});
+
 test('a changed package cannot overwrite an existing version and leaves no staging directory', async (t) => {
   const context = await fixture(t);
   const prepared = await prepareRelease({ projectRoot: context.root });
   const original = await readFile(join(prepared.directory, 'shroom-sdk-node-0.1.0.zip'));
-  await context.put('node/index.js', '// changed implementation\nexport const changed = true;\n');
+  await context.put('src/node/index.js', '// changed implementation\nexport const changed = true;\n');
   await context.pack();
   await context.put('dist/shroom-sdk-0.1.0.tgz', (await fixtureNpm({ projectRoot: context.root })).bytes);
   await assert.rejects(prepareRelease({ projectRoot: context.root }), /不可覆盖|禁止覆盖/);
@@ -157,7 +188,7 @@ test('a changed package cannot overwrite an existing version and leaves no stagi
 
 test('stale aliases or missing release notes fail before creating a version directory', async (t) => {
   const context = await fixture(t);
-  await context.put('node/index.js', '// changed after packing\nexport const changed = true;\n');
+  await context.put('src/node/index.js', '// changed after packing\nexport const changed = true;\n');
   await assert.rejects(prepareRelease({ projectRoot: context.root }), /兼容包与当前源码不一致/);
   await assert.rejects(readdir(context.output), { code: 'ENOENT' });
   await context.put('CHANGELOG.md', '# SDK\n\n## [0.1.0] - 2026-10-29\n\nTODO\n');
@@ -214,7 +245,7 @@ test('release notes reject duplicate versions, invalid dates and path-like versi
 
 test('a stale npm archive is rejected before freezing a release', async (t) => {
   const context = await fixture(t);
-  await context.put('quick-flow.js', 'export const changed = true;');
+  await context.put('src/quick-flow.js', 'export const changed = true;');
   await context.pack();
   await assert.rejects(prepareRelease({ projectRoot: context.root }), /npm 安装包与当前源码不一致/);
   await assert.rejects(readdir(context.output), { code: 'ENOENT' });

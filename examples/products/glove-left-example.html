@@ -5,15 +5,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>手部检测垫 · 首次取数</title>
+<title>左手触觉手套 · 首次取数</title>
 <!-- 页面样式只负责示例布局和状态反馈，不影响 SDK 协议、解析或采样。 -->
 <style>
 :root{color-scheme:light;font:16px/1.6 system-ui,sans-serif;color:#17243b;background:#f5f7fa}*{box-sizing:border-box}body{max-width:900px;margin:32px auto;padding:0 20px}h1{font-size:28px;margin-bottom:8px}h2{font-size:19px;margin-top:0}p{margin:8px 0 16px}section{background:white;border:1px solid #d8e0ec;border-radius:12px;padding:22px;margin:18px 0}a{color:#144c9e;text-underline-offset:3px}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #6399ef;outline-offset:3px}label{display:block;font-weight:600;margin-top:12px}input,select,textarea,button{font:inherit}textarea,select{padding:10px;border:1px solid #aebbd0;border-radius:6px;max-width:100%}textarea{display:block;width:100%;min-height:88px}button{padding:10px 16px;min-height:44px;border-radius:6px;background:#184b8d;color:white;border:1px solid #184b8d;cursor:pointer}button.secondary{background:white;color:#184b8d}button:disabled{cursor:default;background:#e5eaf2;color:#536176;border-color:#d5ddea}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}.note{font-size:14px;color:#495b72}.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.stats dt{font-size:14px;color:#495b72}.stats dd{margin:4px 0 0;font-weight:600;overflow-wrap:anywhere}pre{background:#f3f6fa;padding:14px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;border-radius:6px}#last-error{color:#9b272d}#next-step{min-height:2em}@media(max-width:560px){body{margin-top:20px}.stats{grid-template-columns:1fr}section{padding:16px}}
 </style>
 </head>
 <body>
-<h1>手部检测垫 · 首次取数</h1>
-<p>将 <code>hand-pad-example.html</code> 放在解压后的 SDK 根目录，与 <code>web/</code> 同级。执行 <code>node start.mjs --no-open</code>，打开 <code>http://localhost:5178/hand-pad-example.html</code>；若终端显示了其他端口，请替换地址中的端口。使用支持 Web Serial 的浏览器，通过 localhost 或 HTTPS 访问。</p>
+<h1>左手触觉手套 · 首次取数</h1>
+<p>将 <code>glove-left-example.html</code> 位于仓库 <code>examples/products/</code>；先在仓库根目录安装依赖。执行 <code>node scripts/start.mjs --no-open</code>，打开 <code>http://localhost:5178/examples/products/glove-left-example.html</code>；若终端显示了其他端口，请替换地址中的端口。使用支持 Web Serial 的浏览器，通过 localhost 或 HTTPS 访问。</p>
 <p class="note">当前示例使用 Windows 的驱动与端口提示；其他系统可在产品接入页面选择实际系统后重新生成。</p>
 <!-- 准备区：系统先识别串口，SDK 才能选择和打开设备；串口可见并不代表型号已识别。 -->
 <section aria-labelledby="prepare-title">
@@ -21,7 +21,7 @@
 <p><strong>CH34x 设备未安装驱动时，系统可能无法识别串口。</strong>先安装对应驱动，重新插拔设备，再核对系统中的端口。</p>
 <p><a href="https://shroom.jq-industries.com/drive/CH341SER.EXE">Windows 驱动（EXE）</a> · <a href="https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip">macOS 驱动（ZIP）</a></p>
 <p class="note">Windows：在设备管理器的“端口（COM 和 LPT）”中确认设备。 关闭占用端口的上位机或其他采集程序。</p>
-<p class="note">当前示例配置：<strong>手部检测垫</strong>。这来自你选择的配置，尚未识别实物；请确认实物使用手部检测垫协议。</p>
+<p class="note">当前示例配置：<strong>左手触觉手套</strong>。这来自你选择的配置，尚未识别实物；请核对左右手，手侧错误仍可能收到数据。</p>
 </section>
 <!-- 授权区：独立点击激活，不把远程激活和串口选择塞进同一次点击流程。 -->
 <section aria-labelledby="license-title">
@@ -48,8 +48,8 @@
 <!-- 模块区：下方代码管理授权、单个设备会话、数据显示、错误恢复及页面生命周期。 -->
 <script type="module">
 // SDK 导入：这是浏览器入口，路径相对本 HTML；不要直接通过 file:// 打开模块。
-import { Shroom } from './web/index.js';
-// 当前产品配置：hand，手部检测垫使用内置 32×32 映射，不传手侧参数。
+import { Shroom } from '../../src/web/index.js';
+// 当前产品配置：handGloveFullPacket，实物手侧为 左手（left）；手侧会影响点位映射。
 // 此配置只声明应用要使用的协议和映射，不表示 SDK 已自动识别实物。
 (function webRuntime(Shroom, configuration) {
   // 一、连接状态：一个页面只保留一个当前会话，按钮状态由授权、连接和清理进度共同决定。
@@ -357,7 +357,7 @@ import { Shroom } from './web/index.js';
     refresh();
   });
   refresh();
-})(Shroom, {"product":"hand","env":"web","platform":"windows","kind":"complete","label":"手部检测垫","filename":"hand-pad-example.html"});
+})(Shroom, {"product":"handGloveFullPacket","side":"left","env":"web","platform":"windows","kind":"complete","label":"左手触觉手套","filename":"glove-left-example.html"});
 </script>
 </body>
 </html>

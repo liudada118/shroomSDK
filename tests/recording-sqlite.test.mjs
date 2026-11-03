@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import Database from 'better-sqlite3';
-import { createRecordingStore, recordingCsv, recordingJsonl } from '../node/recording.js';
+import { createRecordingStore, recordingCsv, recordingJsonl } from '../src/node/recording.js';
 
 const runFile = promisify(execFile);
 
@@ -165,7 +165,7 @@ test('a failed SQLite batch rolls back every new frame and does not inflate comm
 
 test('restart recovers a process that exited after committing frames but before stopping', async (t) => {
   const context = await fixture(t);
-  const moduleUrl = new URL('../node/recording.js', import.meta.url).href;
+  const moduleUrl = new URL('../src/node/recording.js', import.meta.url).href;
   const childSource = `
     import { setTimeout as delay } from 'node:timers/promises';
     import { createRecordingStore } from ${JSON.stringify(moduleUrl)};

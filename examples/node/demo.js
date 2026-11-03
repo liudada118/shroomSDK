@@ -1,11 +1,11 @@
 /**
  * Node 端最小示例。
  *
- *   node sdk/node/demo.js            用模拟数据（不用插硬件）
- *   node sdk/node/demo.js COM3       连真实串口
- *   node sdk/node/demo.js --list     列出可用串口
+ *   node examples/node/demo.js            用模拟数据（不用插硬件）
+ *   node examples/node/demo.js COM3       连真实串口
+ *   node examples/node/demo.js --list     列出可用串口
  */
-import { Shroom } from './index.js';
+import { Shroom } from '../../src/node/index.js';
 import { activateLicenseFromEnv } from './license-env.js';
 
 const arg = process.argv[2];

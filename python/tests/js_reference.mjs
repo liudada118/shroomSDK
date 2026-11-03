@@ -1,7 +1,7 @@
 // The existing JS implementation is the reference; this file is not a second decoder.
 import { readFileSync } from 'node:fs';
-import { decodeFrame } from '../../core/frame.js';
-import { createFramer } from '../../core/framer.js';
+import { decodeFrame } from '../../src/core/frame.js';
+import { createFramer } from '../../src/core/framer.js';
 
 const cases = JSON.parse(readFileSync(0, 'utf8'));
 const result = cases.map((item) => {

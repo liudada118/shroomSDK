@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { activateLicense, assertLicense, clearLicense, getLicenseStatus, watchLicense } from '../core/license.js';
+import { activateLicense, assertLicense, clearLicense, getLicenseStatus, watchLicense } from '../src/core/license.js';
 
 const pair = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const publicKey = pair.publicKey.export({ type: 'spki', format: 'pem' });

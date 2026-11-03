@@ -5,10 +5,10 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import * as nodeModule from 'node:module';
 import { ReadableStream } from 'node:stream/web';
-import { connectSerial as connectWeb, isSerialSupported } from '../web/serial.js';
-import { connectSerial as connectNode, listPorts } from '../node/serial.js';
-import { ShroomError } from '../core/errors.js';
-import { serialDiagnostics } from '../core/serial-diagnostics.js';
+import { connectSerial as connectWeb, isSerialSupported } from '../src/web/serial.js';
+import { connectSerial as connectNode, listPorts } from '../src/node/serial.js';
+import { ShroomError } from '../src/core/errors.js';
+import { serialDiagnostics } from '../src/core/serial-diagnostics.js';
 
 beforeEach(() => activateTestLicense());
 

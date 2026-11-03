@@ -11,13 +11,13 @@
 | 开发依赖管理 | pnpm | npm 与 `package-lock.json` |
 | 主要入口 | `ShroomSensorSDK` 等类 | `readProduct / createWS / startRecording / stopRecording / downloadRecording` |
 | 语言 | Node.js 与 React UI | Node.js、浏览器、Python（范围见 Python 文档） |
-| 源码位置 | `index.js`、`src/`、`UI/` | `quick-flow.js`、`flow/`、`core/`、`node/`、`web/`、`python/` |
+| 源码位置 | `index.js`、`src/`、`UI/` | `src/quick-flow.js`、`src/flow|core|node|web|backend/`、`python/`；示例位于 `examples/` |
 
 版本号分别属于两个不同包，`0.1.0` 不是旧包 `0.2.0` 的降级或兼容更新。依赖旧导出、React 组件或存储格式的项目，应继续固定旧标签，完成迁移后再切换。
 
 ## 接入代码需要调整
 
-按[五步调用](docs/QUICK-START.md#quick-call)接入，五个函数来自 `quick-flow.js`。只需要实时数据时调用 `readProduct()`；需要网页传输、采集和下载时继续后续步骤。Node.js 与浏览器入口、返回值和资源关闭方式以当前文档为准。
+按[五步调用](docs/QUICK-START.md#quick-call)接入，五个函数通过 `shroom-sdk/quick-flow` 导入，仓库源码入口位于 `src/quick-flow.js`。只需要实时数据时调用 `readProduct()`；需要网页传输、采集和下载时继续后续步骤。Node.js 与浏览器入口、返回值和资源关闭方式以当前文档为准。
 
 旧版的回放播放器、调零、算法通道、报告服务及 React / Three.js 组件不在当前包中。当前的 `BackendSdkClient` 用于连接已运行的主项目后端，也不等同于旧包全部后端功能。需要这些功能的应用可继续依赖旧版本，或在应用层实现对应能力。
 
@@ -39,4 +39,4 @@
 git clone --branch legacy-backend-sdk-0.2.0 https://github.com/liudada118/shroomSDK.git shroomSDK-legacy
 ```
 
-旧版的安装、组件和回放文档随该标签保留。当前仓库的发布说明、版本工具和官网引用流程见 [SDK-RELEASING.md](https://github.com/liudada118/shroomSDK/blob/main/SDK-RELEASING.md)。
+旧版的安装、组件和回放文档随该标签保留。当前仓库的发布说明、版本工具和官网引用流程见 [SDK-RELEASING.md](https://github.com/liudada118/shroomSDK/blob/main/docs/SDK-RELEASING.md)。

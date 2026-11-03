@@ -1,6 +1,6 @@
 # Shroom SDK 架构
 
-最后更新于：2026-10-30
+最后更新于：2026-11-03
 
 ## 1. 项目概述
 
@@ -27,34 +27,35 @@
 
 ```text
 shroomSDK/
-├─ package.json              SDK 版本唯一来源、公开导出与维护命令
-├─ package-lock.json         JavaScript 锁定依赖
-├─ quick-flow.js / .d.ts      五个快速函数入口与类型
-├─ flow/                     连接、采集会话和生命周期编排
-├─ core/
-│  ├─ products/              产品适配器、注册表、字段校验
-│  ├─ framer.js / frame.js   拆帧和通用矩阵
-│  └─ license.js             SDK 产品授权与运行期权限检查
-├─ node/                     Node 串口、WS/HTTP 服务、SQLite 录制
-├─ web/                      浏览器串口、WS 控制、二维显示及演示
-├─ backend/                  已运行主项目后端的 HTTP/WS 客户端
-├─ python/
-│  ├─ src/shroom_sdk/        Python 运行源码
-│  ├─ tests/                Python 与跨语言测试
-│  └─ requirements-test.lock
-├─ examples/                 五步调用生成器和演示
-├─ docs/                     SDK 接入与基础 API 文档，供官网读取；NPM.md 同时作为安装包 README
-├─ tests/                    JS、协议、授权、采集和类型测试
-├─ scripts/                  版本、构建、打包、制品校验及安装验证
-├─ .github/workflows/        跨平台检查和版本标签发布
-├─ dist/                     生成的兼容 ZIP 与 shroom-sdk-<版本>.tgz，不跟踪到 Git
-│  └─ releases/<version>/    版本 ZIP / TGZ、清单、校验值、发布说明
-├─ CHANGELOG.md              当前包版本更新记录
-├─ MIGRATION.md              原仓库实现的迁移边界
-└─ SDK-RELEASING.md           维护与发布流程
+├─ src/                  SDK 运行实现与类型
+│  ├─ quick-flow.js      五个函数的统一导出
+│  ├─ flow/              快速调用编排
+│  ├─ core/              协议、产品适配、数据结构与授权
+│  ├─ node/              Node 串口、WS 与 SQLite 采集
+│  ├─ web/               浏览器串口、WS 与二维显示
+│  └─ backend/           已有后端的 HTTP / WS 客户端
+├─ examples/
+│  ├─ products/          手套左右手与手垫的 HTML / MJS 示例
+│  ├─ node/              命令行演示与示例授权配置
+│  ├─ web/               网页测试台、模板与生成的 bundle
+│  └─ product-*.js       官网和调用示例共用的生成器
+├─ docs/                 接入、API、AI 上下文和发布说明
+├─ scripts/              启动、构建、版本、打包与发布检查
+├─ tests/                JavaScript 与类型测试
+├─ python/               独立 Python 包、文档、示例和测试
+├─ .github/              跨平台检查与 Release 草稿工作流
+├─ package.json          公开包入口与开发命令
+├─ package-lock.json     JavaScript 依赖锁
+├─ tsconfig.json         类型检查配置
+├─ README.md             使用说明与源码导航
+├─ ARCHITECTURE.md       架构与累积工作记录
+├─ CHANGELOG.md          版本变更
+└─ MIGRATION.md          原有 SDK 的迁移边界
 ```
 
-SDK 源文件直接位于仓库根目录下，没有第二层 `sdk/`。客户 ZIP 采用交付白名单，排除测试、构建脚本、依赖目录、开发缓存及用户采集记录；源码仓库保留这些开发工具。网页 bundle 和内联示例由源码构建，修改模块后应重新生成。
+实现和类型集中在 `src/`，产品/Node/浏览器示例分别位于 `examples/products|node|web/`，启动器归入 `scripts/`。AI 上下文、后端说明和发布指南归入 `docs/`。根目录保留包配置、README、架构、变更与迁移说明。
+
+兼容 ZIP 使用显式交付映射，将仓库源码映射回旧 `quick-flow.js`、`core|node|web|flow|backend/`、根示例与启动器；同时转换相对导入和文档链接。白名单仍排除测试、开发工具、依赖缓存和采集记录，不在源码仓库保留重复兼容文件。
 
 JavaScript 集成优先使用 `scripts/pack-npm.mjs` 生成的 `.tgz` 安装包。它根据公开入口收集实际运行模块，在独立临时目录压缩并保留类型，再交给 npm 打包；客户从 `shroom-sdk/quick-flow` 导入五个函数。Node.js 保留相对模块结构，避免复制授权会话与模拟设备身份；浏览器通过条件导出选择独立入口，并用共享代码块保持同一环境内的模块状态。包中不含开发工具、测试、Python 或 source map。根目录直接 `npm pack` / `npm publish` 会由 `prepack` 阻止，提示使用受控打包命令。
 
@@ -78,7 +79,7 @@ flowchart LR
 
 五函数复用基础 API：`readProduct` 调用 Node `connectProduct` 或浏览器 `connectStream`；`createWS` 调用 `serveDevice`；采集和下载委托已有连接或服务方法。返回对象与 `stream` 保存当前会话，成功开始新采集时清除旧下载 ID。
 
-产品代码集中在 `core/products/`。增加产品通过适配器与注册表扩展协议、映射和 WS 字段校验，不改五个函数签名。产品扩展测试会在临时副本注册测试产品，验证串口、五步调用、录制、导出和浏览器 bundle 的一致性。
+产品代码集中在 `src/core/products/`。增加产品通过适配器与注册表扩展协议、映射和 WS 字段校验，不改五个函数签名。产品扩展测试会在临时副本注册测试产品，验证串口、五步调用、录制、导出和浏览器 bundle 的一致性。
 
 录制使用 SQLite 事务批量写入；停止与关闭等待待写队列落库，导出按页读取。记录目录有独占所有权；异常退出记录可恢复为中断状态。兼容读取旧 JSONL 文件，不兼容原 `shroom-backend-sdk` 的 `captures / frames` 数据库。
 
@@ -96,11 +97,11 @@ flowchart LR
 | WebSocket | `/` 或 `/ws` | 实时帧、状态与控制响应 |
 | WS JSON | `recording.start / stop / status / list` | 带 `requestId` 的采集控制 |
 
-这些端点属于快速本机服务；`BackendSdkClient` 访问的主项目 HTTP/WS 协议另见 [BACKEND.md](BACKEND.md)。
+这些端点属于快速本机服务；`BackendSdkClient` 访问的主项目 HTTP/WS 协议另见 [BACKEND.md](docs/BACKEND.md)。
 
 ## 6. 版本、发布与官网集成
 
-根 `package.json.version` 同步到 `core/version.js`、Python 包元数据和 `_version.py`。发布检查包含原生依赖加载、JS/发布工具/Python 测试、类型检查及客户 ZIP 和 npm TGZ 独立安装验证。npm 消费测试从真实安装后的包名入口调用五步流程，并验证浏览器打包与类型解析。SDK 不运行官网的页面或服务测试。
+根 `package.json.version` 同步到 `src/core/version.js`、Python 包元数据和 `_version.py`。发布检查包含原生依赖加载、JS/发布工具/Python 测试、类型检查及客户 ZIP 和 npm TGZ 独立安装验证。npm 消费测试从真实安装后的包名入口调用五步流程，并验证浏览器打包与类型解析。SDK 不运行官网的页面或服务测试。
 
 构建输出 `dist/shroom-sdk.zip`、`dist/shroom-sdk-node.zip`、`dist/shroom-sdk-python.zip` 和 `dist/shroom-sdk-<版本>.tgz`。正式版本目录有七个文件：三个带版本 ZIP、一个 npm TGZ、`manifest.json`、`SHA256SUMS`、`RELEASE-NOTES.md`。清单记录真实 Git 提交与脏状态；相同版本不允许被不同内容或不同来源覆盖。
 
@@ -135,6 +136,7 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-10-30 | 独立构建与发布 | 版本、依赖锁、类型校验、客户 ZIP 验证、跨平台 CI 与 Release 草稿均在 SDK 仓库完成 |
 | 2026-10-30 | npm 依赖安装交付 | 生成压缩运行代码与类型组成的 TGZ，保持五函数入口；增加客户安装、浏览器构建与类型验证，保留 ZIP 源码交付 |
 | 2026-10-30 | 官网一步安装接入说明 | 客户从官网复制安装命令；示例支持包名与 ZIP 两种导入，快速文档及 AI 上下文采用公开包入口和授权 API |
+| 2026-11-03 | SDK 源码目录归类 | 实现归入 src，演示归入 examples，维护与 AI 文档归入 docs，启动器归入 scripts；公开 npm 入口和旧 ZIP 路径保持兼容 |
 
 ## 9. 更新日志
 
@@ -144,6 +146,7 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-10-30 | 文档更新 | 更新根目录安装与发布说明，明确包身份、旧接口和数据库的迁移边界 |
 | 2026-10-30 | 优化重构 | 增加 npm 精简安装包、受控打包与发布附件；文档区分客户安装和源码维护，说明注册表尚未发布及压缩的保护边界 |
 | 2026-10-30 | 文档更新 | 新增安装 SDK 导航，统一官网命令安装、免登记下载与密钥另行申请；保留源码 ZIP 示例的相对路径兼容 |
+| 2026-11-03 | 优化重构 | 整理源码、示例、文档和启动器，更新构建、交付映射及官网读取路径；五个函数及授权、采集语义不变 |
 
 ## 10. 原 SDK 历史记录
 

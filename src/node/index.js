@@ -2,7 +2,7 @@
  * Shroom SDK · Node 入口：集中导出串口、产品、WS 录制、授权与共享数据处理接口。
  *
  *   // 从 SDK 根目录中的 .mjs 文件导入；真实设备须先完成 SDK 授权。
- *   import { Shroom } from './node/index.js'
+ *   import { Shroom } from 'shroom-sdk/node'
  *
  *   const device = await Shroom.connectGlove({ path: 'COM3', side: 'left' })
  *   device.onData(data => console.log(data.fingers, data.palm))

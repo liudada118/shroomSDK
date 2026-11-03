@@ -2,7 +2,7 @@
  * 产品取数命令行示例：先激活，再读取整包手套或手部检测垫。
  * 产品函数内置波特率、帧长和线序；手套的左右手仍必须按实物选择。
  */
-import { Shroom } from './index.js';
+import { Shroom } from '../../src/node/index.js';
 import { activateLicenseFromEnv } from './license-env.js';
 
 const [product, ...args] = process.argv.slice(2);
@@ -37,7 +37,7 @@ async function main() {
     await activateLicenseFromEnv();
     device = await Shroom.connectHandPad({ ...callbacks, path: args[0] });
   } else {
-    console.log('用法：\n  node node/product-demo.js glove left COM3\n  node node/product-demo.js glove right COM4\n  node node/product-demo.js hand-pad COM5');
+    console.log('用法：\n  node examples/node/product-demo.js glove left COM3\n  node examples/node/product-demo.js glove right COM4\n  node examples/node/product-demo.js hand-pad COM5');
     return;
   }
   console.log(`已连接：${device.info.label}。Ctrl+C 关闭。`);

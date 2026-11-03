@@ -4,7 +4,7 @@
 
 ## 五个函数对应哪些基础 API {#quick-to-base}
 
-| 快速函数（`quick-flow.js`） | 实际调用的基础 API | 参考 |
+| 快速函数（`shroom-sdk/quick-flow`） | 实际调用的基础 API | 参考 |
 | --- | --- | --- |
 | `readProduct(options)` | Node `connectProduct(options)`；网页 `connectStream(options)` | [Node 产品连接](BACKEND-GUIDE.md#node-connect-product) · [网页 WS 连接](FRONTEND-COMMUNICATION.md#connect-stream) |
 | `createWS(device, options)` | Node `serveDevice(device, options)` | [创建服务](BACKEND-GUIDE.md#node-serve-device) |
@@ -16,7 +16,7 @@
 
 - `createWS()` 接管设备：创建失败或 `server.close()` 时释放 device。基础 `serveDevice()` 只管理服务，设备由调用方 `await device.close()`。
 - 快速下载使用同一目标停止时保存的 ID；基础下载必须显式传入记录 ID，可从停止结果或历史列表取得。Node 的 `getRecordingUrl()` 只返回 URL。
-- 客户使用基础 API 不需要接触 `core/products/`；那里是 SDK 内部的产品适配实现。
+- 客户使用基础 API 不需要接触 `src/core/products/`；那里是 SDK 内部的产品适配实现。
 
 ## 开发路线 {#route}
 
@@ -58,12 +58,12 @@ Python 目前只有基础串口、模拟、帧解析和矩阵能力，没有产�
 
 原有的后端、前端、Python、串口和渲染文档 URL 都保留；已有代码无需为了阅读新路线重命名 API。`BackendSdkClient.startCollection()` 仍然是调用已有主项目的采集接口，不会被解释成独立 SDK 的 `startRecording()`。
 
-需要 AI 辅助开发时，把[SDK Skill / AI 上下文](../AI-CONTEXT.md)交给 AI，并说明产品、运行环境、数据源和所需交付。完整基础字段与排错见[SDK 说明](../README.md)。
+需要 AI 辅助开发时，把[SDK Skill / AI 上下文](AI-CONTEXT.md)交给 AI，并说明产品、运行环境、数据源和所需交付。完整基础字段与排错见[SDK 说明](../README.md)。
 
 ## 辅助指南 {#guides}
 
 - [安装串口驱动](DRIVERS.md)：Windows / macOS 驱动下载、安装后确认端口与连接排查。
 - [SDK 授权](LICENSE.md)：激活不限制设备型号的 SDK 产品密钥，管理有效期与电脑名额。
-- [SDK Skill / AI 上下文](../AI-CONTEXT.md)：把当前 SDK 的能力、接口与边界提供给 AI。
-- [AI 开发指南](../怎么用AI开发.md)：说明设备与目标，生成并验证接入代码。
+- [SDK Skill / AI 上下文](AI-CONTEXT.md)：把当前 SDK 的能力、接口与边界提供给 AI。
+- [AI 开发指南](怎么用AI开发.md)：说明设备与目标，生成并验证接入代码。
 - [完整 API 与排错](../README.md)：查阅字段、示例与常见问题。

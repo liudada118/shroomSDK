@@ -248,7 +248,7 @@ document.querySelector('#connect').onclick = async () => {
 
 **参数**：构造选项含 httpBaseUrl、wsUrl、timeoutMs、headers、contract、routes 与实现注入。默认 HTTP 127.0.0.1:19245、WS 127.0.0.1:19999，超时 10000 毫秒。
 
-**返回值**：BackendSdkClient。所有方法、事件与参数表见 [后端通讯 API](../BACKEND.md#constructor)。
+**返回值**：BackendSdkClient。所有方法、事件与参数表见 [后端通讯 API](BACKEND.md#constructor)。
 
 **示例**：
 

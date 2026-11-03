@@ -87,7 +87,7 @@ async function connectSerialDevice(options, productSession = null) {
   if (!isSerialSupported()) {
     let message = '当前浏览器没有 Web Serial API，请改用 Chrome 或 Edge。';
     if (typeof location !== 'undefined' && location.protocol === 'file:') {
-      message = '页面是用 file:// 打开的，浏览器不会开放串口。请用本地服务器打开（SDK 目录里执行 node start.mjs）。';
+      message = '页面是用 file:// 打开的，浏览器不会开放串口。请用本地服务器打开（SDK 目录里执行 npm start）。';
     } else if (typeof window !== 'undefined' && !window.isSecureContext) {
       message = `当前地址 ${typeof location !== 'undefined' ? location.origin : ''} 不是安全上下文，浏览器不会开放串口。请改用 https 或 localhost。`;
     }

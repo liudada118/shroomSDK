@@ -2,6 +2,8 @@
 
 本仓库只维护 SDK。版本唯一来源是根目录 `package.json` 的 `version`；版本命令同步 Node.js、浏览器与 Python 运行时及 Python 包元数据。官网在独立的 [shroomSDKWEB](https://github.com/liudada118/shroomSDKWEB) 仓库，其网站版本不代表 SDK 版本。
 
+实现代码集中在 `src/`，运行示例在 `examples/`，维护与启动命令在 `scripts/`。生成的 npm 包保持公开导入不变；源码 ZIP 由打包器映射为旧路径，不要为兼容交付在仓库根目录复制一套源码。
+
 日常流程：**修改源码 → 升版与更新日志 → 验证 → 提交 → 推送版本标签 → 检查 Release 草稿 → 发布**。
 
 ## 常用命令
@@ -59,7 +61,7 @@ macOS/Linux 将虚拟环境解释器换成 `.venv/bin/python`，环境变量使�
 
 打包工具从公开入口收集运行依赖，在独立临时目录压缩 JavaScript 并生成安装用清单，再调用 npm 生成 `.tgz`。保留类型声明和公开入口；Node.js 模块保留共享状态，浏览器使用独立条件入口和共享代码块。安装包不含开发脚本、测试、示例生成器、Python、用户采集数据、私钥或 source map；原有 ZIP 仍提供源码和示例。
 
-客户使用 `npm install --save-exact ./shroom-sdk-<版本>.tgz`；示例和本地文件依赖的保存方式见[npm 安装说明](docs/NPM.md)。`docs/NPM.md` 同时作为安装包内的 README，修改交付方式时同步维护该文件。
+客户使用 `npm install --save-exact ./shroom-sdk-<版本>.tgz`；示例和本地文件依赖的保存方式见[npm 安装说明](NPM.md)。`docs/NPM.md` 同时作为安装包内的 README，修改交付方式时同步维护该文件。
 
 当前源码与安装包保留 `private: true`，防止误发布到 npm 注册表；它不影响本地 `.tgz` 安装，也不代表 GitHub 仓库私有。尚未设置 npm 注册表发布账号、包名归属或自动发布流程，不能将本地打包描述为 npm 已上线。后续启用注册表发布时，先确认发布身份、包名与分发权限，再更新发布配置并验证目标制品。
 
@@ -68,7 +70,7 @@ macOS/Linux 将虚拟环境解释器换成 `.venv/bin/python`，环境变量使�
 ## 制作本地候选包
 
 1. 完成功能修改，用版本命令升版；首次受管基线保留 `0.1.0`。
-2. 在 [CHANGELOG.md](CHANGELOG.md) 添加唯一的版本小节，格式为 `## [0.2.0] - YYYY-MM-DD`，写清用户可见变化、迁移要求和语言差异。
+2. 在 [CHANGELOG.md](../CHANGELOG.md) 添加唯一的版本小节，格式为 `## [0.2.0] - YYYY-MM-DD`，写清用户可见变化、迁移要求和语言差异。
 3. 执行 `npm run sdk:release`，检查测试输出与生成的文件。
 
 普通 `pack:sdk` 输出 `dist/shroom-sdk.zip`、`dist/shroom-sdk-node.zip` 和 `dist/shroom-sdk-python.zip`；`pack:npm` 输出 `dist/shroom-sdk-<版本>.tgz`。版本制品输出目录为 `dist/releases/<版本>/`，包含：

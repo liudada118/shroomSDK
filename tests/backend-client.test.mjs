@@ -4,9 +4,9 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
-import { BackendSdkClient, normalizeHttpResult } from '../backend/client.js';
-import { BackendSdkClient as NodeClient } from '../node/index.js';
-import { BackendSdkClient as WebClient } from '../web/index.js';
+import { BackendSdkClient, normalizeHttpResult } from '../src/backend/client.js';
+import { BackendSdkClient as NodeClient } from '../src/node/index.js';
+import { BackendSdkClient as WebClient } from '../src/web/index.js';
 
 class FakeSocket {
   constructor(url, protocols) { this.url = url; this.protocols = protocols; this.readyState = 0; this.sent = []; }
@@ -246,7 +246,7 @@ test('Node entry falls back to ws when a global WebSocket is unavailable', async
 });
 
 test('classic browser bundle exposes the backend client without require or Node globals', async () => {
-  const source = await readFile(new URL('../web/shroom.bundle.js', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../examples/web/shroom.bundle.js', import.meta.url), 'utf8');
   const browser = { URL, Headers, AbortController, setTimeout, clearTimeout, console };
   runInNewContext(source, browser);
   assert.equal(typeof browser.Shroom.BackendSdkClient, 'function');

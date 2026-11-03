@@ -1,17 +1,17 @@
 // 用途：首次运行的完整 Node.js 产品取数示例，包含授权、首帧验收、运行期错误及端口清理。
-// 前置条件：驱动已安装、系统识别到串口；把本文件放在 SDK 根目录，与 node/ 同级，先 npm install。
+// 前置条件：驱动已安装、系统识别到串口；本文件位于 examples/products/；先在仓库根目录执行 npm install。
 // SDK 导入：Node.js 入口提供本机串口能力；license-env.js 负责安全读取授权输入和稳定安装标识。
-import { Shroom } from './node/index.js';
-import { activateLicenseFromEnv } from './node/license-env.js';
+import { Shroom } from '../../src/node/index.js';
+import { activateLicenseFromEnv } from '../node/license-env.js';
 
 // 用 SHROOM_LICENSE_KEY 或 SHROOM_LICENSE_FILE 提供密钥；不把密钥写进本文件。
 // license-env.js 自动生成并保存稳定安装标识，无需手动填写 SHROOM_DEVICE_ID。
 // 在线密钥为默认模式；离线码设置 SHROOM_LICENSE_MODE=offline，信任 SDK 默认公钥。
 // 限定电脑名额的离线码仍需联网登记与复核，离线码格式不等于无限制离线运行。
-// 使用：node glove-left-example.mjs <系统中实际识别到的串口路径>。按 Ctrl+C 释放端口。
+// 使用：node examples/products/hand-pad-example.mjs <系统中实际识别到的串口路径>。按 Ctrl+C 释放端口。
 // SDK 授权不限制设备型号；产品协议与左右手仍需与实物对应。
 // 当前示例使用 Windows 端口提示；macOS/Linux 等其他系统可在产品接入页面选择实际系统后重新生成。
-// 当前产品配置：handGloveFullPacket；手侧为 左手（left），由实物选择，不由串口自动识别。
+// 当前产品配置：hand；手部检测垫使用 32×32 映射，不传手侧参数。
 
 await (async function nodeRuntime(Shroom, activateLicenseFromEnv, configuration) {
   // 一、实际端口：取命令行第二个参数，不默认猜 COM 号或 /dev 路径，避免连到其他设备。
@@ -119,4 +119,4 @@ await (async function nodeRuntime(Shroom, activateLicenseFromEnv, configuration)
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
   }
-})(Shroom, activateLicenseFromEnv, {"product":"handGloveFullPacket","side":"left","env":"node","platform":"windows","kind":"complete","label":"左手触觉手套","filename":"glove-left-example.mjs"});
+})(Shroom, activateLicenseFromEnv, {"product":"hand","env":"node","platform":"windows","kind":"complete","label":"手部检测垫","filename":"examples/products/hand-pad-example.mjs"});

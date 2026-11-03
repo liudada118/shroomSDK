@@ -9,15 +9,15 @@ import {
   connectProduct as connectWebProduct,
   connectGlove as connectWebGlove,
   connectHandPad as connectWebHandPad,
-} from '../web/serial.js';
+} from '../src/web/serial.js';
 import {
   connectProduct as connectNodeProduct,
   connectGlove as connectNodeGlove,
   connectHandPad as connectNodeHandPad,
   connectSerial as connectNodeSerial,
-} from '../node/serial.js';
-import { decodeFrame } from '../core/frame.js';
-import { ShroomError } from '../core/errors.js';
+} from '../src/node/serial.js';
+import { decodeFrame } from '../src/core/frame.js';
+import { ShroomError } from '../src/core/errors.js';
 
 beforeEach(() => activateTestLicense());
 

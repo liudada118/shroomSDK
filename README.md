@@ -31,9 +31,9 @@ Node.js 通过 `readProduct({ product: 'glove' | 'pad', path, side, onData })` �
 
 Node.js 快速服务内置带标签会话录制与 **SQLite 持久化**，停止后从数据库导出 CSV / JSONL。新记录位于录制目录的 `recordings.sqlite`，使用 `sessions / frames` 表；旧版 JSONL 记录仍可读取下载。曲线、回放、报表、算法及业务数据库由应用实现。Python 不提供产品级连接、WS 服务或本次快速录制接口。源码 ZIP 包含 `package-lock.json`，在解压后的 SDK 根目录执行 `npm ci`；`.tgz` 则作为业务项目的依赖安装，由业务项目锁文件管理。两种方式都需要正确安装 `serialport / ws / better-sqlite3` 等运行依赖，详见[数据存储](docs/STORAGE.md)。
 
-已有主项目后端时，可读取状态、订阅实时帧，并显式调用后端的串口／采集控制接口，见 [后端连接指南](BACKEND.md)。这是客户端，不包含后端服务，也不等于 Shroom Monitor；Python 本次未增加后端客户端。
+已有主项目后端时，可读取状态、订阅实时帧，并显式调用后端的串口／采集控制接口，见 [后端连接指南](docs/BACKEND.md)。这是客户端，不包含后端服务，也不等于 Shroom Monitor；Python 本次未增加后端客户端。
 
-> **不想自己写代码？** 看 [怎么用AI开发.md](怎么用AI开发.md)——把 [AI-CONTEXT.md](AI-CONTEXT.md)
+> **不想自己写代码？** 看 [怎么用AI开发.md](docs/怎么用AI开发.md)——把 [AI-CONTEXT.md](docs/AI-CONTEXT.md)
 > 丢给 AI，然后说人话描述你要什么就行。
 
 **Windows / macOS / Linux 都支持**，SDK 是同一份，不分平台版本。
@@ -60,26 +60,28 @@ npm ci
 npm run pack:npm
 ```
 
-`pack:npm` 生成 `dist/shroom-sdk-<版本>.tgz`，`test:npm` 验证实际安装结果。正式交付前运行 `npm run sdk:verify`，发布候选使用 `npm run sdk:release`；Python 测试环境及发布步骤见[发布指南](SDK-RELEASING.md)。官网通过固定提交引用 SDK，打包不会自动发布或部署。
+`pack:npm` 生成 `dist/shroom-sdk-<版本>.tgz`，`test:npm` 验证实际安装结果。正式交付前运行 `npm run sdk:verify`，发布候选使用 `npm run sdk:release`；Python 测试环境及发布步骤见[发布指南](docs/SDK-RELEASING.md)。官网通过固定提交引用 SDK，打包不会自动发布或部署。
 
 ## 中文源码导航 {#source-map}
 
-以下路径相对于 SDK 目录。先看 `quick-flow.js` 的五个导出函数；类型声明在 `quick-flow.d.ts`。该入口依赖同目录的 SDK 模块，Node.js 与浏览器调用各自适用的部分。
+维护源码从 `src/quick-flow.js` 的五个导出开始；类型在 `src/quick-flow.d.ts`。实现集中在 `src/`，示例、文档和构建工具各有目录，不需要逐个浏览根目录文件。
 
 | 目录 | 负责什么 | 建议先看 |
 | --- | --- | --- |
-| `quick-flow.js` | 五个快速函数，管理本次采集与下载 | `readProduct()` → `createWS()` → 三个采集函数 |
-| `flow/` | 五函数的编排实现、当前记录 ID 与资源释放 | `runtime.js` |
-| `node/` | 串口取数、WS 服务、SQLite 采集与文件导出 | `serial.js` → `quick-server.js` → `recording.js` |
-| `web/` | 浏览器串口、WS 控制与二维显示 | `stream.js`；浏览器直连看 `serial.js` |
-| `core/` | 分帧、产品协议、点位映射、数据结构与授权 | `product.js`、`glove.js`、`license.js` |
-| `core/products/` | 各产品适配器、注册表与协议复用 | `registry.js` → `glove.js / pad.js`；[扩展指南](core/products/README.md) |
-| `backend/` | 连接已经运行的主项目后端 | `client.js`；与快速 WS 服务使用不同协议 |
+| `src/quick-flow.js` | 五个快速函数的统一入口 | `readProduct()` → `createWS()` → 三个采集函数 |
+| `src/flow/` | 五函数编排、当前记录 ID 与资源释放 | `runtime.js` |
+| `src/node/` | 串口取数、WS 服务、SQLite 采集与导出 | `serial.js` → `quick-server.js` → `recording.js` |
+| `src/web/` | 浏览器串口、WS 控制与二维显示 | `stream.js`；浏览器直连看 `serial.js` |
+| `src/core/` | 分帧、协议、点位映射、数据结构与授权 | `product.js`、`glove.js`、`license.js` |
+| `src/core/products/` | 各产品适配器、注册表与协议复用 | [扩展指南](src/core/products/README.md) |
+| `src/backend/` | 连接已经运行的主项目后端 | `client.js`；与快速 WS 服务使用不同协议 |
+| `examples/` | 产品例程、Node 演示、网页测试台和调用生成器 | `products/`、`node/`、`web/` |
+| `docs/` | 接入、基础 API、AI 上下文与发布说明 | `QUICK-START.md`、`AI-CONTEXT.md` |
 | `python/src/shroom_sdk/` | Python 通用串口、矩阵处理、模拟与授权 | `__init__.py` → `device.py` → `frame.py` |
 
-`quick-flow.js` 调用底层模块：`node/serial.js` 取数 → `node/quick-server.js` 创建服务 → `web/stream.js` 发起采集请求 → `node/recording.js` 保存记录。产品连接与 WS 字段校验共用 `core/products/` 注册表。原始 API 保留在 `node/index.js / web/index.js`，类型见 `index.d.ts`；示例字符串生成器在 `examples/`。
+维护者在仓库根目录运行 `npm start -- --no-open` 打开网页示例，`npm run demo:quick:mock` 运行模拟快速服务。直接启动脚本位于 `scripts/start.mjs`、`scripts/start.sh` 和 `scripts/start-demo.bat`。`examples/web/index.html` 与 `shroom.bundle.js` 是构建产物，应修改模块或 `examples/web/index.template.html` 后重新生成。
 
-`web/shroom.bundle.js` 和 `web/index.html` 是构建产物；应修改对应模块或 `web/index.template.html` 后重新生成。Windows 的 `start-demo.bat` 保留 ASCII 注释以兼容命令提示符编码，其作用是切换到 SDK 目录、检查 Node.js、启动 `start.mjs` 并保留错误输出窗口。
+客户 npm 导入仍为 `shroom-sdk/quick-flow`、`shroom-sdk/node` 等公开入口。兼容源码 ZIP 由打包器映射为原来的 `quick-flow.js`、`node/`、`web/` 与根目录示例、启动脚本；后文的 `./node/`、`./web/` 相对调用示例均以解压后的 ZIP 为准。Git 仓库中的自定义文件若放在根目录，则使用 `./src/quick-flow.js` 等源码路径。
 
 ## 五步调用概览 {#s1}
 
@@ -513,64 +515,43 @@ console.log(device.getDiagnostics()); // 包含 state、status、hint 和 lastEr
 
 ## 目录 {#s13}
 
-```
+```text
 shroomSDK/
-├─ quick-flow.js  五个快速函数的统一导出
-├─ quick-flow.d.ts  快速函数类型
-├─ flow/          连接、服务、采集与下载的编排实现
-├─ backend/       浏览器通用 HTTP / WebSocket 客户端与类型定义
-├─ core/          纯逻辑，浏览器和 Node 共用，不碰任何设备 API
-│  ├─ product.js    产品连接准备，委托注册的适配器
-│  ├─ products/     各产品协议、注册表、WS 字段校验与扩展指南
-│  ├─ framer.js     字节流 → 一帧一帧
-│  ├─ frame.js      一帧字节 → Frame 对象
-│  ├─ colormap.js   0~1 → 颜色
-│  ├─ device.js     帧订阅
-│  └─ mock.js       模拟数据源
-├─ web/           浏览器：Web Serial + canvas 热力图 + 示例页面
-│  ├─ serial.js         ★ 串口连接就在这里（Web Serial API）
-│  ├─ heatmap.js        canvas 渲染，三种画法
-│  ├─ index.js          模块版入口，正经项目 import 这个
-│  ├─ index.html        示例页面，代码已内联，单独拷到哪都能双击打开
-│  └─ shroom.bundle.js  单文件版（自动生成），给不想用模块的人直接 script 引
-├─ node/          Node / Electron
-│  ├─ serial.js     ★ 串口连接就在这里（serialport）
-│  ├─ ascii.js      终端里的彩色方块图
-│  ├─ demo.js       命令行示例
-│  ├─ backend.js    Node 后端客户端（原生 WebSocket / 可选 ws）
-│  ├─ backend-demo.js  后端只读连接示例
-│  └─ index.js      Node 入口
-├─ python/        Python 3.10+，独立 pip 包（无需 Node）
-│  ├─ pyproject.toml   本地安装与 wheel/sdist 构建配置
-│  ├─ src/shroom_sdk/  串口、Frame、拆帧、排列、Mock、CLI
-│  ├─ examples/        逐帧读取与 Matplotlib 热力图
-│  ├─ tests/           Python 测试、串口回环、JS 对照校验
-│  └─ README.md        Python 完整使用文档
-├─ start.mjs      打开浏览器示例用的小服务器
-├─ scripts/       独立版本、构建、打包与发布检查（源码仓库）
-├─ tests/         JavaScript 与类型测试（源码仓库）
-├─ .github/       跨平台检查与 GitHub Release 草稿工作流（源码仓库）
-├─ SDK-RELEASING.md  维护者发布流程（源码仓库）
-├─ MIGRATION.md   与仓库原有 SDK 的迁移边界
-├─ AI-CONTEXT.md  给 AI 看的说明，直接把这个文件丢给它
-├─ BACKEND.md     已有后端的连接、订阅、控制与安全说明
-├─ 怎么用AI开发.md  给人看的：怎么把这个 SDK 交给 AI
-└─ index.d.ts     TypeScript 类型
+├─ src/                  SDK 运行实现与类型
+│  ├─ quick-flow.js      五个函数的统一导出
+│  ├─ flow/              快速调用编排
+│  ├─ core/              协议、产品适配、数据结构与授权
+│  ├─ node/              Node 串口、WS 与 SQLite 采集
+│  ├─ web/               浏览器串口、WS 与二维显示
+│  └─ backend/           已有后端的 HTTP / WS 客户端
+├─ examples/
+│  ├─ products/          手套左右手与手垫的 HTML / MJS 示例
+│  ├─ node/              命令行演示与示例授权配置
+│  ├─ web/               网页测试台、模板与生成的 bundle
+│  └─ product-*.js       官网和调用示例共用的生成器
+├─ docs/                 接入、API、AI 上下文和发布说明
+├─ scripts/              启动、构建、版本、打包与发布检查
+├─ tests/                JavaScript 与类型测试
+├─ python/               独立 Python 包、文档、示例和测试
+├─ .github/              跨平台检查与 Release 草稿工作流
+├─ package.json          公开包入口与开发命令
+├─ package-lock.json     JavaScript 依赖锁
+├─ tsconfig.json         类型检查配置
+├─ README.md             使用说明与源码导航
+├─ ARCHITECTURE.md       架构与累积工作记录
+├─ CHANGELOG.md          版本变更
+└─ MIGRATION.md          原有 SDK 的迁移边界
 ```
 
-**JavaScript 串口连接在哪？** 上面打 ★ 的那两个文件：浏览器是 `web/serial.js`，
-Node 是 `node/serial.js`。通用入口使用 `core/framer.js` 与 `core/frame.js`；产品入口委托 `core/products/` 的适配器完成协议解析，再由 `core/device.js` 交付帧。Node 与浏览器共用数据处理层。
+JavaScript 串口实现分别在 `src/web/serial.js` 和 `src/node/serial.js`。通用入口使用 `src/core/framer.js` 与 `src/core/frame.js`，产品入口委托 `src/core/products/` 的适配器。Python 串口实现位于 `python/src/shroom_sdk/device.py`，通过跨语言测试对齐解析结果。
 
-Python 串口入口在 `python/src/shroom_sdk/device.py`；调用 Python 的 `framer.py` 和 `frame.py`，
-通过同步迭代或 `read_frame()` 读取。它与 JS 使用相同协议，通过跨语言测试保持数值和拆帧一致。
-
-`core/` 不依赖任何环境 API。自定义字节流可用 `createFramer()` + `decodeFrame()`；已有 Shroom 后端的 JSON 实时帧应使用 `BackendSdkClient`，不要二次拆帧或解码。
+上述是 Git 源码仓库结构。客户 npm 包只有运行代码、类型和交付说明；源码 ZIP 保留既有的扁平路径，便于已接入项目继续使用。
 
 ---
 
 ## 拿去问 AI {#s14}
 
-SDK 里有一份专门写给 AI 读的说明：**[AI-CONTEXT.md](AI-CONTEXT.md)**。
+SDK 里有一份专门写给 AI 读的说明：**[AI-CONTEXT.md](docs/AI-CONTEXT.md)**。
 把它整个丢给 AI（拖进对话框，或者复制粘贴），然后描述你想做的东西：
 
 > 帮我做一个页面：用重心控制一个小球移动，压力超过 0.5 就变色。
@@ -578,7 +559,7 @@ SDK 里有一份专门写给 AI 读的说明：**[AI-CONTEXT.md](AI-CONTEXT.md)*
 它里面写全了 API、Frame 结构、几条硬性约束（用户手势、安全上下文、
 数据是 0~1 相对值而不是 kPa）和可以直接抄的例子，AI 照着就能写出跑得起来的代码。
 
-完整流程见 **[怎么用AI开发.md](怎么用AI开发.md)** ——包括怎么描述需求、
+完整流程见 **[怎么用AI开发.md](docs/怎么用AI开发.md)** ——包括怎么描述需求、
 AI 写出来的东西怎么跑起来、报错了怎么跟它说。
 
 SDK 负责把数据稳定地给到你手上，剩下的想怎么玩都行。

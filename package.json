@@ -3,43 +3,43 @@
   "version": "0.1.0",
   "description": "Shroom 产品 SDK：取数、WS、分区渲染、带标签录制与下载",
   "type": "module",
-  "types": "index.d.ts",
+  "types": "src/index.d.ts",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
-      "default": "./web/index.js"
+      "types": "./src/index.d.ts",
+      "default": "./src/web/index.js"
     },
     "./web": {
-      "types": "./index.d.ts",
-      "default": "./web/index.js"
+      "types": "./src/index.d.ts",
+      "default": "./src/web/index.js"
     },
     "./node": {
-      "types": "./node/index.d.ts",
-      "default": "./node/index.js"
+      "types": "./src/node/index.d.ts",
+      "default": "./src/node/index.js"
     },
     "./quick-flow": {
-      "types": "./quick-flow.d.ts",
-      "default": "./quick-flow.js"
+      "types": "./src/quick-flow.d.ts",
+      "default": "./src/quick-flow.js"
     },
     "./backend": {
-      "types": "./backend/client.d.ts",
-      "browser": "./backend/client.js",
-      "node": "./node/backend.js",
-      "default": "./backend/client.js"
+      "types": "./src/backend/client.d.ts",
+      "browser": "./src/backend/client.js",
+      "node": "./src/node/backend.js",
+      "default": "./src/backend/client.js"
     },
     "./core": {
-      "types": "./core/frame.d.ts",
-      "default": "./core/frame.js"
+      "types": "./src/core/frame.d.ts",
+      "default": "./src/core/frame.js"
     }
   },
   "scripts": {
     "generate:examples": "node examples/generate-product-examples.mjs",
-    "start": "node start.mjs",
-    "demo": "node node/demo.js",
-    "ports": "node node/demo.js --list",
-    "demo:backend": "node node/backend-demo.js",
-    "demo:quick": "node node/quick-demo.js",
-    "demo:quick:mock": "node node/quick-demo.js --mock",
+    "start": "node scripts/start.mjs",
+    "demo": "node examples/node/demo.js",
+    "ports": "node examples/node/demo.js --list",
+    "demo:backend": "node examples/node/backend-demo.js",
+    "demo:quick": "node examples/node/quick-demo.js",
+    "demo:quick:mock": "node examples/node/quick-demo.js --mock",
     "test:backend": "node --test tests/backend-client.test.mjs",
     "build:sdk-bundle": "node scripts/build-sdk-bundle.mjs",
     "build": "npm run build:sdk-bundle && npm run generate:examples",

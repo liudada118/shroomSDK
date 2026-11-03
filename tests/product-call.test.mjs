@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createProductCall } from '../examples/product-call.js';
-import * as NodeSdk from '../node/index.js';
-import * as WebSdk from '../web/index.js';
+import * as NodeSdk from '../src/node/index.js';
+import * as WebSdk from '../src/web/index.js';
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 

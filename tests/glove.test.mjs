@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { decodeGlovePacket } from '../core/glove.js';
-import { ShroomError } from '../core/errors.js';
+import { decodeGlovePacket } from '../src/core/glove.js';
+import { ShroomError } from '../src/core/errors.js';
 
 // Captured 1-based product mappings; zero denotes an outline position without a sensor.
 const gloveExpectedMappings = {

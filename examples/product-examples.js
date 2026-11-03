@@ -9,12 +9,13 @@ const drivers = Object.freeze({
 
 /** 校验产品、运行端和平台，统一转换成示例模板使用的协议配置；不探测真实硬件。 */
 function normalize(options = {}) {
-  const { product, side, env, platform = 'windows', kind = 'complete' } = options;
+  const { product, side, env, platform = 'windows', kind = 'complete', layout = 'archive' } = options;
   if (!['glove', 'pad'].includes(product)) throw new TypeError('请选择触觉手套或手部检测垫。');
   if (product === 'glove' && !['left', 'right'].includes(side)) throw new TypeError('生成手套示例前，请明确选择实物的左右手。');
   if (!['web', 'node'].includes(env)) throw new TypeError('此示例生成器支持浏览器 JavaScript 与 Node.js。');
   if (!['windows', 'macos', 'linux'].includes(platform)) throw new TypeError('请选择 Windows、macOS 或 Linux。');
   if (!['complete', 'snippet'].includes(kind)) throw new TypeError('请选择完整示例或接入片段。');
+  if (!['archive', 'repository'].includes(layout)) throw new TypeError('请选择归档或仓库示例布局。');
   return {
     product: product === 'glove' ? 'handGloveFullPacket' : 'hand',
     ...(product === 'glove' ? { side } : {}), env, platform, kind,
@@ -586,14 +587,36 @@ function completeNode(configuration) {
   ].join('\n');
 }
 
+/** 仓库示例引用 src/；默认下载源码仍使用 ZIP 根目录，避免改变已有接入方式。 */
+function repositoryLayout(source, configuration) {
+  let output = source
+    .replaceAll("from './web/index.js'", "from '../../src/web/index.js'")
+    .replaceAll("from './node/index.js'", "from '../../src/node/index.js'")
+    .replaceAll("from './node/license-env.js'", "from '../node/license-env.js'")
+    .replaceAll('在 SDK 根目录 npm install', '在仓库根目录 npm install')
+    .replaceAll('文件放在 SDK 根目录时使用此路径', '文件放在仓库 examples/products/ 时使用此路径')
+    .replaceAll('把本文件放在 SDK 根目录，与 node/ 同级，先 npm install。', '本文件位于 examples/products/；先在仓库根目录执行 npm install。')
+    .replaceAll('放在解压后的 SDK 根目录，与 <code>web/</code> 同级。', '位于仓库 <code>examples/products/</code>；先在仓库根目录安装依赖。')
+    .replaceAll('node start.mjs', 'node scripts/start.mjs')
+    .replaceAll('http://localhost:5178/' + configuration.filename, 'http://localhost:5178/examples/products/' + configuration.filename)
+    .replaceAll('node ' + configuration.filename, 'node examples/products/' + configuration.filename);
+  if (configuration.env === 'node') {
+    output = output.replace(JSON.stringify(configuration), JSON.stringify({
+      ...configuration, filename: 'examples/products/' + configuration.filename,
+    }));
+  }
+  return output;
+}
+
 /** 生成产品示例源码。手套必须明确指定实物手侧；浏览器和 Node 使用各自入口。 */
 export function createProductExample(options) {
   const configuration = normalize(options);
-  return configuration.kind === 'snippet' ? snippet(configuration)
+  const source = configuration.kind === 'snippet' ? snippet(configuration)
     : configuration.env === 'web' ? completeWeb(configuration) : completeNode(configuration);
+  return options?.layout === 'repository' ? repositoryLayout(source, configuration) : source;
 }
 
-/** 返回示例在 SDK 根目录中的文件名，和 createProductExample 使用同一套参数校验。 */
+/** 返回示例文件名，和 createProductExample 使用同一套参数校验；不包含所在目录。 */
 export function getProductExampleFilename(options) {
   return normalize(options).filename;
 }

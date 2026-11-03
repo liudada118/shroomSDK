@@ -875,7 +875,7 @@ const client = new BackendSdkClient({ httpBaseUrl: 'http://127.0.0.1:19245', wsU
 
 **示例**：`console.log(await client.listSerialPorts(), await client.getSerialStatus('sit'))`。
 
-**注意事项**：已解包方法将 `{ code: 0, data }` 返回为 data，原始包方法保留外层；非零业务码仍抛错。逐接口说明见 [BackendSdkClient API](../BACKEND.md#queries)。
+**注意事项**：已解包方法将 `{ code: 0, data }` 返回为 data，原始包方法保留外层；非零业务码仍抛错。逐接口说明见 [BackendSdkClient API](BACKEND.md#queries)。
 
 ### 设备与采集控制 {#backend-controls}
 
@@ -963,7 +963,7 @@ process.once('SIGINT', () => client.disconnectRealtime());
 
 **调用方式**：`await client.request(routeOrName, options)` / `client.route(name, params)`。
 
-**参数**：request 默认 GET、客户端超时，支持 JSON body、query、routeParams、headers、signal、raw；完整表见 [通用 HTTP 请求](../BACKEND.md#request)。route 必填路由名，路径参数需要齐全。
+**参数**：request 默认 GET、客户端超时，支持 JSON body、query、routeParams、headers、signal、raw；完整表见 [通用 HTTP 请求](BACKEND.md#request)。route 必填路由名，路径参数需要齐全。
 
 **返回值**：request 为 `Promise<T>`，route 为编码后的根相对路径 string。
 
@@ -979,7 +979,7 @@ process.once('SIGINT', () => client.disconnectRealtime());
 
 **当前 Python SDK 未包含 `BackendSdkClient`，没有已有后端的 HTTP / WebSocket 客户端、通道订阅或采集控制接口。**
 
-Python 可直连串口，在应用中分析和保存。后端已占用设备时，使用现有 Node.js 客户端订阅，或自行开发符合 [后端 API 契约](../BACKEND.md) 的 Python 网络适配；不能调用不存在的 Python SDK 方法。
+Python 可直连串口，在应用中分析和保存。后端已占用设备时，使用现有 Node.js 客户端订阅，或自行开发符合 [后端 API 契约](BACKEND.md) 的 Python 网络适配；不能调用不存在的 Python SDK 方法。
 
 </div>
 

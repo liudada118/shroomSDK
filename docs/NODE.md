@@ -113,7 +113,7 @@ try {
 
 ## 连接已有后端
 
-已有后端负责连接设备时，使用 `BackendSdkClient`，无需让当前程序再次打开串口。HTTP 与 WebSocket 地址分别设置，示例与完整接口见[后端通讯](../BACKEND.md)。
+已有后端负责连接设备时，使用 `BackendSdkClient`，无需让当前程序再次打开串口。HTTP 与 WebSocket 地址分别设置，示例与完整接口见[后端通讯](BACKEND.md)。
 
 ```js
 import { BackendSdkClient } from './node/index.js';

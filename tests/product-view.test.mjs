@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createProductView } from '../web/product-view.js';
-import { decodeGlovePacket } from '../core/glove.js';
-import { createProductParser } from '../core/product.js';
+import { createProductView } from '../src/web/product-view.js';
+import { decodeGlovePacket } from '../src/core/glove.js';
+import { createProductParser } from '../src/core/product.js';
 
 /** 提供可统计实际绘制点位、支持移除节点的最小 DOM/Canvas 环境。 */
 function viewEnvironment(t) {

@@ -6,9 +6,9 @@
 
 ## 接入前确认 {#prepare}
 
-- **驱动**：CH34x 设备需有可用串口驱动，安装在连接 USB 的电脑上。[Windows CH341SER.EXE](https://shroom.jq-industries.com/drive/CH341SER.EXE) · [macOS CH34xVCPDriver.zip](https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip)。安装后重新插拔，确认系统能列出串口；Linux 检查驱动与权限，见[驱动排查](docs/DRIVERS.md)。
-- **安装**：Node.js 18+，从[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)复制当前版本的安装命令，在业务项目终端执行，自动下载 SDK 并安装 `serialport / ws / better-sqlite3` 等依赖。SDK 免登记下载，密钥另行申请。尚未发布 npm 注册表，不要编造 `npm install shroom-sdk` 已可用；其他方式见[npm 安装](docs/NPM.md)。
-- **授权**：在 Node.js 连接实机前，按 [SDK 授权](docs/LICENSE.md)调用 `await Shroom.activateLicense(key, { deviceId })`；`Shroom` 从 `shroom-sdk/node` 导入。应用保存稳定的安装标识，不能每次启动重新生成。仅取数需要 `serial`，完整五步还需 `stream / recording`；浏览器连接此 Node 服务时无需重复激活。不要导入精简安装包未交付的 `node/license-env.js`。
+- **驱动**：CH34x 设备需有可用串口驱动，安装在连接 USB 的电脑上。[Windows CH341SER.EXE](https://shroom.jq-industries.com/drive/CH341SER.EXE) · [macOS CH34xVCPDriver.zip](https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip)。安装后重新插拔，确认系统能列出串口；Linux 检查驱动与权限，见[驱动排查](DRIVERS.md)。
+- **安装**：Node.js 18+，从[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)复制当前版本的安装命令，在业务项目终端执行，自动下载 SDK 并安装 `serialport / ws / better-sqlite3` 等依赖。SDK 免登记下载，密钥另行申请。尚未发布 npm 注册表，不要编造 `npm install shroom-sdk` 已可用；其他方式见[npm 安装](NPM.md)。
+- **授权**：在 Node.js 连接实机前，按 [SDK 授权](LICENSE.md)调用 `await Shroom.activateLicense(key, { deviceId })`；`Shroom` 从 `shroom-sdk/node` 导入。应用保存稳定的安装标识，不能每次启动重新生成。仅取数需要 `serial`，完整五步还需 `stream / recording`；浏览器连接此 Node 服务时无需重复激活。不要导入精简安装包未交付的 `node/license-env.js`。
 - **产品**：手套 `product: 'glove'`，必须指定 `side: 'left' | 'right'`；检测垫 `product: 'pad'`，不传 `side`。正式 ID 分别为 `handGloveFullPacket / hand`。端口枚举不会自动识别产品。
 - **运行位置**：以下示例放在客户项目，统一从 `shroom-sdk/quick-flow` 导入；Node 使用 ESM，网页使用 Vite 等构建工具解析包名，并通过本机 `http://localhost` 访问。普通 HTML 无法直接解析包名：使用源码 ZIP，将导入改为 SDK 根目录的 `./quick-flow.js`，保留其依赖目录并以模块方式加载；不要双击 HTML。
 
@@ -81,7 +81,7 @@ try {
 }
 ```
 
-默认服务只监听本机，网页 HTTP 端口与 WS 数据端口不同。HTTPS 网页需要 WSS；跨电脑连接需配置 `host / allowedOrigins`，见[前端通讯](docs/FRONTEND-COMMUNICATION.md#sdk-stream)。本流程使用 WebSocket，不需要浏览器直接申请串口，也不使用 Web Serial 支持检测来拦截此连接。
+默认服务只监听本机，网页 HTTP 端口与 WS 数据端口不同。HTTPS 网页需要 WSS；跨电脑连接需配置 `host / allowedOrigins`，见[前端通讯](FRONTEND-COMMUNICATION.md#sdk-stream)。本流程使用 WebSocket，不需要浏览器直接申请串口，也不使用 Web Serial 支持检测来拦截此连接。
 
 ## 3. 开始采集：startRecording {#flow-start}
 
@@ -131,7 +131,7 @@ try {
 }
 ```
 
-这是同步函数：在浏览器触发下载并返回 URL，**不代表文件已经保存成功**，后续 HTTP 失败不由此处的 `catch` 捕获。Node 服务需保持运行。CSV / JSONL 是从 SQLite 分页读取、流式生成的导出格式，不是新采集的存储格式；不直接下载数据库。CSV 数组与分区采用 JSON 单元格，JSONL 保留完整帧。同目录旧版 `.meta.json / .jsonl` 记录仍可查询下载，不自动重写，见[存储说明](docs/STORAGE.md)。
+这是同步函数：在浏览器触发下载并返回 URL，**不代表文件已经保存成功**，后续 HTTP 失败不由此处的 `catch` 捕获。Node 服务需保持运行。CSV / JSONL 是从 SQLite 分页读取、流式生成的导出格式，不是新采集的存储格式；不直接下载数据库。CSV 数组与分区采用 JSON 单元格，JSONL 保留完整帧。同目录旧版 `.meta.json / .jsonl` 记录仍可查询下载，不自动重写，见[存储说明](STORAGE.md)。
 
 后三个函数也能在 Node.js 传入同一个 `server`；`downloadRecording(server, options)` 此时只返回 HTTP URL，由应用负责下载。
 
@@ -191,17 +191,17 @@ SDK 会隔离同步数据回调的异常并报告 `CALLBACK_FAILED`；异步业�
 
 ADC 与归一化相对值不是 kPa、牛顿、公斤或弯曲角度。手套以命名分区取数，不能编造整手的 `pressureMatrix / values` 展示映射；产品帧不要再次 `decodeFrame()` 或重复应用 layout。
 
-五个函数调用的基础 API 是 `connectProduct / connectStream / serveDevice` 及其采集方法，见[五步与基础 API 对照](docs/CUSTOM.md#quick-to-base)。新增产品时按[产品适配器指南](core/products/README.md)增加协议、注册项与类型，避免在五步函数里新增产品分支。参数类型查 `quick-flow.d.ts`；原始 API 查 `index.d.ts / node/index.d.ts`。
+五个函数调用的基础 API 是 `connectProduct / connectStream / serveDevice` 及其采集方法，见[五步与基础 API 对照](CUSTOM.md#quick-to-base)。新增产品时按[产品适配器指南](../src/core/products/README.md)增加协议、注册项与类型，避免在五步函数里新增产品分支。源码仓库的参数类型在 `src/quick-flow.d.ts`，基础类型在 `src/index.d.ts / src/node/index.d.ts`；兼容源码 ZIP 中这些路径不带 `src/`。
 
 ## 按需查阅的其他能力 {#references}
 
 | 需求 | 参考与边界 |
 | --- | --- |
-| 浏览器直接连接 USB 串口 | [Web Serial](docs/FRONTEND-COMMUNICATION.md#web-serial)：基础 `connectGlove / connectHandPad`，已激活后在用户点击中申请端口，要求受支持浏览器与安全上下文；与本文 WS 路线分开 |
-| 二维产品显示或热力图 | [前端通讯与产品数据](docs/FRONTEND-COMMUNICATION.md#product-data)、[渲染 API](docs/RENDERING.md)：显示不控制采集起停 |
-| 自定义协议与矩阵 | [基础与自定义](docs/CUSTOM.md)、[串口](docs/SERIAL.md)；不要覆盖产品接口的 `baudRate / delimiter / rows / cols / layout` |
-| 无硬件开发 | [Mock](docs/FRONTEND-COMMUNICATION.md#mock)：只验证基础矩阵与显示，不模拟整包手套、IMU 或实际按压，不代表实机验收完成 |
+| 浏览器直接连接 USB 串口 | [Web Serial](FRONTEND-COMMUNICATION.md#web-serial)：基础 `connectGlove / connectHandPad`，已激活后在用户点击中申请端口，要求受支持浏览器与安全上下文；与本文 WS 路线分开 |
+| 二维产品显示或热力图 | [前端通讯与产品数据](FRONTEND-COMMUNICATION.md#product-data)、[渲染 API](RENDERING.md)：显示不控制采集起停 |
+| 自定义协议与矩阵 | [基础与自定义](CUSTOM.md)、[串口](SERIAL.md)；不要覆盖产品接口的 `baudRate / delimiter / rows / cols / layout` |
+| 无硬件开发 | [Mock](FRONTEND-COMMUNICATION.md#mock)：只验证基础矩阵与显示，不模拟整包手套、IMU 或实际按压，不代表实机验收完成 |
 | 已有主项目后端 | [BackendSdkClient](BACKEND.md)：连接已有服务，不启动服务；其 WS 协议与快速 WS 服务不同，不能混接 |
-| Python | 独立下载 Python 包，读 [Python AI 上下文](python/AI-CONTEXT.md)与 [Python SDK](python/README.md)。目前只有通用串口、矩阵、模拟与显示，没有本文的产品五函数、整包手套或 WS 录制服务；不要生成不存在的 Python 对应函数 |
+| Python | 独立下载 Python 包，读 [Python AI 上下文](../python/AI-CONTEXT.md)与 [Python SDK](../python/README.md)。目前只有通用串口、矩阵、模拟与显示，没有本文的产品五函数、整包手套或 WS 录制服务；不要生成不存在的 Python 对应函数 |
 
 本地采集 SQLite 已内置，SDK 数据库与上位机数据库不直接兼容，也不依赖 Electron。业务数据库、曲线、回放、算法、标定与云端上传由应用实现。不要因用户需要这些功能就绕过现有录制接口重新实现一套采集。接入验证以实机持续取数、明确起停、记录状态和实际下载内容为准。

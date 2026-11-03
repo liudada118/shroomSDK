@@ -9,9 +9,9 @@ import { once } from 'node:events';
 import { get } from 'node:http';
 import WebSocket from 'ws';
 import Database from 'better-sqlite3';
-import { serveDevice } from '../node/quick-server.js';
-import { createFrameHub } from '../core/device.js';
-import { decodeGlovePacket } from '../core/glove.js';
+import { serveDevice } from '../src/node/quick-server.js';
+import { createFrameHub } from '../src/core/device.js';
+import { decodeGlovePacket } from '../src/core/glove.js';
 
 beforeEach(() => activateTestLicense());
 

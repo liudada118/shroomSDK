@@ -108,7 +108,7 @@
     }
   },
   {
-    "slug": "backend-api", "file": "BACKEND.md", "label": "后端通讯 API 参考", "navLabel": "HTTP / WebSocket API",
+    "slug": "backend-api", "file": "docs/BACKEND.md", "label": "后端通讯 API 参考", "navLabel": "HTTP / WebSocket API",
     "summary": "通过 HTTP 查询与控制已有后端，通过 WebSocket 订阅实时数据。",
     "forAi": false, "area": "backend", "group": "features", "hidden": true, "apiReference": true,
     "tocDescriptions": {
@@ -188,12 +188,12 @@
     }
   },
   {
-    "slug": "ai-context", "file": "AI-CONTEXT.md", "label": "给 AI 的上下文", "navLabel": "SDK Skill",
+    "slug": "ai-context", "file": "docs/AI-CONTEXT.md", "label": "给 AI 的上下文", "navLabel": "SDK Skill",
     "summary": "让 AI 先用一个函数获取产品数据，按需扩展完整五步，包含错误处理与资源释放。",
     "forAi": true, "area": "guides", "group": "guides"
   },
   {
-    "slug": "ai-guide", "file": "怎么用AI开发.md", "label": "怎么用 AI 来开发", "navLabel": "AI 开发指南",
+    "slug": "ai-guide", "file": "docs/怎么用AI开发.md", "label": "怎么用 AI 来开发", "navLabel": "AI 开发指南",
     "summary": "先让 AI 完成一步取数，再按需增加 WS、采集和下载，并验证生成的代码。",
     "forAi": false, "area": "guides", "group": "guides"
   },

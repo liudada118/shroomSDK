@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decodeGlovePacket } from '../core/glove.js';
-import { createProductParser } from '../core/product.js';
-import { decodeFrame } from '../core/frame.js';
-import { encodeStreamFrame, decodeStreamFrame, STREAM_SCHEMA } from '../core/stream-codec.js';
+import { decodeGlovePacket } from '../src/core/glove.js';
+import { createProductParser } from '../src/core/product.js';
+import { decodeFrame } from '../src/core/frame.js';
+import { encodeStreamFrame, decodeStreamFrame, STREAM_SCHEMA } from '../src/core/stream-codec.js';
 
 /** Make deterministic product data including zero and high-byte scan positions. */
 function codecGlove(side = 'left') {

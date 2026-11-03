@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { connectStream } from '../web/stream.js';
-import { decodeGlovePacket } from '../core/glove.js';
-import { encodeStreamFrame, STREAM_SCHEMA } from '../core/stream-codec.js';
+import { connectStream } from '../src/web/stream.js';
+import { decodeGlovePacket } from '../src/core/glove.js';
+import { encodeStreamFrame, STREAM_SCHEMA } from '../src/core/stream-codec.js';
 
 const recordingId = '12345678-1234-4234-8234-123456789abc';
 

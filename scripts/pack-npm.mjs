@@ -50,8 +50,8 @@ function browserExport(value) {
 
 function runtimeExport(value) {
   if (typeof value === 'string') {
-    assert.ok(value.startsWith('./') && !value.slice(2).split('/').includes('..'), `无效的包入口：${value}`);
-    return `./runtime/${value.slice(2)}`;
+    assert.ok(value.startsWith('./src/') && !value.slice(2).split('/').includes('..'), `无效的包入口：${value}`);
+    return `./runtime/${value.slice('./src/'.length)}`;
   }
   return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, runtimeExport(child)]));
 }
@@ -82,12 +82,12 @@ async function discoverRuntime(root, pkg, temporary) {
 
 /** 浏览器误调用本机串口/服务端入口时给出 SDK 错误，不将 Node 依赖塞进网页。 */
 function browserNodeShim(root, entryExports) {
-  const nodeNames = entryExports.get(resolve(root, 'node/index.js')) ?? [];
-  const webNames = new Set(entryExports.get(resolve(root, 'web/index.js')) ?? []);
+  const nodeNames = entryExports.get(resolve(root, 'src/node/index.js')) ?? [];
+  const webNames = new Set(entryExports.get(resolve(root, 'src/web/index.js')) ?? []);
   const browserUnsafe = new Set(['connectSerial', 'connectProduct', 'connectGlove', 'connectHandPad']);
   const shared = nodeNames.filter(name => webNames.has(name) && !browserUnsafe.has(name) && !['default', 'Shroom'].includes(name));
   const unsupported = nodeNames.filter(name => !shared.includes(name) && !['default', 'Shroom'].includes(name));
-  const source = JSON.stringify(resolve(root, 'web/index.js').split(sep).join('/'));
+  const source = JSON.stringify(resolve(root, 'src/web/index.js').split(sep).join('/'));
   return `import { Shroom as WebShroom, ${shared.join(', ')} } from ${source};
 export { ${shared.join(', ')} };
 function unsupported() { throw new ShroomError('UNSUPPORTED_ENVIRONMENT', '本机串口取数和创建 WS 服务须在 Node.js 中调用；网页请传入 WS url。', { stage: 'configure' }); }
@@ -110,7 +110,7 @@ async function browserBuild(root, pkg, staging, entryExports) {
     entries[name] = await checkedFile(root, entry);
     publicPaths.set(key, `./browser/${name}.js`);
   }
-  const nodeEntry = resolve(root, 'node/index.js');
+  const nodeEntry = resolve(root, 'src/node/index.js');
   const result = await build({
     absWorkingDir: root, entryPoints: entries, outdir: join(staging, 'browser'),
     platform: 'browser', format: 'esm', target: 'es2022', bundle: true, splitting: true,
@@ -169,7 +169,8 @@ export async function packNpm({ projectRoot = ROOT, outputDirectory, log = conso
     await mkdir(staging);
     const { modules, entryExports } = await discoverRuntime(root, pkg, temporary);
     for (const file of modules) {
-      const destination = join(staging, 'runtime', relative(root, file));
+      assert.ok(within(join(root, 'src'), file), 'npm 运行代码必须位于 src/');
+      const destination = join(staging, 'runtime', relative(join(root, 'src'), file));
       const result = await transform(await readFile(file, 'utf8'), {
         format: 'esm', target: 'es2022', minify: true, keepNames: true,
         charset: 'utf8', legalComments: 'none', sourcemap: false,
@@ -178,7 +179,7 @@ export async function packNpm({ projectRoot = ROOT, outputDirectory, log = conso
       await writeFile(destination, result.code);
     }
     for (const file of DECLARATIONS) {
-      const source = await checkedFile(root, file);
+      const source = await checkedFile(root, `src/${file}`);
       const destination = join(staging, 'runtime', file);
       await mkdir(dirname(destination), { recursive: true });
       await writeFile(destination, (await readFile(source, 'utf8')).replace(/\r\n/g, '\n'));

@@ -28,5 +28,5 @@ try:
 except ImportError:
     problems.append("未安装本仓库的 Python SDK")
 if problems:
-    raise SystemExit("\n".join(problems) + "\n请按 SDK-RELEASING.md 安装锁定测试环境，或设置 SDK_PYTHON。")
+    raise SystemExit("\n".join(problems) + "\n请按 docs/SDK-RELEASING.md 安装锁定测试环境，或设置 SDK_PYTHON。")
 print(f"Python {sys.version.split()[0]}：锁定依赖和 SDK {version} 检查通过")

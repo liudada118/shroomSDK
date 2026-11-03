@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
-import { createProductParser, prepareProductConnection, listDeviceProducts } from '../core/product.js';
-import { createTailProductParser } from '../core/products/tail-parser.js';
-import { decodeFrame } from '../core/frame.js';
-import { Shroom as NodeShroom } from '../node/index.js';
-import { Shroom as WebShroom } from '../web/index.js';
+import { createProductParser, prepareProductConnection, listDeviceProducts } from '../src/core/product.js';
+import { createTailProductParser } from '../src/core/products/tail-parser.js';
+import { decodeFrame } from '../src/core/frame.js';
+import { Shroom as NodeShroom } from '../src/node/index.js';
+import { Shroom as WebShroom } from '../src/web/index.js';
 import { activateTestLicense, licenseBrowserGlobals } from './license-fixture.mjs';
 
 const tail = [0xaa, 0x55, 0x03, 0x99];
@@ -97,7 +97,7 @@ test('bad and oversize segments are dropped, recovery is bounded, and reset clea
 });
 
 test('classic browser bundle exposes the same high-level product entry points', async () => {
-  const source = await readFile(new URL('../web/shroom.bundle.js', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../examples/web/shroom.bundle.js', import.meta.url), 'utf8');
   const browser = { console };
   runInNewContext(source, browser);
   for (const name of ['connectProduct', 'connectGlove', 'connectHandPad', 'listDeviceProducts']) assert.equal(typeof browser.Shroom[name], 'function');
@@ -106,7 +106,7 @@ test('classic browser bundle exposes the same high-level product entry points', 
 });
 
 test('classic browser product callback also delivers anatomical regions', async () => {
-  const source = await readFile(new URL('../web/shroom.bundle.js', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../examples/web/shroom.bundle.js', import.meta.url), 'utf8');
   const payload = new Uint8Array(274);
   for (let i = 0; i < 256; i++) payload[2 + i] = i;
   let reads = 0;

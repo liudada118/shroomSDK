@@ -19,10 +19,10 @@ async function fixture(t) {
     assert.ok(target.startsWith(join(base, 'shroom-npm-test-')));
     await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
-  for (const directory of ['core', 'backend', 'flow', 'node', 'web']) {
+  for (const directory of ['src']) {
     await cp(join(ROOT, directory), join(root, directory), { recursive: true });
   }
-  for (const file of ['package.json', 'quick-flow.js', 'quick-flow.d.ts', 'index.d.ts', 'CHANGELOG.md', 'MIGRATION.md']) {
+  for (const file of ['package.json', 'CHANGELOG.md', 'MIGRATION.md']) {
     await cp(join(ROOT, file), join(root, file));
   }
   await mkdir(join(root, 'docs'));
@@ -32,9 +32,9 @@ async function fixture(t) {
 
 test('npm package is reproducible and includes only reachable runtime, browser output and public types', async t => {
   const root = await fixture(t);
-  await writeFile(join(root, 'core/private-debug.js'), '// private-maintenance-marker\n');
-  await writeFile(join(root, 'node/customer.sqlite'), 'private-recording-marker');
-  await writeFile(join(root, 'web/client.env'), 'private-configuration-marker');
+  await writeFile(join(root, 'src/core/private-debug.js'), '// private-maintenance-marker\n');
+  await writeFile(join(root, 'src/node/customer.sqlite'), 'private-recording-marker');
+  await writeFile(join(root, 'src/web/client.env'), 'private-configuration-marker');
   const first = await packNpm({ projectRoot: root, log() {} });
   const second = await packNpm({ projectRoot: root, outputDirectory: join(root, 'second-output'), log() {} });
   assert.deepEqual(second.bytes, first.bytes, '相同输入必须生成相同 tgz 字节');
@@ -55,7 +55,7 @@ test('npm package is reproducible and includes only reachable runtime, browser o
   for (const path of entries.keys()) {
     assert.doesNotMatch(path, /private-debug|customer\.sqlite|client\.env|\.map$|(?:^|\/)demo\.js$|\.html$/);
   }
-  assert.ok(entries.get('runtime/quick-flow.js').length < (await readFile(join(root, 'quick-flow.js'))).length);
+  assert.ok(entries.get('runtime/quick-flow.js').length < (await readFile(join(root, 'src/quick-flow.js'))).length);
   for (const [key, value] of Object.entries(pkg.exports)) {
     assert.ok(value.browser.startsWith('./browser/'), `缺少浏览器入口：${key}`);
     if (value.types) assert.equal(Object.keys(value)[0], 'types');
@@ -65,8 +65,8 @@ test('npm package is reproducible and includes only reachable runtime, browser o
 
 test('npm packaging rejects a reachable directory symlink', async t => {
   const root = await fixture(t);
-  await rename(join(root, 'core'), join(root, 'core-original'));
-  try { await symlink(join(root, 'core-original'), join(root, 'core'), 'junction'); }
+  await rename(join(root, 'src/core'), join(root, 'src/core-original'));
+  try { await symlink(join(root, 'src/core-original'), join(root, 'src/core'), 'junction'); }
   catch (error) {
     if (['EPERM', 'EACCES'].includes(error.code)) return t.skip('系统不允许测试进程创建目录链接');
     throw error;

@@ -6,7 +6,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
-import { activateLicense } from '../core/license.js';
+import { activateLicense } from '../../src/core/license.js';
 
 /**
  * SHROOM_LICENSE_KEY 优先于 SHROOM_LICENSE_FILE；SHROOM_DEVICE_ID 可覆盖本机安装标识。

@@ -179,17 +179,17 @@
       下面这段是 SDK 本体，由 scripts/build-sdk-bundle.mjs 内联进来的，别手改。
       内联而不是外链一个 .js，是为了让这个 html 单独拷到任何地方都能跑 ——
       在 zip 里直接双击时，资源管理器只解出这一个文件，同目录的兄弟文件拿不到。
-      写自己的项目请用模块版：import { Shroom } from './index.js'
+      写自己的项目请用模块版：import { Shroom } from 'shroom-sdk/web'
     -->
     <script>
     /**
      * Shroom SDK 0.1.0 —— 单文件版（自动生成，别手改）
      *
-     * 由 scripts/build-sdk-bundle.mjs 从 core/ + web/ 拼出来，内容和模块版完全一致。
+     * 由 scripts/build-sdk-bundle.mjs 从 src/core/ + src/web/ 拼出来，内容和模块版完全一致。
      * 它是「经典脚本」而不是模块，所以用普通的 script 标签引进去就行，file:// 下也能加载，
      * 加载完全局多一个 Shroom 对象。
      *
-     * 正经项目里请直接 import 模块版：import { Shroom } from './web/index.js'
+     * 正经项目里请直接 import 模块版：import { Shroom } from 'shroom-sdk/web'
      */
     (function (global) {
       'use strict';
@@ -3383,7 +3383,7 @@
         if (!isSerialSupported()) {
           let message = '当前浏览器没有 Web Serial API，请改用 Chrome 或 Edge。';
           if (typeof location !== 'undefined' && location.protocol === 'file:') {
-            message = '页面是用 file:// 打开的，浏览器不会开放串口。请用本地服务器打开（SDK 目录里执行 node start.mjs）。';
+            message = '页面是用 file:// 打开的，浏览器不会开放串口。请用本地服务器打开（SDK 目录里执行 npm start）。';
           } else if (typeof window !== 'undefined' && !window.isSecureContext) {
             message = `当前地址 ${typeof location !== 'undefined' ? location.origin : ''} 不是安全上下文，浏览器不会开放串口。请改用 https 或 localhost。`;
           }

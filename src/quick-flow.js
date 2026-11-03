@@ -1,9 +1,10 @@
 /**
  * 快速接入只需要这五个函数，内部复用基础文档里的公开 API。
- * 本文件依赖同目录的 flow/、core/、node/、web/，请保留 SDK 目录结构。
+ * 源码实现集中在 src/；本入口依赖同目录的 flow/、core/、node/、web/。
+ * 客户安装后统一从 shroom-sdk/quick-flow 导入，无需了解内部目录。
  *
  * Node.js（先安装驱动、依赖，并激活 SDK 授权）：
- *   import { readProduct, createWS } from './quick-flow.js';
+ *   import { readProduct, createWS } from 'shroom-sdk/quick-flow';
  *   const device = await readProduct({
  *     product: 'glove', side: 'left', path: 'COM3', // 手垫 product='pad'，不填 side。
  *     onData: data => console.log(data), // ① 持续收到解析后的产品数据。
@@ -13,7 +14,7 @@
  *   // 退出时 await server.close()，等待文件写完并释放串口。
  *
  * 网页（同一台电脑通过 http://localhost 打开，使用 type="module"）：
- *   import { readProduct, startRecording, stopRecording, downloadRecording } from './quick-flow.js';
+ *   import { readProduct, startRecording, stopRecording, downloadRecording } from 'shroom-sdk/quick-flow';
  *   const stream = await readProduct({
  *     url: 'ws://127.0.0.1:19999', // 接收 Node 数据；HTTPS 网页需另配 WSS。
  *     onData: data => console.log(data),

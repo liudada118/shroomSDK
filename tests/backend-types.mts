@@ -1,6 +1,6 @@
 // Compile-only smoke checks: relative imports and package subpath exports.
-import { BackendSdkClient, type BackendFrame } from '../web/index.js';
-import { BackendSdkClient as NodeClient, Shroom } from '../node/index.js';
+import { BackendSdkClient, type BackendFrame } from '../src/web/index.js';
+import { BackendSdkClient as NodeClient, Shroom } from '../src/node/index.js';
 import { BackendSdkClient as PackageClient } from 'shroom-sdk/backend';
 import { BackendSdkClient as PackageNodeClient } from 'shroom-sdk/node';
 import { BackendSdkClient as PackageWebClient } from 'shroom-sdk/web';

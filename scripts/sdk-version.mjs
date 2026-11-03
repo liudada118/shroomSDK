@@ -70,7 +70,7 @@ async function planVersion(root, override) {
   const version = override ?? pkg.version;
   parseSdkVersion(version);
   const files = new Map([
-    ['core/version.js', `/** 自动生成自 package.json；请使用 npm run sdk:version，不要手动修改。 */\nexport const SDK_VERSION = '${version}';\n`],
+    ['src/core/version.js', `/** 自动生成自 package.json；请使用 npm run sdk:version，不要手动修改。 */\nexport const SDK_VERSION = '${version}';\n`],
     ['python/src/shroom_sdk/_version.py', `"""自动生成自 package.json；请通过 SDK 版本工具更新。"""\n\n__version__ = "${version}"\n`],
   ]);
   const pythonText = await readFile(resolve(root, 'python/pyproject.toml'), 'utf8');
@@ -101,7 +101,7 @@ export async function checkSdkVersion(root = VERSION_ROOT) {
     const actual = await readOptional(resolve(root, path));
     if (actual === null || normalized(actual) !== normalized(expected)) mismatches.push(path);
   }
-  for (const path of ['node/index.js', 'web/index.js']) {
+  for (const path of ['src/node/index.js', 'src/web/index.js']) {
     const text = await readFile(resolve(root, path), 'utf8');
     if (!/import\s*\{\s*SDK_VERSION\s*\}\s*from\s*['"]\.\.\/core\/version\.js['"]/.test(text)
       || !/\bversion:\s*SDK_VERSION\b/.test(text)) mismatches.push(path);

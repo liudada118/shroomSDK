@@ -1,5 +1,5 @@
-/** 将产品示例事实源同步为 SDK 根目录中可直接使用的六个完整示例。 */
-import { writeFile } from 'node:fs/promises';
+/** 将产品示例事实源同步到 examples/products/；下载 ZIP 另用默认归档布局。 */
+import { mkdir, writeFile } from 'node:fs/promises';
 import { createProductExample, getProductExampleFilename } from './product-examples.js';
 
 // 预置文案默认 Windows；macOS/Linux 可在产品接入页选择系统后生成对应提示的示例。
@@ -9,10 +9,11 @@ const configurations = [
   { product: 'glove', side: 'right' },
   { product: 'pad' },
 ];
+await mkdir(new URL('./products/', import.meta.url), { recursive: true });
 for (const configuration of configurations) {
   for (const env of ['web', 'node']) {
-    const options = { ...configuration, env, platform: 'windows', kind: 'complete' };
-    const path = new URL('../' + getProductExampleFilename(options), import.meta.url);
+    const options = { ...configuration, env, platform: 'windows', kind: 'complete', layout: 'repository' };
+    const path = new URL('./products/' + getProductExampleFilename(options), import.meta.url);
     await writeFile(path, createProductExample(options), 'utf8');
   }
 }

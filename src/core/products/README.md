@@ -62,15 +62,15 @@
 
 随后同步：
 
-- `sdk/index.d.ts` 的 `DeviceProductTypes`：为正式 ID 增加一项，包含 `names`（正式 ID 和别名）、`frame`、`node`、`web`；定义对应的产品帧和参数类型。Node/Web `connectProduct` 与快速 `readProduct` 从该映射推导参数和返回值，无需再逐个修改函数重载。
-- 验证 `sdk/quick-flow.d.ts`、Node/Web 声明对新产品的推导结果；五个函数名保持不变，运行时注册表与类型映射必须一致。
+- `src/index.d.ts` 的 `DeviceProductTypes`：为正式 ID 增加一项，包含 `names`（正式 ID 和别名）、`frame`、`node`、`web`；定义对应的产品帧和参数类型。Node/Web `connectProduct` 与快速 `readProduct` 从该映射推导参数和返回值，无需再逐个修改函数重载。
+- 验证 `src/quick-flow.d.ts`、Node/Web 声明对新产品的推导结果；五个函数名保持不变，运行时注册表与类型映射必须一致。
 - 产品字段文档、菜单和示例。新增产品不会自动获得 `createProductView()` 的绘图；需要时增加并验证视图，或由客户用 `onData` 自行展示。
 - Node/Web 模块、经典脚本与下载包中的实际接入结果。
 
-经典脚本构建会沿静态 import 自动加入注册的适配器，无需再改一份模块清单。当前拼接器仅支持 SDK 内的单行具名导入及顶层具名声明；不支持导入别名或循环依赖，共享作用域中的顶层名称要避免冲突。修改源码后重新构建，不手改 `web/shroom.bundle.js`。
+经典脚本构建会沿静态 import 自动加入注册的适配器，无需再改一份模块清单。当前拼接器仅支持 SDK 内的单行具名导入及顶层具名声明；不支持导入别名或循环依赖，共享作用域中的顶层名称要避免冲突。修改源码后重新构建，不手改 `examples/web/shroom.bundle.js`。
 
 ## 4. 用真实协议样本验证
 
 覆盖产品参数拒绝、正式 ID/别名解析、串口分块恢复、点位映射、WS 往返与损坏字段拒绝。确认原有产品、模块入口和经典脚本继续兼容，再验证五步流程的读取、录制、停止及下载。模拟样本通过后，仍需实际设备核对固件、触点与持续取数结果。
 
-客户调用见[快速接入](../../docs/QUICK-START.md)，通用串口入口见[基础与自定义](../../docs/CUSTOM.md)。
+客户调用见[快速接入](../../../docs/QUICK-START.md)，通用串口入口见[基础与自定义](../../../docs/CUSTOM.md)。

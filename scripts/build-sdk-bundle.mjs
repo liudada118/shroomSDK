@@ -1,7 +1,7 @@
 /**
  * 产出两样东西：
- *   1. web/shroom.bundle.js  —— core/ + web/ 拼成的「经典脚本」，挂 window.Shroom
- *   2. web/index.html        —— 由 index.template.html 把上面那段**内联**进去
+ *   1. examples/web/shroom.bundle.js  —— core/ + web/ 拼成的「经典脚本」，挂 window.Shroom
+ *   2. examples/web/index.html        —— 由 index.template.html 把上面那段**内联**进去
  *
  *   npm run build:sdk-bundle
  *
@@ -24,10 +24,10 @@ import { fileURLToPath } from 'node:url';
 import { Script } from 'node:vm';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const SDK = ROOT;
-const OUT = join(SDK, 'web', 'shroom.bundle.js');
-const PAGE_TEMPLATE = join(SDK, 'web', 'index.template.html');
-const PAGE_OUT = join(SDK, 'web', 'index.html');
+const SDK = join(ROOT, 'src');
+const OUT = join(ROOT, 'examples', 'web', 'shroom.bundle.js');
+const PAGE_TEMPLATE = join(ROOT, 'examples', 'web', 'index.template.html');
+const PAGE_OUT = join(ROOT, 'examples', 'web', 'index.html');
 const PLACEHOLDER = '<!--@INLINE_BUNDLE@-->';
 
 // 公共能力入口；内部产品由 registry 的静态 import 自动带入，无需在此重复登记。
@@ -100,7 +100,7 @@ function strip(source, file) {
     .trim();
 }
 
-const pkg = JSON.parse(await readFile(join(SDK, 'package.json'), 'utf8'));
+const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'));
 const { ordered: FILES, sources } = await collectBundleModules(ENTRY_FILES);
 
 const parts = [];
@@ -115,11 +115,11 @@ const body = parts.join('\n\n');
 const bundle = `/**
  * Shroom SDK ${pkg.version} —— 单文件版（自动生成，别手改）
  *
- * 由 scripts/build-sdk-bundle.mjs 从 core/ + web/ 拼出来，内容和模块版完全一致。
+ * 由 scripts/build-sdk-bundle.mjs 从 src/core/ + src/web/ 拼出来，内容和模块版完全一致。
  * 它是「经典脚本」而不是模块，所以用普通的 script 标签引进去就行，file:// 下也能加载，
  * 加载完全局多一个 Shroom 对象。
  *
- * 正经项目里请直接 import 模块版：import { Shroom } from './web/index.js'
+ * 正经项目里请直接 import 模块版：import { Shroom } from 'shroom-sdk/web'
  */
 (function (global) {
   'use strict';
@@ -174,7 +174,7 @@ ${body
 // 只编译而不执行：模块共享作用域，重名的 const/class 等必须在产物覆盖前报错。
 new Script(bundle, { filename: 'shroom.bundle.js' });
 await writeFile(OUT, bundle);
-console.log(`  已生成 web/shroom.bundle.js（${FILES.length} 个模块，${bundle.length} 字节）`);
+console.log(`  已生成 examples/web/shroom.bundle.js（${FILES.length} 个模块，${bundle.length} 字节）`);
 
 // ---------- 把 bundle 内联进示例页面 ----------
 const template = (await readFile(PAGE_TEMPLATE, 'utf8')).replace(/\r\n?/g, '\n');
@@ -194,7 +194,7 @@ const page = template.replace(
     '  下面这段是 SDK 本体，由 scripts/build-sdk-bundle.mjs 内联进来的，别手改。',
     '  内联而不是外链一个 .js，是为了让这个 html 单独拷到任何地方都能跑 ——',
     '  在 zip 里直接双击时，资源管理器只解出这一个文件，同目录的兄弟文件拿不到。',
-    "  写自己的项目请用模块版：import { Shroom } from './index.js'",
+    "  写自己的项目请用模块版：import { Shroom } from 'shroom-sdk/web'",
     '-->',
     '<script>',
     inlineSafe.trim(),
@@ -207,4 +207,4 @@ const page = template.replace(
 );
 
 await writeFile(PAGE_OUT, page);
-console.log(`  已生成 web/index.html（自包含，${page.length} 字节）`);
+console.log(`  已生成 examples/web/index.html（自包含，${page.length} 字节）`);

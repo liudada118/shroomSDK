@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createGloveRegions } from '../core/glove-regions.js';
-import { ShroomError } from '../core/errors.js';
+import { createGloveRegions } from '../src/core/glove-regions.js';
+import { ShroomError } from '../src/core/errors.js';
 
 // Independent transcription of the supplied 1-based product mapping. Never
 // derive expected results from the implementation's private lookup tables.

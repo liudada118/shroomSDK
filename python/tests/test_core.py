@@ -113,7 +113,7 @@ class FramerTests(unittest.TestCase):
                 Framer(**options)
 
 
-@unittest.skipUnless(shutil.which("node") and (Path(__file__).resolve().parents[2] / "core/frame.js").exists(),
+@unittest.skipUnless(shutil.which("node") and (Path(__file__).resolve().parents[2] / "src/core/frame.js").exists(),
                      "Cross-language parity tests require Node and the full repository's JS reference")
 class JavaScriptParityTests(unittest.TestCase):
     def reference(self, cases):

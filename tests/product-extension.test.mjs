@@ -11,7 +11,7 @@ import { runInNewContext } from 'node:vm';
 import { activateTestLicense, licenseBrowserGlobals } from './license-fixture.mjs';
 
 const workspace = fileURLToPath(new URL('../', import.meta.url));
-const sdkSource = fileURLToPath(new URL('../', import.meta.url));
+const sdkSource = fileURLToPath(new URL('../src/', import.meta.url));
 const runFile = promisify(execFile);
 
 // 第三个产品完全位于临时 SDK 副本内；生产适配器、注册表和入口不会被测试改写。
@@ -76,16 +76,19 @@ test('one adapter plus one registry entry extends the unchanged five-function fl
 }, async t => {
   // 位于仓库下才能复用已安装的 ws；临时目录只包含本测试生成的 SDK 副本。
   const root = await mkdtemp(join(workspace, '.shroom-product-extension-'));
-  const sdk = root;
+  const sdk = join(root, 'src');
   let device, server, stream;
   t.after(async () => {
     await stream?.close(); await server?.close(); await device?.close();
     assert.ok(resolve(root).startsWith(resolve(workspace) + sep));
     await rm(root, { recursive: true, force: true });
   });
+  await mkdir(sdk);
   await Promise.all(['core', 'node', 'web', 'flow', 'backend'].map(name => cp(join(sdkSource, name), join(sdk, name), { recursive: true })));
   await cp(join(sdkSource, 'quick-flow.js'), join(sdk, 'quick-flow.js'));
-  await cp(join(sdkSource, 'package.json'), join(sdk, 'package.json'));
+  await cp(join(workspace, 'package.json'), join(root, 'package.json'));
+  await mkdir(join(root, 'examples', 'web'), { recursive: true });
+  await cp(join(workspace, 'examples', 'web', 'index.template.html'), join(root, 'examples', 'web', 'index.template.html'));
   await mkdir(join(root, 'scripts'));
   await cp(join(workspace, 'scripts', 'build-sdk-bundle.mjs'), join(root, 'scripts', 'build-sdk-bundle.mjs'));
   const registryPath = join(sdk, 'core', 'products', 'registry.js');
@@ -148,7 +151,7 @@ test('one adapter plus one registry entry extends the unchanged five-function fl
 
   // 构建脚本也保持原样，注册表新增的静态依赖必须自动进入经典浏览器脚本。
   await runFile(process.execPath, [join(root, 'scripts', 'build-sdk-bundle.mjs')], { cwd: root, timeout: 15000 });
-  const bundle = await readFile(join(sdk, 'web', 'shroom.bundle.js'), 'utf8');
+  const bundle = await readFile(join(root, 'examples', 'web', 'shroom.bundle.js'), 'utf8');
   const browser = { ...licenseBrowserGlobals };
   runInNewContext(bundle, browser);
   assert.ok(browser.Shroom.listDeviceProducts().some(product => product.product === 'fixtureStrip'));

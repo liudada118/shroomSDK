@@ -10,12 +10,14 @@ export interface ProductExampleOptions {
   platform: 'windows' | 'macos' | 'linux';
   /** 默认 complete：含授权、连接、错误和清理；snippet 供已授权、已有会话管理的项目接入。 */
   kind?: 'complete' | 'snippet';
+  /** 默认 archive 保持下载 ZIP 的根目录布局；repository 用于仓库 examples/products/。 */
+  layout?: 'archive' | 'repository';
 }
 
 /**
  * 返回带中文注释的完整 HTML、Node.js 模块或接入片段。
  * 纯字符串生成，不访问 DOM，不连接硬件，不激活授权，不创建浏览器全局变量。
- * 完整示例应放在 SDK 根目录，与 web/ 和 node/ 同级，以保证相对导入路径正确。
+ * 默认完整示例放在 ZIP 根目录；layout=repository 时放在仓库 examples/products/。
  */
 export function createProductExample(options: ProductExampleOptions): string;
 

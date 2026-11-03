@@ -3,7 +3,8 @@
  * npm/pip 安装、缓存、模拟采集数据库均位于本脚本创建的临时目录，退出时清理。
  */
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 import { promisify } from 'node:util';
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
@@ -51,6 +52,44 @@ async function extract(zip, directory) {
     if (name.includes(':') || !destination.startsWith(root + sep)) throw new Error('ZIP 解压路径超出临时目录。');
     await mkdir(dirname(destination), { recursive: true });
     await writeFile(destination, bytes, { flag: 'wx' });
+  }
+}
+
+/** 从真实解压结果启动零依赖示例服务，验证入口和模块资源没有被目录迁移弄断。 */
+export async function checkZipLauncher(sdkRoot) {
+  const socket = createServer();
+  await new Promise((done, reject) => { socket.once('error', reject); socket.listen(0, '127.0.0.1', done); });
+  const port = socket.address().port;
+  await new Promise((done, reject) => socket.close(error => error ? reject(error) : done()));
+  const child = spawn(process.execPath, [join(sdkRoot, 'start.mjs'), '--no-open'], {
+    cwd: sdkRoot, env: { ...process.env, PORT: String(port) }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const closed = new Promise(done => child.once('close', done));
+  try {
+    const origin = await new Promise((done, reject) => {
+      let output = '';
+      const timer = setTimeout(() => reject(new Error('ZIP 示例启动超时：' + output)), 10000);
+      const finish = (error, url) => { clearTimeout(timer); error ? reject(error) : done(url); };
+      child.once('error', error => finish(error));
+      child.once('exit', code => finish(new Error('ZIP 示例提前退出：' + code + '\n' + output)));
+      child.stderr.on('data', data => { output += data; });
+      child.stdout.on('data', data => {
+        output += data;
+        const match = /Shroom SDK 示例已启动：(http:\/\/localhost:\d+)/.exec(output);
+        if (match) finish(null, match[1]);
+      });
+    });
+    for (const [url, file] of [['/', 'web/index.html'], ['/web/quick-start.html', 'web/quick-start.html'],
+      ['/glove-left-example.html', 'glove-left-example.html'], ['/web/index.js', 'web/index.js'],
+      ['/node/license-env.js', 'node/license-env.js']]) {
+      const response = await fetch(origin + url, { signal: AbortSignal.timeout(5000) });
+      assert.equal(response.status, 200, 'ZIP 示例资源不可访问：' + url);
+      assert.equal(await response.text(), await readFile(join(sdkRoot, file), 'utf8'));
+    }
+    console.log('Node ZIP 示例启动、页面与模块资源检查通过。');
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+    await closed;
   }
 }
 
@@ -136,6 +175,7 @@ export async function checkSdkPackages({ projectRoot = ROOT } = {}) {
     await extract(await readFile(join(projectRoot, 'dist', 'shroom-sdk-node.zip')), nodeExtraction);
     await extract(await readFile(join(projectRoot, 'dist', 'shroom-sdk-python.zip')), pythonExtraction);
     const nodeSdk = join(nodeExtraction, 'shroom-sdk-node');
+    await checkZipLauncher(nodeSdk);
     const pythonSdk = join(pythonExtraction, 'shroom-sdk-python', 'python');
     const pythonInstall = join(temporary, 'python-installed');
     const env = {

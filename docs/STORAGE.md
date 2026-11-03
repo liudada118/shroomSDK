@@ -86,7 +86,7 @@ function downloadById(recordingId) {
 
 快速方案的 `serveDevice()` 是独立 SDK 数据与录制服务，使用自己的 SQLite 数据库，不依赖 Electron 或上位机运行环境。它参考上位机的会话标签、事务批写、停止排空及按记录导出逻辑；SDK 的 `sessions / frames` 表与上位机的 `matrix` 等表不同，不直接读写上位机数据库。
 
-`BackendSdkClient.startCollection()` 仍是请求已经运行的主项目后端启动采集；是否保存文件、文件路径及数据库结构由该后端决定，不会自动变成快速方案的录制会话。已有接口见[后端通讯](../BACKEND.md)。
+`BackendSdkClient.startCollection()` 仍是请求已经运行的主项目后端启动采集；是否保存文件、文件路径及数据库结构由该后端决定，不会自动变成快速方案的录制会话。已有接口见[后端通讯](BACKEND.md)。
 
 ## 选择保存内容 {#s1}
 
@@ -143,7 +143,7 @@ python -m shroom_sdk --frames 100 --json > frames.jsonl
 
 SDK 已内置用于本地采集的 SQLite 存储及 `sessions / frames` 表。快速方案的会话列表用于查询本地录制记录，不是通用 SQL 查询接口。应用自己的业务数据库、PostgreSQL 服务、云端存储和跨设备同步需另外集成。
 
-`BackendSdkClient.startCollection()` 是请求已经运行的后端启动采集。保存路径及数据库结构取决于该后端，与独立快速服务的 SQLite 记录分开。已有接口见[后端通讯](../BACKEND.md)。
+`BackendSdkClient.startCollection()` 是请求已经运行的后端启动采集。保存路径及数据库结构取决于该后端，与独立快速服务的 SQLite 记录分开。已有接口见[后端通讯](BACKEND.md)。
 
 ## 前端职责 {#s5}
 

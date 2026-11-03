@@ -5,7 +5,7 @@
  * 直连产品：先激活 SDK，再从点击事件调用 connectGlove / connectHandPad。
  * 连接 Node 服务：connectStream 返回订阅、开始/停止录制和下载接口，记录保存在 Node 端。
  *
- *   import { Shroom } from './sdk/web/index.js'
+ *   import { Shroom } from 'shroom-sdk/web'
  *
  *   const device  = await Shroom.connect()                    // 已激活；必须在点击里调用
  *   const heatmap = Shroom.createHeatmap('#view')

@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
-import { Shroom, ShroomError, ERROR_CODES, asShroomError } from '../web/index.js';
-import { Shroom as NodeShroom } from '../node/index.js';
-import { createFramer } from '../core/framer.js';
-import { decodeFrame, resolveShape } from '../core/frame.js';
-import { createFrameHub } from '../core/device.js';
-import { serialDiagnostics } from '../core/serial-diagnostics.js';
-import { validateSerialOptions } from '../core/serial-config.js';
+import { Shroom, ShroomError, ERROR_CODES, asShroomError } from '../src/web/index.js';
+import { Shroom as NodeShroom } from '../src/node/index.js';
+import { createFramer } from '../src/core/framer.js';
+import { decodeFrame, resolveShape } from '../src/core/frame.js';
+import { createFrameHub } from '../src/core/device.js';
+import { serialDiagnostics } from '../src/core/serial-diagnostics.js';
+import { validateSerialOptions } from '../src/core/serial-config.js';
 
 const invalid = (fn, field) => assert.throws(fn, (error) =>
   error instanceof ShroomError && error.code === 'INVALID_CONFIG'
@@ -150,7 +150,7 @@ test('mock shares diagnostics/error interface, counters and idempotent close', a
 });
 
 test('classic bundle has the same error and mock contract without Node globals', async () => {
-  const source = await readFile(new URL('../web/shroom.bundle.js', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../examples/web/shroom.bundle.js', import.meta.url), 'utf8');
   let tick;
   const browser = { console, setInterval: (fn) => { tick = fn; return 1; }, clearInterval: () => {} };
   runInNewContext(source, browser);

@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { access, readFile } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import test from 'node:test';
 
@@ -145,23 +148,73 @@ test('filename factory and content factory share product and glove-side validati
     assert.throws(() => factory({ ...configuration, side: undefined }), /左右手/);
     assert.throws(() => factory({ ...configuration, platform: 'unknown' }), /Windows/);
     assert.throws(() => factory({ ...configuration, env: 'python' }), /JavaScript/);
+    assert.throws(() => factory({ ...configuration, layout: 'unknown' }), /布局/);
   }
 });
 
-test('six SDK-root examples exactly match the source factory and import existing SDK-root entries', async () => {
+test('repository layout preserves legacy archive imports and points run instructions at the real example', () => {
+  const archive = create({ ...configuration, env: 'node' });
+  const repository = create({ ...configuration, env: 'node', layout: 'repository' });
+  assert.match(archive, /from '\.\/node\/index\.js'/);
+  assert.match(archive, /"filename":"glove-left-example\.mjs"/);
+  assert.match(repository, /from '\.\.\/\.\.\/src\/node\/index\.js'/);
+  assert.match(repository, /"filename":"examples\/products\/glove-left-example\.mjs"/);
+  const page = create({ ...configuration, layout: 'repository' });
+  assert.match(page, /node scripts\/start\.mjs --no-open/);
+  assert.match(page, /http:\/\/localhost:5178\/examples\/products\/glove-left-example\.html/);
+  assert.equal(getProductExampleFilename({ ...configuration, layout: 'repository' }), getProductExampleFilename(configuration));
+});
+
+test('six repository examples exactly match their factory and import existing src entries', async () => {
   for (const productOptions of [{ product: 'glove', side: 'left' }, { product: 'glove', side: 'right' }, { product: 'pad' }]) {
     for (const env of ['web', 'node']) {
-      const options = { ...productOptions, env, platform: 'windows', kind: 'complete' };
+      const options = { ...productOptions, env, platform: 'windows', kind: 'complete', layout: 'repository' };
       const filename = getProductExampleFilename(options);
-      const path = new URL('../' + filename, import.meta.url);
+      const path = new URL('../examples/products/' + filename, import.meta.url);
       const source = await readFile(path, 'utf8');
       assert.equal(source, createProductExample(options), filename + ' must be regenerated from the factory');
       const imports = [...source.matchAll(/^import\s.+?\sfrom ['"]([^'"]+)['"];$/gm)].map((match) => match[1]);
-      assert.deepEqual(imports, env === 'web' ? ['./web/index.js'] : ['./node/index.js', './node/license-env.js']);
+      assert.deepEqual(imports, env === 'web' ? ['../../src/web/index.js'] : ['../../src/node/index.js', '../node/license-env.js']);
       for (const relativePath of imports) await access(new URL(relativePath, path));
-      if (env === 'web') await access(new URL('../start.mjs', import.meta.url));
+      if (env === 'web') await access(new URL('../scripts/start.mjs', import.meta.url));
       assert.match(source, /Windows[^\n]*产品接入页面[^\n]*重新生成/);
     }
+  }
+});
+
+test('repository launcher serves the relocated page, product example and runtime modules', async () => {
+  const reservation = createServer();
+  await new Promise((resolve, reject) => {
+    reservation.once('error', reject);
+    reservation.listen(0, '127.0.0.1', resolve);
+  });
+  const port = reservation.address().port;
+  await new Promise((resolve) => reservation.close(resolve));
+  const child = spawn(process.execPath, [fileURLToPath(new URL('../scripts/start.mjs', import.meta.url)), '--no-open'], {
+    env: { ...process.env, PORT: String(port) }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '';
+  let timer;
+  try {
+    const url = await new Promise((resolve, reject) => {
+      timer = setTimeout(() => reject(new Error('Example launcher timeout: ' + output)), 5000);
+      child.once('error', reject);
+      child.once('exit', (code) => reject(new Error('Example launcher exited: ' + code + ' ' + output)));
+      child.stdout.on('data', (chunk) => {
+        output += chunk;
+        const address = output.match(/http:\/\/localhost:\d+/)?.[0];
+        if (address) resolve(address);
+      });
+      child.stderr.on('data', (chunk) => { output += chunk; });
+    });
+    for (const path of ['/', '/examples/products/glove-left-example.html', '/src/quick-flow.js', '/src/web/index.js']) {
+      const response = await fetch(url + path);
+      assert.equal(response.status, 200, path);
+      assert.ok((await response.text()).length > 0, path);
+    }
+  } finally {
+    clearTimeout(timer);
+    child.kill();
   }
 });
 

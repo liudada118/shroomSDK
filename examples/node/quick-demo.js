@@ -1,13 +1,13 @@
 /**
- * 产品端到端演示：Node 取数，web/quick-start.html 负责查看、采集控制与下载。
- *   node node/quick-demo.js --mock --port 19999
- *   node node/quick-demo.js --path COM3 --side left --port 19999
- *   node node/quick-demo.js --product hand --path COM4 --port 19999
- * 另开终端运行 node start.mjs，再按终端显示的端口访问 web/quick-start.html。
+ * 产品端到端演示：Node 取数，examples/web/quick-start.html 负责查看、采集控制与下载。
+ *   node examples/node/quick-demo.js --mock --port 19999
+ *   node examples/node/quick-demo.js --path COM3 --side left --port 19999
+ *   node examples/node/quick-demo.js --product hand --path COM4 --port 19999
+ * 另开终端运行 node scripts/start.mjs，再按终端显示的端口访问 examples/web/quick-start.html。
  */
-import { connectGlove, connectHandPad } from './serial.js';
-import { serveDevice } from './quick-server.js';
-import { createProductMockDevice } from '../core/mock.js';
+import { connectGlove, connectHandPad } from '../../src/node/serial.js';
+import { serveDevice } from '../../src/node/quick-server.js';
+import { createProductMockDevice } from '../../src/core/mock.js';
 import { activateLicenseFromEnv } from './license-env.js';
 
 /** 严格解析有限的命令行参数，防止拼写错误悄悄选中错误的设备或产品。 */
@@ -42,7 +42,7 @@ async function main() {
   catch (error) { await device.close(); throw error; }
   console.log(`产品：${options.product}${options.product === 'hand' ? '' : ` (${options.side})`}，数据源：${device.info.source}`);
   console.log(`WS：${relay.url}；录制下载：${relay.httpUrl}/recordings/<id>.csv`);
-  console.log('另开终端运行 node start.mjs，然后打开 http://localhost:5178/web/quick-start.html；输入上面的端口。');
+  console.log('另开终端运行 node scripts/start.mjs，然后打开 http://localhost:5178/examples/web/quick-start.html；输入上面的端口。');
   console.log('录制由 Node 保存到当前目录 .shroom-recordings，网页断开不会停止录制；Ctrl+C 会写完并退出。');
   let stopping = false;
   /** 先等待入库队列排空并关闭服务，再释放串口；重复退出信号不重复收尾。 */

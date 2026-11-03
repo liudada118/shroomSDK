@@ -5,15 +5,15 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Shroom as NodeShroom } from '../node/index.js';
-import { Shroom as BrowserShroom } from '../web/index.js';
-import { createFrameHub } from '../core/device.js';
-import { decodeGlovePacket } from '../core/glove.js';
+import { Shroom as NodeShroom } from '../src/node/index.js';
+import { Shroom as BrowserShroom } from '../src/web/index.js';
+import { createFrameHub } from '../src/core/device.js';
+import { decodeGlovePacket } from '../src/core/glove.js';
 import { createServer } from 'node:http';
 import WebSocket from 'ws';
 import { EventEmitter } from 'node:events';
 import * as nodeModule from 'node:module';
-import { readProduct, createWS, startRecording, stopRecording, downloadRecording } from '../quick-flow.js';
+import { readProduct, createWS, startRecording, stopRecording, downloadRecording } from '../src/quick-flow.js';
 
 beforeEach(() => activateTestLicense());
 
@@ -42,7 +42,7 @@ function framesFrom(client, count) {
 }
 
 test('quick page groups capture start and stop together and keeps downloads separate', async () => {
-  const html = await readFile(new URL('../web/quick-start.html', import.meta.url), 'utf8');
+  const html = await readFile(new URL('../examples/web/quick-start.html', import.meta.url), 'utf8');
   const capture = html.match(/<section[^>]*aria-labelledby="capture-title"[^>]*>([\s\S]*?)<\/section>/)?.[1];
   const downloads = html.match(/<section[^>]*aria-labelledby="downloads-title"[^>]*>([\s\S]*?)<\/section>/)?.[1];
   assert.ok(capture);
@@ -57,7 +57,7 @@ test('quick page groups capture start and stop together and keeps downloads sepa
 });
 
 test('quick page highlights all seven steps with links only to available browser controls', async () => {
-  const html = await readFile(new URL('../web/quick-start.html', import.meta.url), 'utf8');
+  const html = await readFile(new URL('../examples/web/quick-start.html', import.meta.url), 'utf8');
   const flows = [...html.matchAll(/<section\b[^>]*class="sdk-quick-flow"[^>]*aria-label="快速接入完整链路"[^>]*>([\s\S]*?)<\/section>/g)];
   assert.equal(flows.length, 1, 'show the complete workflow once');
   const list = flows[0][1].match(/<ol\b[^>]*>([\s\S]*?)<\/ol>/)?.[1];

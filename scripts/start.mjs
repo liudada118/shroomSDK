@@ -1,9 +1,9 @@
 /**
  * 一个零依赖的小服务器，用来打开浏览器示例。
  *
- *   node start.mjs
+ *   npm start
  *
- * 为什么不能直接双击 web/index.html：浏览器不允许 file:// 页面加载 ES 模块，
+ * 为什么不能直接双击 examples/web/index.html：浏览器不允许 file:// 页面加载 ES 模块，
  * 而且 Web Serial 只在 https 或 localhost 下可用。跑这个脚本两个问题一起解决。
  */
 import { createServer } from 'node:http';
@@ -12,7 +12,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
-const ROOT = fileURLToPath(new URL('.', import.meta.url));
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PORT = Number(process.env.PORT) || 5178;
 // 端口被占用就顺延，不要直接崩掉
 const PORT_CANDIDATES = [PORT, PORT + 1, PORT + 2, PORT + 3, PORT + 4];
@@ -41,7 +41,7 @@ function openBrowser(url) {
 
 const server = createServer(async (req, res) => {
   let path = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-  if (path === '/') path = '/web/index.html';
+  if (path === '/') path = '/examples/web/index.html';
 
   // 防目录穿越：normalize 之后必须还在 ROOT 里
   const file = normalize(join(ROOT, path));
@@ -62,10 +62,10 @@ const server = createServer(async (req, res) => {
 
 // 跑之前先确认目录对不对 —— 在外层文件夹里跑是最常见的错误
 try {
-  await access(join(ROOT, 'web', 'index.html'));
+  await access(join(ROOT, 'examples', 'web', 'index.html'));
 } catch {
-  console.error(`\n  这个目录下没有 web/index.html：\n    ${ROOT}`);
-  console.error('  你可能在外层文件夹里运行了。先 cd 到解压出来的 shroom-sdk 目录再试。\n');
+  console.error(`\n  这个目录下没有 examples/web/index.html：\n    ${ROOT}`);
+  console.error('  请在仓库根目录运行 npm run build，生成示例后再执行 npm start。\n');
   process.exit(1);
 }
 
@@ -74,7 +74,7 @@ server.once('listening', () => {
   server.removeAllListeners('error');
   const url = `http://localhost:${server.address().port}`;
   console.log(`\n  Shroom SDK 示例已启动：${url}`);
-  console.log(`  WS、标签录制与下载示例：${url}/web/quick-start.html`);
+  console.log(`  WS、标签录制与下载示例：${url}/examples/web/quick-start.html`);
   console.log('  浏览器应该会自动打开；没打开就自己把上面这行地址复制过去。');
   console.log('  用 Chrome 或 Edge 打开，Ctrl+C 退出。\n');
   openBrowser(url);
@@ -85,7 +85,7 @@ function listen(ports) {
   const port = ports[0];
   if (port === undefined) {
     console.error(`\n  ${PORT_CANDIDATES.join('、')} 这几个端口都被占用了。`);
-    console.error('  换一个端口再试，例如：\n    PORT=6001 node start.mjs\n');
+    console.error('  换一个端口再试，例如：\n    PORT=6001 npm start\n');
     process.exit(1);
   }
   server.once('error', (err) => {

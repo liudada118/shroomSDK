@@ -1,5 +1,5 @@
 #!/bin/sh
-# macOS / Linux 上打开浏览器示例：sh start.sh
+# macOS / Linux 上打开浏览器示例：sh scripts/start.sh
 cd "$(dirname "$0")" || exit 1
 
 if ! command -v node > /dev/null 2>&1; then

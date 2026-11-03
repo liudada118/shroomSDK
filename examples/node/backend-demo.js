@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 只读示例：查询已有后端并订阅实时帧，不切换传感器、开关串口或启动采集。
-import { BackendSdkClient } from './backend.js';
+import { BackendSdkClient } from '../../src/node/backend.js';
 import { parseArgs } from 'node:util';
 
 const { values } = parseArgs({ options: {
@@ -12,7 +12,7 @@ const { values } = parseArgs({ options: {
 } });
 
 if (values.help) {
-  console.log('node node/backend-demo.js [--http URL] [--ws URL] [--channels sit,back] [--duration 10000]');
+  console.log('node examples/node/backend-demo.js [--http URL] [--ws URL] [--channels sit,back] [--duration 10000]');
   console.log('只读取后端元数据和订阅实时帧；需要已启动的主项目后端，不会自动连接设备或启动采集。');
 } else {
   const duration = Number(values.duration);

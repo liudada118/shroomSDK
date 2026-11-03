@@ -4,9 +4,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createProductFlow } from '../examples/product-flow.js';
-import { readProduct, createWS, startRecording, stopRecording, downloadRecording } from '../quick-flow.js';
-import { createFrameHub } from '../core/device.js';
-import { decodeGlovePacket } from '../core/glove.js';
+import { readProduct, createWS, startRecording, stopRecording, downloadRecording } from '../src/quick-flow.js';
+import { createFrameHub } from '../src/core/device.js';
+import { decodeGlovePacket } from '../src/core/glove.js';
 import { activateTestLicense } from './license-fixture.mjs';
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;

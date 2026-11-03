@@ -150,7 +150,7 @@ await Shroom.activateLicense(process.env.SHROOM_LICENSE_KEY, {
 
 ### 接入自己的页面 {#guide-code}
 
-在页面初始化或连接操作中执行一次 `readProduct({ url, onData, onError })`，共享返回的 `stream`，把第 3、4、5 步分别放入开始、停止与下载按钮回调。只需直接取数时停在第 1 步即可；适配新产品见[产品扩展指南](../core/products/README.md)，通用协议见[基础与自定义](CUSTOM.md)。
+在页面初始化或连接操作中执行一次 `readProduct({ url, onData, onError })`，共享返回的 `stream`，把第 3、4、5 步分别放入开始、停止与下载按钮回调。只需直接取数时停在第 1 步即可；适配新产品见[产品扩展指南](../src/core/products/README.md)，通用协议见[基础与自定义](CUSTOM.md)。
 
 ## 相关接口与旧链接 {#extensions}
 
