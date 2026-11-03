@@ -94,10 +94,27 @@ npm publish ./dist/shroom-sdk-0.1.0.tgz --access public --registry=https://regis
 
 按 npm 提示完成浏览器或命令行的双重验证（2FA）。`--dry-run` 不上传，也不能代替实际发布权限和认证检查；不要把验证码或令牌写进仓库。
 
-4. 确认官方注册表中的版本与制品，然后运行真实安装验证：
+4. 确认目标版本已经向客户开放。CLI 返回成功或打印 `+ shroom-sdk@0.1.0`，不代表该版本已经可以安装，必须查询官方注册表：
 
 ```bash
 npm view shroom-sdk@0.1.0 version dist.integrity --registry=https://registry.npmjs.org
+```
+
+如果暂时查不到目标版本，而包页面或版本列表只有 `0.0.0-stage`，先等待注册表处理，再查询精确版本和 `dist.integrity`。占位状态本身不能证明需要人工审批：本项目首次发布曾出现占位，但账号的 `stage list` 为空，数分钟后注册表才显示 SDK 说明和上传制品哈希。不要把占位版本交给客户，也不要重新上传或改动已经提交的同版本 TGZ。
+
+如需判断是否有待审制品，在 npm 网站查看 **Staged Packages**，或使用 npm 11.15.0+ 的 `stage list`；只有存在对应的待审记录时，才进入 `view / approve` 流程。Node.js 要求 22.14.0+，仓库固定的 Node.js 22.22.0 满足要求。为保留现有维护环境的 npm 10.9.4，可临时运行指定版本，不必全局升级：
+
+```bash
+npm exec --yes --package=npm@11.15.0 --registry=https://registry.npmjs.org -- npm stage list shroom-sdk --registry=https://registry.npmjs.org
+npm exec --yes --package=npm@11.15.0 --registry=https://registry.npmjs.org -- npm stage view <stage-id> --registry=https://registry.npmjs.org
+npm exec --yes --package=npm@11.15.0 --registry=https://registry.npmjs.org -- npm stage approve <stage-id> --registry=https://registry.npmjs.org
+```
+
+`list` 为空时继续等待并查询精确版本，不执行 `approve`。有待审记录时，将 `<stage-id>` 替换为对应 UUID；`list` 只传包名，不附加版本，`view / approve` 使用记录 ID。先通过 `view` 核对目标确为 `shroom-sdk@0.1.0`、预期标签、提交者及制品哈希；扫描尚未完成时等待完成，不重复上传。随后执行 `approve`，或在 **Staged Packages** 点击 **Approve**，按提示完成 2FA，再查询目标版本。流程见 [npm staged publishing 说明](https://docs.npmjs.com/staged-publishing/)与[新包支持公告](https://github.blog/changelog/2026-10-02-npm-staged-publishing-now-supports-creating-new-packages/)；命令参数已对照 [npm 11.15.0 的 stage 源码](https://github.com/npm/cli/tree/v11.15.0/lib/commands/stage)核对。
+
+5. 目标版本正式开放后，运行真实安装验证：
+
+```bash
 npm run test:npm:registry
 ```
 
