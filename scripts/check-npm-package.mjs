@@ -4,6 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
@@ -43,7 +44,9 @@ async function inspectInstalledPackage(root, version) {
   assert.equal(metadata.name, 'shroom-sdk');
   assert.equal(metadata.version, version);
   assert.equal(metadata.type, 'module');
-  assert.equal(metadata.private, true, '注册表尚未启用，保持防误发布标记');
+  assert.equal(metadata.private, false, '客户安装包应允许 npm 注册表发布');
+  assert.equal(metadata.publishConfig?.access, 'public');
+  assert.equal(metadata.publishConfig?.registry, 'https://registry.npmjs.org/');
   assert.ok(!metadata.scripts && !metadata.devDependencies, '客户安装包不能带开发脚本或开发依赖');
   const files = [];
   async function walk(directory) {
@@ -234,10 +237,11 @@ downloadRecording(stream, { format: 'xlsx' });
 await readProduct({ url: 'ws://127.0.0.1:19999', product: 'pad' });
 `;
 
-export async function checkNpmPackage({ projectRoot = ROOT, packagePath } = {}) {
+export async function checkNpmPackage({ projectRoot = ROOT, packagePath, fromRegistry = false } = {}) {
   const { version } = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8'));
   const archive = resolve(packagePath ?? join(projectRoot, 'dist', `shroom-sdk-${version}.tgz`));
-  verifyNpmArchive(await readFile(archive), version);
+  const archiveBytes = await readFile(archive);
+  verifyNpmArchive(archiveBytes, version, { requirePublishable: true });
   const npm = await npmCli();
   const temporaryRoot = resolve(tmpdir());
   const temporary = await mkdtemp(join(temporaryRoot, 'shroom-npm-consumer-'));
@@ -249,14 +253,20 @@ export async function checkNpmPackage({ projectRoot = ROOT, packagePath } = {}) 
       npm_config_devdir: join(temporary, 'node-gyp'), npm_config_fetch_retries: '1',
       npm_config_fetch_timeout: '30000', npm_config_update_notifier: 'false',
       TMPDIR: temporary, TEMP: temporary, TMP: temporary };
-    console.log('检查 npm 交付包：在独立客户项目安装 ' + basename(archive));
-    await execute([npm, 'install', '--save-exact', '--no-audit', '--no-fund', '--loglevel=error', archive],
+    const specifier = fromRegistry ? `shroom-sdk@${version}` : archive;
+    console.log('检查 npm 交付包：在独立客户项目安装 ' + (fromRegistry ? specifier : basename(archive)));
+    await execute([npm, 'install', '--save-exact', '--no-audit', '--no-fund', '--loglevel=error',
+      '--registry=https://registry.npmjs.org/', specifier],
       { cwd: consumer, env, label: 'npm 安装交付包' });
     const installed = join(consumer, 'node_modules/shroom-sdk');
     const { files } = await inspectInstalledPackage(installed, version);
     const lock = JSON.parse(await readFile(join(consumer, 'package-lock.json'), 'utf8'));
     assert.equal(lock.packages['node_modules/shroom-sdk'].version, version);
     assert.ok(lock.packages['node_modules/shroom-sdk'].integrity, '客户锁文件必须记录安装包完整性');
+    assert.equal(lock.packages['node_modules/shroom-sdk'].integrity,
+      'sha512-' + createHash('sha512').update(archiveBytes).digest('base64'), '安装内容必须与通过验证的发布包一致');
+    if (fromRegistry) assert.equal(new URL(lock.packages['node_modules/shroom-sdk'].resolved).origin,
+      'https://registry.npmjs.org', '客户必须从 npm 官方注册表获取包');
 
     await writeFile(join(consumer, 'browser-entry.js'), BROWSER_ENTRY);
     const browserBundle = join(consumer, 'browser-bundle.js');
@@ -293,5 +303,5 @@ export async function checkNpmPackage({ projectRoot = ROOT, packagePath } = {}) 
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  checkNpmPackage().catch(error => { console.error(error.message); process.exitCode = 1; });
+  checkNpmPackage({ fromRegistry: process.argv.includes('--from-registry') }).catch(error => { console.error(error.message); process.exitCode = 1; });
 }

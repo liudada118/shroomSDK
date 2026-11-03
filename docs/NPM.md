@@ -4,19 +4,23 @@
 
 ## 安装到自己的项目
 
-打开[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)，在 JavaScript / TypeScript 卡片点击 **复制安装命令**，粘贴到自己项目的终端执行即可。命令包含当前版本的完整下载地址，npm 会自动下载并安装到 `node_modules/shroom-sdk`，不用先下载、解压或复制源码。
+在自己的项目终端执行：
+
+```bash
+npm install shroom-sdk
+```
+
+npm 从注册表下载 SDK 并安装到 `node_modules/shroom-sdk`，不用先查找仓库、下载或解压源码。
 
 SDK 下载与安装不要求登记联系方式。真实设备使用的 **Shroom SDK 产品密钥另行申请**，下载完成不代表已经激活。
 
-也可以点击 **下载安装包**，在保存 `.tgz` 的目录运行以下命令；文件名以实际下载版本为准：
+需要固定版本时，使用 `npm install --save-exact shroom-sdk@0.1.0`。也可以在[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **下载安装包**，在保存 `.tgz` 的目录运行以下命令；文件名以实际下载版本为准：
 
 ```bash
 npm install --save-exact ./shroom-sdk-0.1.0.tgz
 ```
 
-**当前尚未发布到 npm 注册表，不要直接运行 `npm install shroom-sdk`。** 使用官网复制的完整命令，或安装已经下载的 `.tgz`。
-
-安装后保存项目的 `package.json` 和锁文件。使用官网 URL 安装时，其他电脑或 CI 可直接 `npm ci`；使用本地 `.tgz` 安装时，应将包放在 `vendor/` 并随项目保存，否则其他电脑找不到该文件。升级时重新复制官网对应版本的安装命令，安装后提交新的锁文件。首次安装需要能够下载运行依赖，或已有对应 npm 缓存。
+历史官网安装包 URL 仍可作为 npm 的安装来源，已有项目无需立即改写依赖。安装后保存项目的 `package.json` 和锁文件，其他电脑或 CI 使用 `npm ci`；使用本地 `.tgz` 安装时，应将包放在 `vendor/` 并随项目保存，否则其他电脑找不到该文件。升级时选择已发布的目标版本，执行 `npm install --save-exact shroom-sdk@<目标版本>` 并提交新的锁文件；使用 URL 或本地包的项目也可以继续安装对应版本制品。首次安装需要能够下载运行依赖，或已有对应 npm 缓存。
 
 ## 只导入需要的函数
 

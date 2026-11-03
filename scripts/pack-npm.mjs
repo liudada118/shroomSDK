@@ -193,7 +193,9 @@ export async function packNpm({ projectRoot = ROOT, outputDirectory, log = conso
         : { ...(current.types ? { types: current.types } : {}), browser: browserPaths.get(key),
           ...Object.fromEntries(Object.entries(current).filter(([condition]) => !['types', 'browser'].includes(condition))) }];
     }));
-    metadata.private = true;
+    // 只有经过白名单构建的交付包允许公开发布；源码仓库继续保持 private。
+    metadata.private = false;
+    metadata.publishConfig = { access: 'public', registry: 'https://registry.npmjs.org/' };
     metadata.files = ['runtime/', 'browser/', 'README.md', 'CHANGELOG.md', 'MIGRATION.md'];
     await writeFile(join(staging, 'package.json'), `${JSON.stringify(metadata, null, 2)}\n`);
     for (const [source, destination] of [['docs/NPM.md', 'README.md'], ['CHANGELOG.md', 'CHANGELOG.md'], ['MIGRATION.md', 'MIGRATION.md']]) {
@@ -209,7 +211,7 @@ export async function packNpm({ projectRoot = ROOT, outputDirectory, log = conso
     const name = `${pkg.name}-${pkg.version}.tgz`;
     assert.equal(report.filename, name, 'npm 打包文件名与 SDK 版本不一致');
     const bytes = await readFile(join(temporary, name));
-    verifyNpmArchive(bytes, pkg.version);
+    verifyNpmArchive(bytes, pkg.version, { requirePublishable: true });
     await mkdir(output, { recursive: true });
     const file = join(output, name);
     await writeFile(file, bytes);

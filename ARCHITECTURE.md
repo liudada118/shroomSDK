@@ -57,7 +57,7 @@ shroomSDK/
 
 兼容 ZIP 使用显式交付映射，将仓库源码映射回旧 `quick-flow.js`、`core|node|web|flow|backend/`、根示例与启动器；同时转换相对导入和文档链接。白名单仍排除测试、开发工具、依赖缓存和采集记录，不在源码仓库保留重复兼容文件。
 
-JavaScript 集成优先使用 `scripts/pack-npm.mjs` 生成的 `.tgz` 安装包。它根据公开入口收集实际运行模块，在独立临时目录压缩并保留类型，再交给 npm 打包；客户从 `shroom-sdk/quick-flow` 导入五个函数。Node.js 保留相对模块结构，避免复制授权会话与模拟设备身份；浏览器通过条件导出选择独立入口，并用共享代码块保持同一环境内的模块状态。包中不含开发工具、测试、Python 或 source map。根目录直接 `npm pack` / `npm publish` 会由 `prepack` 阻止，提示使用受控打包命令。
+JavaScript 集成优先使用 `npm install shroom-sdk` 从 npm 注册表安装，下载 `.tgz` 与历史官网 URL 继续可用。发布制品由 `scripts/pack-npm.mjs` 根据公开入口收集实际运行模块，在独立临时目录压缩并保留类型，再交给 npm 打包；客户从 `shroom-sdk/quick-flow` 导入五个函数。Node.js 保留相对模块结构，避免复制授权会话与模拟设备身份；浏览器通过条件导出选择独立入口，并用共享代码块保持同一环境内的模块状态。包中不含开发工具、测试、Python 或 source map。根目录直接 `npm pack` / `npm publish` 会由 `prepack` 阻止，提示使用受控打包命令。
 
 `examples/product-call.js` 与 `product-flow.js` 接受 `importStyle: 'package'`，官网由此生成 `shroom-sdk/quick-flow` 和 `shroom-sdk/node|web` 的公开包名导入；默认 `relative` 保持 ZIP 示例可运行。客户安装文档纳入 `docs/catalog.json` 的 `npm` 页面，快速接入与 AI 上下文默认使用包入口，源码 ZIP 的路径转换单独说明。
 
@@ -105,7 +105,9 @@ flowchart LR
 
 构建输出 `dist/shroom-sdk.zip`、`dist/shroom-sdk-node.zip`、`dist/shroom-sdk-python.zip` 和 `dist/shroom-sdk-<版本>.tgz`。正式版本目录有七个文件：三个带版本 ZIP、一个 npm TGZ、`manifest.json`、`SHA256SUMS`、`RELEASE-NOTES.md`。清单记录真实 Git 提交与脏状态；相同版本不允许被不同内容或不同来源覆盖。
 
-源码包与 npm 安装包保留 `private: true`，仅阻止 npm 注册表发布，不限制文件或 URL 安装，也不代表 GitHub 仓库私有。当前未启用注册表发布；客户从官网复制包含安装包完整 URL 的命令，直接安装到业务项目 `node_modules`，无需解压或登记。真实设备密钥另行申请。下载 `.tgz` 后手动安装仍可用，本地文件依赖需要随项目保存安装包与锁文件。压缩并隐藏内部导入路径用于交付管理，不能作为防篡改或授权不可绕过的保证。
+源码根包保留 `private: true` 与直接打包保护；受控生成的 npm TGZ 设为 `private: false`，`publishConfig` 指定公开访问与官方注册表。完整门禁通过后，维护者手动将已验证 TGZ 发布到 `https://registry.npmjs.org`，再执行 `npm run test:npm:registry`：从官方注册表安装当前版本，比对安装锁文件 SHA-512 与本地 TGZ，并复验五函数、WS / SQLite / CSV / JSONL、浏览器入口与类型。制品验证器默认兼容历史 `private: true` 安装包，`requirePublishable` 模式严格拒绝此类旧包作为发布制品；本地构建成功不等于远端发布成功。
+
+客户使用 `npm install shroom-sdk` 安装到业务项目 `node_modules`，无需解压或登记；真实设备密钥另行申请。下载 `.tgz` 后手动安装及历史官网 URL 仍可用，本地文件依赖需要随项目保存安装包与锁文件。压缩并隐藏内部导入路径用于交付管理，不能作为防篡改或授权不可绕过的保证。
 
 GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运行检查；`sdk-vX.Y.Z` 标签触发 Windows/macOS/Linux 检查，Linux 打包并保存附件，具有写权限的后续任务重新验证附件再创建 Release 草稿。同名 Release 不覆盖。工作流不自动发布 npm、PyPI 或部署官网。
 
@@ -137,6 +139,7 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-10-30 | npm 依赖安装交付 | 生成压缩运行代码与类型组成的 TGZ，保持五函数入口；增加客户安装、浏览器构建与类型验证，保留 ZIP 源码交付 |
 | 2026-10-30 | 官网一步安装接入说明 | 客户从官网复制安装命令；示例支持包名与 ZIP 两种导入，快速文档及 AI 上下文采用公开包入口和授权 API |
 | 2026-11-03 | SDK 源码目录归类 | 实现归入 src，演示归入 examples，维护与 AI 文档归入 docs，启动器归入 scripts；公开 npm 入口和旧 ZIP 路径保持兼容 |
+| 2026-11-03 | npm 注册表交付流程 | 精简 TGZ 支持手动公开发布，根源码保持误发布保护；新增官方注册表安装与 SHA-512 比对验证，统一 npm 安装文档并保留历史制品安装 |
 
 ## 9. 更新日志
 
@@ -147,6 +150,7 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-10-30 | 优化重构 | 增加 npm 精简安装包、受控打包与发布附件；文档区分客户安装和源码维护，说明注册表尚未发布及压缩的保护边界 |
 | 2026-10-30 | 文档更新 | 新增安装 SDK 导航，统一官网命令安装、免登记下载与密钥另行申请；保留源码 ZIP 示例的相对路径兼容 |
 | 2026-11-03 | 优化重构 | 整理源码、示例、文档和启动器，更新构建、交付映射及官网读取路径；五个函数及授权、采集语义不变 |
+| 2026-11-03 | 配置变更 | 分离源码与发布包权限，增加发布后注册表消费检查；README、快速接入、基础 API 和 AI 说明采用 npm install shroom-sdk，发布指南补充登录、2FA、预览及制品发布步骤 |
 
 ## 10. 原 SDK 历史记录
 

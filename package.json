@@ -55,6 +55,7 @@
     "pack:sdk": "npm run sdk:check && npm run build && node scripts/pack-sdk.mjs && node scripts/sdk-release-artifacts.mjs verify-latest",
     "pack:npm": "npm run sdk:check && node scripts/pack-npm.mjs",
     "test:npm": "npm run pack:npm && node scripts/check-npm-package.mjs",
+    "test:npm:registry": "node scripts/check-npm-package.mjs --from-registry",
     "prepack": "node scripts/npm-source-guard.mjs"
   },
   "optionalDependencies": {

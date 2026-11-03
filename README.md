@@ -1,13 +1,17 @@
 # Shroom SDK
 
-**一步拿到产品数据。** 在[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **复制安装命令**，粘贴到自己项目的终端执行，即可自动下载并安装到 `node_modules`。不需要查找仓库、解压或复制源码；也可直接下载 `.tgz` 安装包备用。
+**一步拿到产品数据。** 在自己项目的终端安装 SDK，无需查找仓库、解压或复制源码：
+
+```bash
+npm install shroom-sdk
+```
 
 ```js
 import { readProduct, createWS, startRecording, stopRecording, downloadRecording }
   from 'shroom-sdk/quick-flow';
 ```
 
-**当前尚未发布到 npm 注册表，请使用官网复制的完整安装命令，不要直接运行 `npm install shroom-sdk`。** SDK 免登记下载，真实设备密钥单独申请。安装包只含压缩运行代码、类型与说明；保存项目依赖和锁文件，以便重复安装。入口、升级和本地包安装见[npm 安装说明](docs/NPM.md)。压缩不等于加密，也不能防止有意修改代码。
+SDK 从 npm 注册表安装到 `node_modules/shroom-sdk`，免登记下载，真实设备密钥单独申请。[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)继续提供 `.tgz` 下载；历史安装包 URL 仍可使用。安装包只含压缩运行代码、类型与说明；保存项目依赖和锁文件，以便重复安装。入口、升级和本地包安装见[npm 安装说明](docs/NPM.md)。压缩不等于加密，也不能防止有意修改代码。
 
 当前包为 `shroom-sdk`，首次受管版本为 `0.1.0`。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)，这不是原包的兼容升级。
 

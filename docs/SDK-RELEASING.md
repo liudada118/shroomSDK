@@ -4,7 +4,7 @@
 
 实现代码集中在 `src/`，运行示例在 `examples/`，维护与启动命令在 `scripts/`。生成的 npm 包保持公开导入不变；源码 ZIP 由打包器映射为旧路径，不要为兼容交付在仓库根目录复制一套源码。
 
-日常流程：**修改源码 → 升版与更新日志 → 验证 → 提交 → 推送版本标签 → 检查 Release 草稿 → 发布**。
+日常流程：**修改源码 → 升版与更新日志 → 验证 → 提交 → 发布已验证的 npm 安装包 → 验证注册表安装**。GitHub 版本附件另走标签与 Release 草稿流程。
 
 ## 常用命令
 
@@ -22,6 +22,7 @@
 | `npm run pack:sdk` | 构建并生成当前版本的三个兼容 ZIP |
 | `npm run pack:npm` | 生成可由 npm 安装的精简 `dist/shroom-sdk-<版本>.tgz` |
 | `npm run test:npm` | 在独立客户项目实际安装 `.tgz`，检查入口、类型、浏览器构建及采集下载 |
+| `npm run test:npm:registry` | 从官方 npm 安装当前版本，核对本地 TGZ 的 SHA-512，再验证客户调用 |
 | `npm run sdk:verify` | 运行完整发布门禁 |
 | `npm run sdk:release` | 完整门禁通过后生成本地版本制品 |
 | `npm run sdk:release -- --require-clean` | 正式发布检查：干净 Git 工作区、匹配版本标签与当前提交 |
@@ -61,11 +62,48 @@ macOS/Linux 将虚拟环境解释器换成 `.venv/bin/python`，环境变量使�
 
 打包工具从公开入口收集运行依赖，在独立临时目录压缩 JavaScript 并生成安装用清单，再调用 npm 生成 `.tgz`。保留类型声明和公开入口；Node.js 模块保留共享状态，浏览器使用独立条件入口和共享代码块。安装包不含开发脚本、测试、示例生成器、Python、用户采集数据、私钥或 source map；原有 ZIP 仍提供源码和示例。
 
-客户使用 `npm install --save-exact ./shroom-sdk-<版本>.tgz`；示例和本地文件依赖的保存方式见[npm 安装说明](NPM.md)。`docs/NPM.md` 同时作为安装包内的 README，修改交付方式时同步维护该文件。
+客户默认使用 `npm install shroom-sdk`，也可以继续使用 `npm install --save-exact ./shroom-sdk-<版本>.tgz` 或历史官网安装包 URL；示例和本地文件依赖的保存方式见[npm 安装说明](NPM.md)。`docs/NPM.md` 同时作为安装包内的 README，修改该文件后必须重新构建并验证安装包。
 
-当前源码与安装包保留 `private: true`，防止误发布到 npm 注册表；它不影响本地 `.tgz` 安装，也不代表 GitHub 仓库私有。尚未设置 npm 注册表发布账号、包名归属或自动发布流程，不能将本地打包描述为 npm 已上线。后续启用注册表发布时，先确认发布身份、包名与分发权限，再更新发布配置并验证目标制品。
+源码根包继续保留 `private: true` 与 `prepack` 保护；只有受控生成的精简安装包设为 `private: false`，并通过 `publishConfig` 指定公开访问及官方注册表 `https://registry.npmjs.org`。安装包验证器默认兼容历史 `private: true` TGZ，发布检查使用 `requirePublishable` 拒绝不能发布的旧制品。本地打包成功不代表 npm 已上线，必须完成下方发布与注册表验证。
 
 压缩和不附 source map 只能减少误改与内部实现的直接暴露，不能保证防止破解。安装分发与授权校验是独立机制，本次不改变设备协议、授权权益或收费功能。
+
+## 手动发布到 npm
+
+首次注册表版本为 `shroom-sdk@0.1.0`。后续发布先升版，不能覆盖已经发布的同名同版本。以下示例文件名为 `0.1.0`，发布其他版本时替换为当前版本。
+
+1. 使用具有包发布权限的 npm 账号登录官方注册表，并确认身份：
+
+```bash
+npm login --registry=https://registry.npmjs.org
+npm whoami --registry=https://registry.npmjs.org
+```
+
+2. 执行完整验证，检查差异并提交本次源码、文档和需要跟踪的构建产物。发布前确认工作区干净，待发布文件来自这次已验证的源码；验证之后如果又修改文件，需要重新构建并验证。
+
+```bash
+npm run sdk:verify
+```
+
+3. 预览包信息后，发布验证生成的 `.tgz`。必须传入制品路径，不能在源码根目录直接运行不带路径的 `npm publish`：
+
+```bash
+npm publish ./dist/shroom-sdk-0.1.0.tgz --dry-run --access public --registry=https://registry.npmjs.org
+npm publish ./dist/shroom-sdk-0.1.0.tgz --access public --registry=https://registry.npmjs.org
+```
+
+按 npm 提示完成浏览器或命令行的双重验证（2FA）。`--dry-run` 不上传，也不能代替实际发布权限和认证检查；不要把验证码或令牌写进仓库。
+
+4. 确认官方注册表中的版本与制品，然后运行真实安装验证：
+
+```bash
+npm view shroom-sdk@0.1.0 version dist.integrity --registry=https://registry.npmjs.org
+npm run test:npm:registry
+```
+
+`test:npm:registry` 在仓库之外的临时客户项目，从官方 npm 安装 `package.json` 指定的当前版本；核对安装锁文件中的 SHA-512 与本地已验证 TGZ 一致，再验证公开入口、原生 WS / SQLite 采集、CSV / JSONL 导出、浏览器构建和 TypeScript 类型。保留本地 TGZ 供此步骤比对；仅看到版本可查询不能代替验证。发布成功后客户即可运行 `npm install shroom-sdk`，需要复现版本时使用 `npm install --save-exact shroom-sdk@0.1.0`。
+
+本流程由维护者手动执行，GitHub CI 不自动发布 npm。若发布请求中断，先查询该版本是否已经存在并运行注册表验证，再决定后续处理，避免把网络超时误认为未发布。
 
 ## 制作本地候选包
 
@@ -106,13 +144,15 @@ git push origin "sdk-v$sdkVersion"
 4. 等 Windows、macOS、Linux 检查通过。Linux 执行完整门禁并打包，后续发布任务重新校验文件哈希、干净状态和来源提交，再创建带附件的 GitHub Release 草稿。
 5. 在 GitHub 检查版本、更新说明、三个 ZIP 与一个 `.tgz`，确认后点击 **Publish release**。草稿不是已经对外发布的版本。
 
-日常分支或 PR 使用 `.github/workflows/sdk-ci.yml` 的 **SDK checks**。发布配置不会自动发布到 npm 或 PyPI；客户可安装已交付的 `.tgz`，或使用官网 ZIP 与已发布的 GitHub Release 附件。
+日常分支或 PR 使用 `.github/workflows/sdk-ci.yml` 的 **SDK checks**。GitHub 工作流不会自动发布到 npm 或 PyPI；npm 按上节手动发布，Python 继续通过 ZIP 与本地 pip 安装。客户也可使用已交付的 `.tgz`、官网 ZIP 与已发布的 GitHub Release 附件。
 
 ## 官网下载与回退
 
 官网 `shroomSDKWEB` 的 `sdk/` 是本仓库的 Git 子模块，固定到明确提交。官网文档、产品配置和版本展示读取该提交；构建时将对应 SDK 的 ZIP 和浏览器演示复制到官网 `public/`，保留 `/shroom-sdk-node.zip`、`/shroom-sdk-python.zip` 和 `/shroom-sdk.zip` 下载入口。这些兼容入口随官网构建更新，不能作为历史版本定位依据。
 
 官网不会自动跟随 SDK 的 `main`。升级官网时，先选择已验证的 SDK 提交或标签，再更新并提交官网的子模块指针，运行官网集成检查。克隆官网时使用 `git clone --recurse-submodules`；已有检出执行 `git submodule update --init --recursive`。
+
+官网的首选 JavaScript 安装命令为 `npm install shroom-sdk`；`.tgz` 下载与历史 URL 继续作为备用交付，已有 URL 依赖项目不强制迁移。npm 注册表安装的包不依赖官网子模块指针更新，官网文档和展示的版本仍需单独同步。
 
 历史发行通过 [GitHub Releases](https://github.com/liudada118/shroomSDK/releases) 的标签与附件定位；本地版本制品位于 `dist/releases/<版本>/`。网站部署仍走现有部署流程，创建或发布 GitHub Release 不会自动替换线上网站。
 

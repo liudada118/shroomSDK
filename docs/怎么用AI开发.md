@@ -6,11 +6,11 @@
 
 ## 1. 准备 SDK 和设备 {#prepare}
 
-1. 安装 Node.js 18+，到[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **复制安装命令**，在自己的项目终端执行；无需先解压源码。也可下载 `.tgz`，安装方式见[npm 安装说明](NPM.md)。SDK 免登记下载，密钥单独申请。
+1. 安装 Node.js 18+，在自己的项目终端执行 `npm install shroom-sdk`；无需先解压源码。也可下载 `.tgz`，安装方式见[npm 安装说明](NPM.md)。SDK 免登记下载，密钥单独申请。
 2. CH34x 设备先确认驱动可用：[Windows 驱动](https://shroom.jq-industries.com/drive/CH341SER.EXE) · [macOS 驱动](https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip)。安装后重新插拔，确认系统能识别串口；没有串口先查[驱动说明](DRIVERS.md)。
 3. 确认产品、左右手和实际串口；准备有效的 **Shroom SDK** 密钥，按[授权说明](LICENSE.md)在 Node.js 中激活。上位机密钥不能用于 SDK，密钥不要发进聊天或写进公开代码。
 
-手套需要选左手或右手；检测垫不用选。授权不限制设备型号，但 SDK 仍需有该产品的协议适配。安装后直接通过包名调用，不需要阅读或移动 `node_modules` 内部文件。当前尚未发布 npm 注册表，使用官网复制的完整命令。
+手套需要选左手或右手；检测垫不用选。授权不限制设备型号，但 SDK 仍需有该产品的协议适配。安装后直接通过包名调用，不需要阅读或移动 `node_modules` 内部文件。
 
 ## 2. 把说明与需求交给 AI {#give-context}
 
@@ -23,7 +23,7 @@
 > 产品是：[触觉手套 / 手部检测垫]；手套左右手是：[左 / 右]。
 > 连接设备的电脑系统是：[Windows / macOS / Linux]，实际串口是：[COM3 或其他路径]。
 > 我的项目是：[已有网页 / Node.js 程序]，希望展示：[需要的产品数据]。
-> SDK 已通过官网命令安装，函数从 shroom-sdk/quick-flow 导入，Node 基础 API 从 shroom-sdk/node 导入。
+> SDK 已通过 npm install shroom-sdk 安装，函数从 shroom-sdk/quick-flow 导入，Node 基础 API 从 shroom-sdk/node 导入。
 >
 > 先给 Node.js 取数调用，带中文注释，通过 onData 把数据交给我的业务。处理调用失败和运行中报错，不先搭整套页面或采集服务。
 > 先给调用片段，不需要生成完整 HTML 或演示工程。授权从我的本地配置读取，不在代码中写真实密钥。

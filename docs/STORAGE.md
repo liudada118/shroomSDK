@@ -23,7 +23,7 @@ stream.downloadRecording(recording.id, { format: 'csv' });
 
 帧先进入有界队列，再以每批最多 200 帧的事务写入；未满批的数据约每 250ms 刷入数据库。`frameCount` 只在事务提交成功后增加。停止采集先停止接收新记录帧，再等待队列排空和会话状态保存；实时取数与 WS 不因此关闭。写入失败必须展示错误，不能把有错误的会话提示为完整成功；停止后为零帧也不代表采集成功。
 
-在 SDK 根目录执行 `npm install`，安装快速服务所需的 `ws` 与 SQLite 驱动 `better-sqlite3`；实机取数还需要 `serialport`。`better-sqlite3` 是按功能使用的可选依赖，仅使用解析或一步取数时不需要初始化采集数据库。
+在业务项目执行 `npm install shroom-sdk`，安装 SDK 及其声明的依赖；使用源码 ZIP 时，在解压根目录执行 `npm ci`。快速服务需要 `ws` 与 SQLite 驱动 `better-sqlite3`，实机取数还需要 `serialport`。`better-sqlite3` 是按功能使用的可选依赖，仅使用解析或一步取数时不需要初始化采集数据库；开始采集前应确认该依赖安装成功。
 
 ## 采集基础 API {#recording-api}
 

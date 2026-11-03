@@ -22,14 +22,14 @@ SDK 不限制传感器型号授权；串口是否出现由系统、设备与驱�
 
 ## 使用 SDK 再查一次
 
-解压 Node.js SDK 并安装依赖后，无需激活密钥即可列出串口：
+在业务项目安装 Node.js SDK 后，无需激活密钥即可列出串口：
 
 ```bash
-npm install
-node node/demo.js --list
+npm install shroom-sdk
+node --input-type=module -e "import { Shroom } from 'shroom-sdk/node'; console.log(await Shroom.listPorts());"
 ```
 
-Python SDK 安装串口依赖后：
+使用源码 ZIP 时，在解压根目录执行 `npm ci`，再运行 `node node/demo.js --list`。Python SDK 安装串口依赖后：
 
 ```bash
 python -m shroom_sdk --list

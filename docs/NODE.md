@@ -8,14 +8,15 @@
 
 ## 安装与入口
 
-从首页下载 Node.js SDK，解压进入含有 `package.json`、`node/` 和 `web/` 的目录。以下例子均放在这个目录，以 `.mjs` 文件运行。使用 Node.js 18+。
+使用 Node.js 18+，在自己的项目中安装：
 
 ```bash
-npm install
-node node/demo.js --list
+npm install shroom-sdk
 ```
 
-`serialport` 用于真实串口，`ws` 用于没有原生 WebSocket 的 Node 环境。模拟设备无需这两项依赖。SDK 当前通过下载包或本地依赖使用，尚未发布到公共 npm 仓库。
+业务项目从 `shroom-sdk/node` 导入基础 API，快速流程从 `shroom-sdk/quick-flow` 导入。以下基础示例保留源码 ZIP 的 `./node/index.js` 写法；npm 用户将该导入改为 `shroom-sdk/node`，保存为 `.mjs` 文件运行即可。使用 ZIP 时，在含有 `package.json`、`node/` 和 `web/` 的解压目录执行 `npm ci`，再放入示例。其他安装方式见[npm 安装说明](NPM.md)。
+
+`serialport` 用于真实串口，`ws` 用于没有原生 WebSocket 的 Node 环境。模拟设备无需这两项依赖。
 
 ## 先用模拟数据
 

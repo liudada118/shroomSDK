@@ -266,3 +266,24 @@ test('npm archive validation rejects traversal, development files and missing ex
   assert.throws(() => verifyNpmArchive(tarFixture(entries), version), /缺少声明入口/);
   assert.throws(() => readNpmEntries(bytes.subarray(0, bytes.length - 8)));
 });
+
+test('registry publication requires a public official-registry package while historical private TGZs remain readable', async (t) => {
+  const context = await fixture(t);
+  const bytes = (await fixtureNpm({ projectRoot: context.root })).bytes;
+  assert.equal(verifyNpmArchive(bytes, version).private, true);
+  assert.throws(() => verifyNpmArchive(bytes, version, { requirePublishable: true }), /未启用/);
+  const entries = readNpmEntries(bytes);
+  const metadata = JSON.parse(entries.get('package.json'));
+  metadata.private = false;
+  metadata.publishConfig = { access: 'public', registry: 'https://registry.npmjs.org/' };
+  const archive = () => {
+    entries.set('package.json', Buffer.from(JSON.stringify(metadata)));
+    return tarFixture(entries);
+  };
+  assert.equal(verifyNpmArchive(archive(), version, { requirePublishable: true }).private, false);
+  metadata.publishConfig.registry = 'https://example.com/';
+  assert.throws(() => verifyNpmArchive(archive(), version, { requirePublishable: true }), /官方注册表/);
+  metadata.publishConfig.registry = 'https://registry.npmjs.org/';
+  metadata.publishConfig.access = 'restricted';
+  assert.throws(() => verifyNpmArchive(archive(), version, { requirePublishable: true }), /public/);
+});

@@ -7,7 +7,7 @@
 ## 接入前确认 {#prepare}
 
 - **驱动**：CH34x 设备需有可用串口驱动，安装在连接 USB 的电脑上。[Windows CH341SER.EXE](https://shroom.jq-industries.com/drive/CH341SER.EXE) · [macOS CH34xVCPDriver.zip](https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip)。安装后重新插拔，确认系统能列出串口；Linux 检查驱动与权限，见[驱动排查](DRIVERS.md)。
-- **安装**：Node.js 18+，从[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)复制当前版本的安装命令，在业务项目终端执行，自动下载 SDK 并安装 `serialport / ws / better-sqlite3` 等依赖。SDK 免登记下载，密钥另行申请。尚未发布 npm 注册表，不要编造 `npm install shroom-sdk` 已可用；其他方式见[npm 安装](NPM.md)。
+- **安装**：Node.js 18+，在业务项目终端执行 `npm install shroom-sdk`，通过 npm 安装 SDK 及其声明的依赖。真实串口、WS 与 SQLite 分别需要 `serialport / ws / better-sqlite3` 可用。SDK 免登记下载，密钥另行申请；固定版本、下载 `.tgz` 与历史 URL 安装见[npm 安装](NPM.md)。
 - **授权**：在 Node.js 连接实机前，按 [SDK 授权](LICENSE.md)调用 `await Shroom.activateLicense(key, { deviceId })`；`Shroom` 从 `shroom-sdk/node` 导入。应用保存稳定的安装标识，不能每次启动重新生成。仅取数需要 `serial`，完整五步还需 `stream / recording`；浏览器连接此 Node 服务时无需重复激活。不要导入精简安装包未交付的 `node/license-env.js`。
 - **产品**：手套 `product: 'glove'`，必须指定 `side: 'left' | 'right'`；检测垫 `product: 'pad'`，不传 `side`。正式 ID 分别为 `handGloveFullPacket / hand`。端口枚举不会自动识别产品。
 - **运行位置**：以下示例放在客户项目，统一从 `shroom-sdk/quick-flow` 导入；Node 使用 ESM，网页使用 Vite 等构建工具解析包名，并通过本机 `http://localhost` 访问。普通 HTML 无法直接解析包名：使用源码 ZIP，将导入改为 SDK 根目录的 `./quick-flow.js`，保留其依赖目录并以模块方式加载；不要双击 HTML。

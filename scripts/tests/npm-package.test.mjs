@@ -39,10 +39,12 @@ test('npm package is reproducible and includes only reachable runtime, browser o
   const second = await packNpm({ projectRoot: root, outputDirectory: join(root, 'second-output'), log() {} });
   assert.deepEqual(second.bytes, first.bytes, '相同输入必须生成相同 tgz 字节');
   assert.equal(relative(root, first.file), join('dist', `shroom-sdk-${first.version}.tgz`));
-  const pkg = verifyNpmArchive(first.bytes, first.version);
+  const pkg = verifyNpmArchive(first.bytes, first.version, { requirePublishable: true });
   const entries = readNpmEntries(first.bytes);
   assert.equal(entries.size, first.report.files.length);
-  assert.equal(pkg.private, true);
+  assert.equal(pkg.private, false);
+  assert.deepEqual(pkg.publishConfig, { access: 'public', registry: 'https://registry.npmjs.org/' });
+  assert.equal(JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).private, true, '源码仓库继续防止误发布');
   assert.equal(pkg.scripts, undefined);
   assert.equal(pkg.devDependencies, undefined);
   assert.deepEqual(pkg.optionalDependencies, JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).optionalDependencies);

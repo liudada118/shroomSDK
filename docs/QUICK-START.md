@@ -2,7 +2,7 @@
 
 同一台电脑上，Node.js 连接设备、创建 WS 并保存记录；浏览器连接一次，后面三步复用同一个 `stream`。下面只列 API 调用，放进自己的 Node.js 程序和网页，不需要复制完整 HTML。
 
-**运行前提**：设备驱动可用，业务项目已通过[官网安装命令](https://sdk.jq-industries.com/#downloads)安装 SDK，Node.js 已按 [SDK 授权](LICENSE.md)激活有效 SDK 产品密钥，功能包括 `serial / stream / recording`。安装和授权要点见文末[接入准备](#product-guide)。
+**运行前提**：设备驱动可用，业务项目已执行 `npm install shroom-sdk`，Node.js 已按 [SDK 授权](LICENSE.md)激活有效 SDK 产品密钥，功能包括 `serial / stream / recording`。安装和授权要点见文末[接入准备](#product-guide)。
 
 **只用五个函数**：`readProduct`、`createWS`、`startRecording`、`stopRecording`、`downloadRecording`，统一从 `shroom-sdk/quick-flow` 导入；Node.js 与浏览器分别调用各自的片段。
 
@@ -127,7 +127,13 @@ downloadRecording(stream, { format: 'csv' });
 
 ### 安装 SDK {#guide-run}
 
-到[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **复制安装命令**，在自己的项目终端执行即可。npm 会自动下载 SDK 并安装 `serialport / ws / better-sqlite3` 等依赖，不需要手动解压。SDK 免登记下载，真实设备密钥另行申请。SQLite 由 SDK 管理，无需安装独立数据库服务。尚未发布 npm 注册表，请使用官网完整命令；离线包和源码 ZIP 用法见[安装说明](NPM.md)。
+在自己的项目终端执行：
+
+```bash
+npm install shroom-sdk
+```
+
+npm 安装 SDK 及其声明的依赖，无需手动解压。真实串口、WS 与 SQLite 分别需要 `serialport / ws / better-sqlite3` 可用。SDK 免登记下载，真实设备密钥另行申请。SQLite 由 SDK 管理，无需安装独立数据库服务。固定版本、下载 `.tgz` 和源码 ZIP 用法见[安装说明](NPM.md)。
 
 ### 激活 SDK 授权 {#guide-connect}
 

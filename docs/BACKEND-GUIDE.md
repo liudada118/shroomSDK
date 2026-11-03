@@ -12,20 +12,20 @@
 
 ### Node.js 入口 {#node-import}
 
-使用 Node.js 18+。在含有 `node/`、`web/` 和 `package.json` 的 SDK 解压目录运行：
+使用 Node.js 18+。在自己的业务项目中运行：
 
 ```bash
-npm install
+npm install shroom-sdk
 ```
 
 ```js
 import { Shroom, BackendSdkClient, createFramer, decodeFrame, resolveShape,
   getLayout, listLayouts, getProduct, listProducts,
   connectGlove, connectHandPad, connectProduct, listDeviceProducts, serveDevice,
-  ShroomError, asShroomError, ERROR_CODES } from './node/index.js';
+  ShroomError, asShroomError, ERROR_CODES } from 'shroom-sdk/node';
 ```
 
-示例保存为根目录的 `.mjs` 文件，用 `node 文件名.mjs` 运行。真实串口依赖 `serialport`；快速 WS 采集服务依赖 `ws` 与 SQLite 驱动 `better-sqlite3`，均由 SDK 根目录的 `npm install` 安装。模拟数据和核心解析不需要串口硬件或采集数据库。
+示例保存为业务项目的 `.mjs` 文件，用 `node 文件名.mjs` 运行。本页其他示例中的 `./node/index.js` 是源码 ZIP 写法，npm 用户改为 `shroom-sdk/node`；使用 ZIP 时，在解压目录执行 `npm ci` 后运行。真实串口依赖 `serialport`；快速 WS 采集服务依赖 `ws` 与 SQLite 驱动 `better-sqlite3`，安装后需确认对应依赖可用。模拟数据和核心解析不需要串口硬件或采集数据库。
 
 </div>
 
@@ -47,7 +47,7 @@ from shroom_sdk import Shroom, Framer, decode_frame, resolve_shape, get_layout, 
 
 </div>
 
-SDK 使用 ZIP 或本地依赖安装，尚未发布公共 npm / PyPI 包。浏览器接入见 [前端通讯 API](FRONTEND-COMMUNICATION.md)，Canvas 见 [渲染 API](RENDERING.md)。
+JavaScript SDK 优先通过 npm 安装，下载包和历史 URL 安装方式见[npm 安装说明](NPM.md)。Python 继续使用 ZIP 与本地 pip 安装，尚未发布到 PyPI。浏览器接入见 [前端通讯 API](FRONTEND-COMMUNICATION.md)，Canvas 见 [渲染 API](RENDERING.md)。
 
 ## 串口 {#serial}
 

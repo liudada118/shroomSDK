@@ -38,7 +38,7 @@ export function readNpmEntries(bytes) {
   return entries;
 }
 
-export function verifyNpmArchive(bytes, expectedVersion) {
+export function verifyNpmArchive(bytes, expectedVersion, { requirePublishable = false } = {}) {
   const entries = readNpmEntries(bytes);
   for (const path of entries.keys()) {
     assert.ok(/^(?:package\.json|README\.md|CHANGELOG\.md|MIGRATION\.md|LICENSE(?:\.md|\.txt)?)$/.test(path)
@@ -51,7 +51,13 @@ export function verifyNpmArchive(bytes, expectedVersion) {
   assert.match(pkg.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
   if (expectedVersion) assert.equal(pkg.version, expectedVersion, 'npm 包版本与 SDK 不一致');
   assert.equal(pkg.type, 'module');
-  assert.equal(pkg.private, true, '尚未启用 npm 注册表发布');
+  // 旧官网 TGZ 保持可安装、可校验；新发布包必须明确指向官方公共注册表。
+  assert.ok(pkg.private === true || pkg.private === false, 'npm 包必须明确声明发布范围');
+  if (requirePublishable) assert.equal(pkg.private, false, '此安装包未启用 npm 注册表发布');
+  if (pkg.private === false) {
+    assert.equal(pkg.publishConfig?.access, 'public', 'npm 发布包必须声明 public');
+    assert.equal(pkg.publishConfig?.registry, 'https://registry.npmjs.org/', 'npm 发布包必须使用官方注册表');
+  }
   assert.ok(!pkg.scripts && !pkg.devDependencies, 'npm 包不能包含开发脚本或依赖');
   function checkTarget(value) {
     if (typeof value === 'string') {
