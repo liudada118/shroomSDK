@@ -1,11 +1,11 @@
 /** 五步入口的公开类型；调用方只处理产品参数、连接句柄和采集结果。 */
 import type { Frame, DeviceProductName, ProductOptionsFor, ProductFrameFor,
-  ProductDevice, FrameSource, StreamOptions, StreamDevice, RecordingSession, RecordingFormat } from './index.js';
+  NodeProductDevice, FrameSource, StreamOptions, StreamDevice, RecordingSession, RecordingFormat } from './index.js';
 import type { DeviceServer, DeviceServerOptions } from './node/index.js';
 
 /** 网页通过 WS 接收产品帧；不能同时传入 Node 串口参数。 */
 export type ReadStreamOptions<T extends Frame = Frame> = StreamOptions<T> & {
-  url: string; product?: never; path?: never; side?: never;
+  url: string; product?: never; path?: never; side?: never; reconnect?: never; onStateChange?: never;
 };
 /** 服务关闭会等待录制完成并释放 createWS 接管的设备。 */
 export interface QuickServer extends DeviceServer {
@@ -14,7 +14,7 @@ export interface QuickServer extends DeviceServer {
 export type RecordingTarget = QuickServer | StreamDevice;
 
 /** ① Node 取数；参数和返回帧从产品类型注册表推导，新增产品无需修改此函数。 */
-export function readProduct<Name extends DeviceProductName>(options: { product: Name; url?: never } & ProductOptionsFor<Name, 'node'>): Promise<ProductDevice<ProductFrameFor<Name>>>;
+export function readProduct<Name extends DeviceProductName>(options: { product: Name; url?: never } & ProductOptionsFor<Name, 'node'>): Promise<NodeProductDevice<ProductFrameFor<Name>>>;
 /** ① 网页接收 Node WS 数据；连接前失败会拒绝 Promise。 */
 export function readProduct<T extends Frame = Frame>(options: ReadStreamOptions<T>): Promise<StreamDevice<T>>;
 /** ② 创建本地 WS/HTTP 服务；创建失败会释放设备，成功后由 server.close() 统一释放。 */

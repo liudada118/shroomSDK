@@ -18,7 +18,7 @@ export function createProductCall(options) {
     env === 'web' ? '// SDK 授权完成后，在“连接”按钮的点击事件中调用。' : '// SDK 授权完成后调用；path 替换为系统中的实际串口。',
     `const device = await ${name}({`,
     ...(quickFlow ? [`  product: '${product}', // 由 SDK 注册表选择对应产品协议`] : []),
-    ...(env === 'node' ? [`  path: '${path}',`] : []),
+    ...(env === 'node' ? [`  path: '${path}', // 替换为 listPorts() 查询后用户选择的串口`] : []),
     ...(product === 'glove' ? [`  side: '${side}', // 按实际左手或右手设置`] : []),
     '  onData(data) {',
     '    // 每次收到一帧已解析的产品数据，在这里接入你的业务。',

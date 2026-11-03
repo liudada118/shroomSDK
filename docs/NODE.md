@@ -6,6 +6,8 @@
 
 整包手套与手部检测垫优先按 **选产品 → 选端口与手侧 → onData 接收数据 → 错误诊断** 接入，波特率、协议和线序由产品入口内置。通用 `connect()` 保留为进阶配置；串口查询只列端口，不识别硬件型号，每个阶段都应处理结构化错误。
 
+连接前从 `shroom-sdk/node` 导入 `listPorts()`，将返回的 `path` 展示给用户选择；不要直接取第一项。查询不打开串口，也不需要先激活授权；完整片段见[快速接入准备](QUICK-START.md#flow-ports)。
+
 ## 安装与入口
 
 使用 Node.js 18+，在自己的项目中安装：
@@ -67,6 +69,10 @@ try {
 
 产品入口省略 path 时，只在恰好一个端口时自动选择；零个为 `PORT_NOT_FOUND`、多个为 `PORT_AMBIGUOUS`。`onData / onError` 在打开前注册，避免漏首帧；连接前失败仍拒绝 Promise。产品入口不接受 baudRate、delimiter、layout 等底层覆盖。
 
+从 0.2.0 起，Node 产品入口和快速 `readProduct()` 默认开启自动重连：意外断开后按原 `path` 每 3 秒尝试一次、最多 3 次。`reconnect: false` 可关闭，`reconnect: { intervalMs, maxAttempts }` 可调整。使用 `onStateChange: status => console.log(status.state, status.attempt)` 或返回设备的 `onStateChange(handler)` 显示状态；恢复后同一 `device` 和 `onData` 继续交付数据，不需要重新创建 WS。
+
+首次打开失败不会后台重试；主动关闭、授权失效、配置或解析错误会停止。重连不重新枚举或猜测原设备，COM 号变化后需重新选择。断线会使当前录制以 `error` 收尾，重连不会自动续录；恢复后由用户开始新记录。
+
 包内也提供现成命令：
 
 ```bash
@@ -108,9 +114,9 @@ try {
 
 串口、拆帧与解码参数先校验再打开设备。查询与连接失败拒绝 Promise，运行期用 `onError(handler)` 接收 `ShroomError`，返回取消订阅函数。错误有 `code / stage / message / suggestion / details / cause`，JS 入口也导出 `ShroomError / ERROR_CODES`。
 
-串口读取、解析或断开错误会自动停止并尝试清理，应用可 `await device.close()` 确认清理结果；`CALLBACK_FAILED` 不会停止采集。Mock 的帧长在首帧前为 0、首帧后为模拟 payload 点数。
+串口断线或读取错误会报告并释放本次物理连接；启用重连时，保留逻辑设备与订阅后重试。解析或授权错误终止连接，不重试。应用可 `await device.close()` 取消后续重连并确认清理结果；`CALLBACK_FAILED` 不会停止采集或触发重连。Mock 的帧长在首帧前为 0、首帧后为模拟 payload 点数。
 
-`device.getDiagnostics()` 无参数，同步返回来源、状态、计数、最近错误与 `status / hint`。`status` 为 `waiting-data / waiting-frame / streaming / closed / error`；它描述累计观测，不能自动判定根因或证明设备仍在发送。`close()` 幂等，SDK 不自动重连；完整接口见[后端 SDK API](BACKEND-GUIDE.md#node-diagnostics)。
+`device.getDiagnostics()` 无参数，同步返回来源、状态、计数、最近错误与 `status / hint`。`status` 包括 `reconnecting / waiting-data / waiting-frame / streaming / closed / error`；恢复后需新连接实际收到字节或有效帧才更新当前接收状态，累计计数仍保留。`close()` 幂等并取消后续重试。通用 `Shroom.connect()` / `connectSerial()` 默认不重连，可传 `reconnect: true` 启用；完整接口见[后端 SDK API](BACKEND-GUIDE.md#node-reconnect)。
 
 ## 连接已有后端
 

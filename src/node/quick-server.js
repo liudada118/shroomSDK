@@ -80,6 +80,7 @@ export async function serveDevice(device, options = {}) {
   let unsubscribeStreamLicense;
   let unsubscribeRecordingLicense;
   let pendingControl = Promise.resolve();
+  let sourceFailureRevision = 0;
   const clients = new Set();
   const httpSockets = new Set();
 
@@ -167,16 +168,29 @@ export async function serveDevice(device, options = {}) {
   function startRecording(options) {
     return control(async () => {
       assertRecordingLicense();
+      assertSourceConnected();
+      const sourceRevision = sourceFailureRevision;
       const result = await recorder.start({ ...options, product: device.info?.product, side: device.info?.side, source: device.info?.source });
       try {
         if (closed) throw new ShroomError('SERVER_CLOSED', '服务已关闭。', { stage: 'serve' });
         assertRecordingLicense();
+        assertSourceConnected();
+        if (sourceRevision !== sourceFailureRevision) {
+          throw new ShroomError('RECORDING_INTERRUPTED', '开始采集期间设备断开，请确认设备恢复后重新开始。', { stage: 'recording' });
+        }
       }
       catch (error) { await recorder.abort(error); throw error; }
       unsubscribeRecordingLicense?.();
       if (!mockSource) unsubscribeRecordingLicense = watchLicense({ feature: 'recording' }, recordingLicenseInvalid);
       return result;
     });
+  }
+
+  /** 重连期间不能创建空记录；未提供 state 的自定义数据源保持既有契约。 */
+  function assertSourceConnected() {
+    if (device.state !== undefined && device.state !== 'open') {
+      throw new ShroomError('DISCONNECTED', '设备未连接或正在重连，请恢复连接后重新开始采集。', { stage: 'recording' });
+    }
   }
 
   /** 等待缓冲帧和最终元信息写入后返回记录；不会停止设备或 WS 数据流。 */
@@ -311,8 +325,11 @@ export async function serveDevice(device, options = {}) {
     }]);
     if (typeof device.onError === 'function') unsubscribeError = device.onError((error) => {
       broadcast({ type: 'error', error: publicError(error) });
-      if (!['CALLBACK_FAILED'].includes(error?.code) && recorder.status()?.status === 'recording') {
-        void recorder.abort(error).catch((cause) => broadcast({ type: 'error', error: publicError(cause) }));
+      if (error?.code !== 'CALLBACK_FAILED') {
+        sourceFailureRevision += 1;
+        if (recorder.status()?.status === 'recording') {
+          void recorder.abort(error).catch((cause) => broadcast({ type: 'error', error: publicError(cause) }));
+        }
       }
     });
     if (!mockSource) {

@@ -26,8 +26,8 @@ export async function readProduct(options) {
   optionsObject(options);
   if (Object.hasOwn(options, 'url')) {
     if (typeof options.url !== 'string' || !options.url.trim()
-      || ['product', 'path', 'side'].some(key => Object.hasOwn(options, key))) {
-      throw flowError('INVALID_CONFIG', 'WS 取数请填写 url，不要同时传入 product、path 或 side。');
+      || ['product', 'path', 'side', 'reconnect', 'onStateChange'].some(key => Object.hasOwn(options, key))) {
+      throw flowError('INVALID_CONFIG', 'WS 取数请填写 url，不要同时传入产品、串口或 Node 重连参数。');
     }
     const { connectStream } = await import('../web/index.js');
     const stream = await connectStream(options);

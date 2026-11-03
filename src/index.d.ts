@@ -73,17 +73,39 @@ export function activateLicense(key: string, options?: LicenseOptions): Promise<
 export function getLicenseStatus(): LicenseStatus;
 /** 清除当前进程内授权并通知受保护会话停止，不删除宿主持久保存的安装标识。 */
 export function clearLicense(): void;
-export type DeviceState = 'open' | 'closed' | 'error';
+export type DeviceState = 'open' | 'closed' | 'error' | 'reconnecting';
+/** Node 串口重连策略；产品连接默认启用，通用串口默认关闭。 */
+export interface SerialReconnectOptions {
+  /** 两次尝试之间的毫秒数，默认 3000。 */
+  intervalMs?: number;
+  /** 连续未恢复有效数据时的最大重连次数，默认 3。 */
+  maxAttempts?: number;
+}
+/** 低频连接状态；open 仅代表端口打开，收到有效帧才代表恢复取数。 */
+export interface SerialConnectionStatus {
+  state: DeviceState;
+  path: string;
+  attempt: number;
+  maxAttempts: number;
+}
+/** Node 专用连接选项；Web Serial 和 WS 客户端不支持自动重连。 */
+export interface NodeSerialLifecycleOptions {
+  reconnect?: boolean | SerialReconnectOptions;
+  onStateChange?: (status: SerialConnectionStatus) => void;
+}
 export interface SerialDiagnostics {
   source: DeviceInfo['source'];
   state: DeviceState;
-  status: 'waiting-data' | 'waiting-frame' | 'streaming' | 'closed' | 'error';
+  status: 'waiting-data' | 'waiting-frame' | 'streaming' | 'closed' | 'error' | 'reconnecting';
   bytesReceived: number;
   frameCount: number;
   droppedCount: number;
   frameLength: number;
   lastError: SerialErrorInfo | null;
   hint: string;
+  /** Node 串口的重连次数；累计计数与当前连接就绪状态分开。 */
+  reconnectAttempt?: number;
+  reconnectMaxAttempts?: number;
 }
 
 /** 基础矩阵帧；产品层在此之上增加产品标识、分区和原始协议字段。 */
@@ -204,6 +226,11 @@ export interface Device {
   readonly frameLength: number;
   /** 取消读取并释放连接；重复调用可复用关闭过程，关闭失败通过 Promise 报告。 */
   close(): Promise<void>;
+}
+
+/** Node 串口保留稳定句柄与订阅，重连时无需重新绑定数据回调。 */
+export interface NodeSerialDevice extends Device {
+  onStateChange(handler: (status: SerialConnectionStatus) => void): () => void;
 }
 
 /** 已核实并封装串口协议的产品；与旧 listProducts() 的展示线序清单不同。 */
@@ -396,12 +423,12 @@ export interface WebHandPadOptions extends ProductCallbacks<HandPadFrame> {
   port?: unknown;
   filters?: WebConnectOptions['filters'];
 }
-export interface NodeGloveOptions extends ProductCallbacks<GloveFrame> {
+export interface NodeGloveOptions extends ProductCallbacks<GloveFrame>, NodeSerialLifecycleOptions {
   side: 'left' | 'right';
   /** 未指定时仅一个端口可自动选择；多端口抛 PORT_AMBIGUOUS。 */
   path?: string;
 }
-export interface NodeHandPadOptions extends ProductCallbacks<HandPadFrame> {
+export interface NodeHandPadOptions extends ProductCallbacks<HandPadFrame>, NodeSerialLifecycleOptions {
   side?: never;
   path?: string;
 }
@@ -411,6 +438,9 @@ export type WebProductOptions = {
 export type NodeProductOptions = {
   [Id in DeviceProductId]: DeviceProductTypes[Id]['node'] & { product: DeviceProductTypes[Id]['names'] };
 }[DeviceProductId];
+/** Node 产品设备：五步入口与基础产品连接返回相同的稳定设备句柄。 */
+export type NodeProductDevice<T extends Frame & { product: DeviceProductId } = ProductFrame> =
+  ProductDevice<T> & Pick<NodeSerialDevice, 'onStateChange'>;
 /** 列出已有产品协议封装；不会枚举串口或扫描实物。 */
 export function listDeviceProducts(): DeviceProductInfo[];
 /** 浏览器整包手套入口：先激活授权，在用户点击中选择串口，按 side 解析分区。 */
@@ -465,8 +495,8 @@ export interface WebConnectOptions extends DecodeOptions, FramerOptions {
   port?: unknown;
 }
 
-export interface NodeConnectOptions extends DecodeOptions, FramerOptions {
-  /** 端口号，如 'COM3' / '/dev/ttyUSB0'；不填时仅单端口可自动选，多端口抛 PORT_AMBIGUOUS。 */
+export interface NodeConnectOptions extends DecodeOptions, FramerOptions, NodeSerialLifecycleOptions {
+  /** 端口号，如 'COM3' / '/dev/ttyUSB0'；通用入口不填时选第一个，产品入口拒绝多端口歧义。 */
   path?: string;
   /** 波特率，默认 1000000 */
   baudRate?: number;

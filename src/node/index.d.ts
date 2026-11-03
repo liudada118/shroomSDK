@@ -9,8 +9,8 @@ export {
   encodeStreamFrame, decodeStreamFrame, STREAM_SCHEMA,
 } from '../index.js';
 export { BackendSdkClient } from './backend.js';
-import type { NodeConnectOptions, Device, MockOptions, Frame, AsciiOptions, PortInfo, ShroomError, ERROR_CODES, asShroomError } from '../index.js';
-import type { NodeProductOptions, NodeGloveOptions, NodeHandPadOptions, ProductDevice, GloveFrame, HandPadFrame, ProductFrameFor, DeviceProductName, ProductOptionsFor, listDeviceProducts } from '../index.js';
+import type { NodeConnectOptions, Device, NodeSerialDevice, MockOptions, Frame, AsciiOptions, PortInfo, ShroomError, ERROR_CODES, asShroomError } from '../index.js';
+import type { NodeProductOptions, NodeGloveOptions, NodeHandPadOptions, NodeProductDevice, GloveFrame, HandPadFrame, ProductFrameFor, DeviceProductName, ProductOptionsFor, listDeviceProducts } from '../index.js';
 import type { FrameSource, RecordingSession, encodeStreamFrame, decodeStreamFrame, STREAM_SCHEMA } from '../index.js';
 import type { activateLicense, getLicenseStatus, clearLicense } from '../index.js';
 
@@ -55,13 +55,15 @@ export interface DeviceServer {
 export function serveDevice<T extends Frame>(device: FrameSource<T>, options?: DeviceServerOptions): Promise<DeviceServer>;
 
 /** 通用串口连接，按传入协议配置拆帧；多端口时建议明确 path。 */
-export function connectSerial(options?: NodeConnectOptions): Promise<Device>;
+export function connectSerial(options?: NodeConnectOptions): Promise<NodeSerialDevice>;
+/** 查询本机串口及元信息，不打开设备，也不要求激活 SDK 授权。 */
+export function listPorts(): Promise<PortInfo[]>;
 /** 连接整包手套，side 必须明确；onData 返回手指、手掌和原始 IMU。 */
-export function connectGlove(options: NodeGloveOptions): Promise<ProductDevice<GloveFrame>>;
+export function connectGlove(options: NodeGloveOptions): Promise<NodeProductDevice<GloveFrame>>;
 /** 连接手部检测垫，使用内置 32×32 矩阵协议，无需填写 side。 */
-export function connectHandPad(options?: NodeHandPadOptions): Promise<ProductDevice<HandPadFrame>>;
+export function connectHandPad(options?: NodeHandPadOptions): Promise<NodeProductDevice<HandPadFrame>>;
 /** 产品类型由统一类型注册表推导，支持别名；未指定 path 且有多个串口时拒绝猜测。 */
-export function connectProduct<Name extends DeviceProductName>(options: { product: Name } & ProductOptionsFor<Name, 'node'>): Promise<ProductDevice<ProductFrameFor<Name>>>;
+export function connectProduct<Name extends DeviceProductName>(options: { product: Name } & ProductOptionsFor<Name, 'node'>): Promise<NodeProductDevice<ProductFrameFor<Name>>>;
 /** 具名导出的便捷集合；connect 为通用串口入口，mock 为通用矩阵模拟源。 */
 export const Shroom: {
   activateLicense: typeof activateLicense;
@@ -78,7 +80,7 @@ export const Shroom: {
   encodeStreamFrame: typeof encodeStreamFrame;
   decodeStreamFrame: typeof decodeStreamFrame;
   STREAM_SCHEMA: typeof STREAM_SCHEMA;
-  connect(options?: NodeConnectOptions): Promise<Device>;
+  connect(options?: NodeConnectOptions): Promise<NodeSerialDevice>;
   mock(options?: MockOptions): Device;
   listPorts(): Promise<PortInfo[]>;
   renderAscii(frame: Frame, options?: AsciiOptions): string;

@@ -1,15 +1,20 @@
 import { readProduct, createWS, startRecording, stopRecording, downloadRecording } from 'shroom-sdk/quick-flow';
-import { connectProduct as connectNodeProduct } from 'shroom-sdk/node';
+import { connectProduct as connectNodeProduct, listPorts, type SerialConnectionStatus } from 'shroom-sdk/node';
 import { connectProduct as connectWebProduct, type GloveFrame, type HandPadFrame } from 'shroom-sdk';
 
 async function fiveFunctions() {
+  const ports = await listPorts();
+  const path: string | undefined = ports[0]?.path;
+  void path;
   const glove = await readProduct({ product: 'glove', side: 'left', onData(frame) {
     const data: GloveFrame = frame; void data.fingers;
   } });
   glove.onData(frame => { const data: GloveFrame = frame; void data.imu; });
-  const pad = await readProduct({ product: 'pad', onData(frame) {
+  const pad = await readProduct({ product: 'pad', reconnect: { intervalMs: 3000, maxAttempts: 3 },
+    onStateChange(status) { const state: SerialConnectionStatus = status; void state.attempt; }, onData(frame) {
     const data: HandPadFrame = frame; void data.pressureMatrix;
   } });
+  pad.onStateChange(status => { void status.state; });
   const server = await createWS(pad);
   const stream = await readProduct<GloveFrame>({ url: server.url, onData(frame) { void frame.palm; } });
   await startRecording(stream, { label: '抓握' });
@@ -40,3 +45,10 @@ declare const unselectedProduct: 'glove' | 'pad';
 void readProduct({ product: unselectedProduct });
 // @ts-expect-error 显式联合泛型也必须保持产品与参数的对应关系。
 void readProduct<'glove' | 'pad'>({ product: 'glove' });
+
+// @ts-expect-error Web 产品连接不接受 Node 重连参数。
+void connectWebProduct({ product: 'pad', reconnect: true });
+// @ts-expect-error WS 入口不能误用串口重连配置。
+void readProduct({ url: 'ws://localhost:19999', reconnect: true });
+// @ts-expect-error 重连策略只接受规定的字段。
+void readProduct({ product: 'pad', reconnect: { retries: 3 } });

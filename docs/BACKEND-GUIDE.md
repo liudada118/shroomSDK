@@ -21,7 +21,7 @@ npm install shroom-sdk
 ```js
 import { Shroom, BackendSdkClient, createFramer, decodeFrame, resolveShape,
   getLayout, listLayouts, getProduct, listProducts,
-  connectGlove, connectHandPad, connectProduct, listDeviceProducts, serveDevice,
+  connectGlove, connectHandPad, connectProduct, listDeviceProducts, listPorts, serveDevice,
   ShroomError, asShroomError, ERROR_CODES } from 'shroom-sdk/node';
 ```
 
@@ -68,8 +68,10 @@ Node.js / 浏览器连接已封装的整包手套与手部检测垫时，优先�
 | `port / filters` | 浏览器串口对象 / 筛选数组 | 仅浏览器可选；未给 port 时由用户选择端口 |
 | `onData` | `(data) => void` | 可选，在打开前注册的数据回调 |
 | `onError` | `(error: ShroomError) => void` | 可选，在打开前注册的运行错误回调 |
+| `reconnect` | `boolean \| { intervalMs?: number, maxAttempts?: number }` | 仅 Node；默认开启，间隔 3000ms、最多 3 次；`false` 关闭 |
+| `onStateChange` | `(status) => void` | 仅 Node；接收 `state / path / attempt / maxAttempts` |
 
-**返回值**：`Promise<ProductDevice<GloveFrame>>`；产品设备有 `onData / onFrame / onError / state / getDiagnostics() / close()`，`info` 含 product、label、side，数据字段见[产品帧](#node-product-data)。具名 `connectGlove()` 是相同入口。
+**返回值**：产品设备的 Promise；产品设备有 `onData / onFrame / onError / state / getDiagnostics() / close()`，Node 还提供 `onStateChange(handler)`。`info` 含 product、label、side，数据字段见[产品帧](#node-product-data)。具名 `connectGlove()` 是相同入口。
 
 **示例**：
 
@@ -97,9 +99,9 @@ try {
 
 **用途**：连接手部检测垫 `hand`，内置 1000000 波特率、1024 点、32×32 与 `mat32` 点位映射。
 
-**参数**：可选对象；Node 使用 `path / onData / onError`，浏览器使用 `port / filters / onData / onError`。端口选择、回调注册和错误行为与 `connectGlove()` 相同，不需要 side。
+**参数**：可选对象；Node 使用 `path / onData / onError / reconnect / onStateChange`，浏览器使用 `port / filters / onData / onError`。端口选择、回调注册和错误行为与 `connectGlove()` 相同，不需要 side。
 
-**返回值**：`Promise<ProductDevice<HandPadFrame>>`，支持相同的产品设备方法；具名 `connectHandPad()` 是相同入口。
+**返回值**：Node 为 `Promise<NodeProductDevice<HandPadFrame>>`，浏览器为 `Promise<ProductDevice<HandPadFrame>>`；支持相同的产品数据方法，Node 另有状态订阅。具名 `connectHandPad()` 是相同入口。
 
 **示例**：
 
@@ -203,7 +205,7 @@ import { Shroom } from './node/index.js';
 console.log(await Shroom.listPorts());
 ```
 
-**注意事项**：需要 `serialport`。查询失败拒绝为 `ShroomError`；空数组表示没有可见端口。端口路径如 `COM3`、`/dev/ttyUSB0`，查询不会识别产品、协议或线序。
+**注意事项**：需要 `serialport`，无需先激活授权，也不会打开端口。查询失败拒绝为 `ShroomError`；空数组表示没有可见端口。端口路径如 `COM3`、`/dev/ttyUSB0`，查询不会识别产品、协议或线序。将列表展示给用户选择，把选中的 `path` 传给产品入口；插拔后可重新查询，不能默认连接第一项。
 
 ### Shroom.connect(options) {#node-connect}
 
@@ -217,8 +219,10 @@ console.log(await Shroom.listPorts());
 | `baudRate` | `number` | `1000000`，正整数，与设备一致 |
 | `delimiter / minLength / maxLength / lockLength` | 分帧选项 | 同 `createFramer()` |
 | `rows / cols / points / fullScale / threshold / layout` | 解码选项 | 同 `decodeFrame()` |
+| `reconnect` | `boolean \| { intervalMs?: number, maxAttempts?: number }` | 默认 `false`；开启后默认间隔 3000ms、最多 3 次 |
+| `onStateChange` | `(status) => void` | 连接状态回调，字段见[自动重连](#node-reconnect) |
 
-**返回值**：`Promise<Device>`；查询、配置或打开失败以 `ShroomError` 拒绝 Promise，成功后用 `onFrame()` 接收帧。
+**返回值**：`Promise<NodeSerialDevice>`；查询、配置或打开失败以 `ShroomError` 拒绝 Promise，成功后用 `onFrame()` 接收帧。
 
 **示例**：
 
@@ -230,7 +234,38 @@ const unsubscribe = device.onFrame((frame) => console.log(frame.max));
 process.once('SIGINT', async () => { unsubscribe(); await device.close(); });
 ```
 
-**注意事项**：先校验串口、拆帧及解码配置，再打开端口；参数限制见下面对应接口。端口不存在、占用或权限不足时失败；不要与上位机共用同一端口。JS `Device` 没有 `write()` 或 `device.on('error')`，运行期使用 `onError()`；SDK 不自动重连。
+**注意事项**：先校验串口、拆帧及解码配置，再打开端口；参数限制见下面对应接口。端口不存在、占用或权限不足时失败；不要与上位机共用同一端口。JS `Device` 没有 `write()` 或 `device.on('error')`，运行期使用 `onError()`。通用 Node 入口默认不重连，可显式启用；产品入口默认启用。
+
+### Node 自动重连与 device.onStateChange(handler) {#node-reconnect}
+
+**用途**：在一次成功连接后，自动恢复意外断开的原串口，保留同一设备句柄、数据订阅及其 WS 服务。五步入口仍是原来的五个函数；重连由 Node 基础串口模块处理。
+
+| 配置或状态 | 说明 |
+| --- | --- |
+| `reconnect` 省略 | Node 产品入口开启；通用 `connectSerial / Shroom.connect` 关闭 |
+| `reconnect: false / true` | 明确关闭或按默认值开启 |
+| `reconnect: { intervalMs, maxAttempts }` | 自定义间隔和次数；缺省项为 3000ms、3 次。`intervalMs` 为 1–2147483647 的整数，`maxAttempts` 为 1–1000 的整数；关闭使用 `false` |
+| `onStateChange(status)` | 连接选项中的回调；也可用 `device.onStateChange(handler)` 订阅，返回取消订阅函数 |
+| `status.state` | `open / reconnecting / error / closed` |
+| `status.path` | 此逻辑设备使用的原串口路径 |
+| `status.attempt / maxAttempts` | 重连尝试次数和配置上限；收到有效新帧后重置计数 |
+
+```js
+const device = await Shroom.connectHandPad({
+  path: 'COM3', // 使用 listPorts 查询后用户选定的端口。
+  reconnect: { intervalMs: 3000, maxAttempts: 3 },
+  onStateChange: status => console.log(status.state, status.attempt),
+  onData: data => console.log(data.pressureMatrix),
+  onError: error => console.error(error.code, error.message),
+});
+// 主动退出时取消重连并释放资源：await device.close();
+```
+
+首次打开失败拒绝 Promise，不转入后台重试。只有意外断线或读取失败触发恢复；主动 `close()`、授权失效、配置和解析错误不会重连，回调错误不会启动重连。关闭未确认时不能重新抢占端口；重连会清空旧连接的半帧，不混合旧连接的迟到数据。只按原 `path` 重试，不自动匹配换号后的设备；COM 号改变需要重新查询和选择。
+
+每次重连打开最多等待 10 秒，旧连接关闭最多等待 3 秒；这些内部保护时限不作为公开配置。旧端口关闭失败或超时会终止自动重试并保持 `error`，避免仍占用端口时并发打开。重连打开超时按失败次数计入上限。
+
+状态回调可能在连接 Promise 完成前触发，不要引用尚未赋值的 `device`。`open` 表示串口已打开，不代表已经有有效产品帧。断线仍通过 `onError` 报告并使当前录制以 `error` 收尾，已接收数据保留；恢复只继续实时取数，新的采集必须由用户重新开始。Web Serial、浏览器 WS 客户端与 Python 不支持这些 Node 重连配置。
 
 ### Shroom.mock(options) {#node-mock}
 
@@ -288,13 +323,13 @@ const offError = device.onError((error) => {
 // 某个模块不再处理错误时：offError();
 ```
 
-**注意事项**：查询、配置和连接尚未成功时的失败由相应 Promise 拒绝，不会交给这个监听。串口读取、解析或断开错误会自动停止并尝试清理，应用可检查快照并 `await device.close()` 确认清理结果，再决定何时重新连接。应用帧回调异常报告为 `CALLBACK_FAILED`、阶段为 `callback`，不会停止采集或中断其他帧订阅，不应当作设备断线。错误回调异常不会阻止其他监听。
+**注意事项**：查询、配置和首次连接尚未成功时的失败由相应 Promise 拒绝，不会交给这个监听。Node 串口开启重连时，可恢复的读取或断开错误会报告到这里，并由同一设备自动重试；用 `onStateChange` 区分正在恢复和最终失败，不要在每次错误回调中调用 `close()`，否则会取消重连。解析错误、授权失效、清理失败等终止连接；Web Serial 和未开启重连的 Node 连接由应用决定何时重新连接。应用帧回调异常报告为 `CALLBACK_FAILED`、阶段为 `callback`，不会停止设备或中断其他帧订阅，不应当作设备断线。错误回调异常不会阻止其他监听。
 
 ### device.state / getDiagnostics() {#node-diagnostics}
 
 **用途**：读取串口或 Mock 的生命周期与诊断快照。
 
-**参数**：无。**返回值**：`state` 为 `'open' | 'closed' | 'error'`；`getDiagnostics()` 同步返回 `{ source, state, bytesReceived, frameCount, droppedCount, frameLength, lastError, status, hint }`。
+**参数**：无。**返回值**：Node 串口 `state` 为 `'open' | 'reconnecting' | 'closed' | 'error'`；`getDiagnostics()` 同步返回 `{ source, state, bytesReceived, frameCount, droppedCount, frameLength, lastError, status, hint }`，并提供 `reconnectAttempt / reconnectMaxAttempts`。重连中的 `status` 为 `reconnecting`；累计字节与帧数保留，但恢复后的接收状态使用新连接的实际数据判断。Web 和 Mock 没有重连状态。
 
 **示例**：`console.log(device.state, device.getDiagnostics())`。
 
@@ -333,7 +368,8 @@ try {
 | `PORT_NOT_FOUND / PORT_AMBIGUOUS` | 重新查询并明确选择端口 |
 | `PERMISSION_DENIED / PORT_BUSY / CONNECTION_FAILED` | 核对权限、占用、驱动与原始原因 |
 | `UNSUPPORTED_ENVIRONMENT / USER_CANCELLED` | 浏览器环境不支持，或用户取消选择；取消可单独静默处理 |
-| `DISCONNECTED / READ_FAILED / PARSE_FAILED / CLOSE_FAILED` | 串口读取、解析或断开错误自动停止并尝试清理；应用用 close() 确认结果并处理关闭失败，决定何时恢复 |
+| `DISCONNECTED / READ_FAILED` | 开启重连的 Node 连接按策略恢复，用状态回调区分正在重试和最终失败；其他连接由应用重新连接 |
+| `PARSE_FAILED / CLOSE_FAILED` | 终止连接与重试；先处理协议或端口清理问题，再重新连接 |
 | `CALLBACK_FAILED` | 检查应用帧回调，设备不一定发生故障 |
 
 ### device.close() {#node-close}
@@ -342,7 +378,7 @@ try {
 
 **参数**：无。**返回值**：`Promise<void>`。**示例**：`await device.close()`。
 
-**注意事项**：在程序退出或组件卸载时显式释放设备。重复调用幂等；正常关闭后 `state` 为 `closed`，不再产帧；故障释放后可保留 `error` 状态及最近错误供排查。SDK 不会自动重连。
+**注意事项**：在程序退出或组件卸载时显式释放设备。重复调用幂等；主动关闭会取消已安排及进行中的重连，正常关闭后 `state` 为 `closed`，不再产帧。终止故障后可保留 `error` 状态及最近错误供排查。自动重连不等于重新调用此已关闭设备；主动关闭后需要新的连接调用。
 
 ### createFramer(options) {#node-framer}
 
@@ -771,7 +807,7 @@ print(Shroom.render_ascii(frame, width=16, gain=1.0))
 | Node.js / Python 字段 | 说明 |
 | --- | --- |
 | `info` | 来源、端口、波特率或 Mock 配置；未推断行列可能为空 |
-| `state` | `open / closed / error` 生命周期状态 |
+| `state` | `open / closed / error` 生命周期状态；Node 串口启用重连时还可能为 `reconnecting` |
 | `bytesReceived / bytes_received` | 真实串口收到的字节数，为零时优先检查设备发送 |
 | `frameCount / frame_count` | 成功切出的 payload 数；字节增长而它不增长时检查协议 |
 | `droppedCount / dropped_count` | 无效或不匹配锁定长度的丢帧数 |
@@ -779,7 +815,7 @@ print(Shroom.render_ascii(frame, width=16, gain=1.0))
 | `lastError / last_error` | 最近错误的可序列化快照，无错误时为 null / None；不含 cause |
 | `status / hint` | 当前观测分类和检查建议，来自诊断快照 |
 
-`getDiagnostics() / get_diagnostics()` 对串口与 Mock 均可用；Mock 的字节数和帧数反映模拟生成量，两种语言的帧长都在首帧前为 0、首帧后为模拟 payload 点数，丢帧为 0，不能视为串口吞吐。`status` 为 `waiting-data`（还没有字节）、`waiting-frame`（有字节尚未成帧）、`streaming`（曾产出帧）、`closed` 或 `error`。计数和 hint 用于缩小排查范围，不能自动判定根因；`streaming` 不证明设备仍在持续发送，也不代表协议、尺寸与线序都正确。Python 串口 frame_count 统计切帧器接受的 payload 数，批量读取时可能大于已返回给应用的 Frame 数。info 的行列为调用配置，应以实际 Frame 的尺寸为准。真机排错见 [串口参考](SERIAL.md)。
+`getDiagnostics() / get_diagnostics()` 对串口与 Mock 均可用；Mock 的字节数和帧数反映模拟生成量，两种语言的帧长都在首帧前为 0、首帧后为模拟 payload 点数，丢帧为 0，不能视为串口吞吐。`status` 为 `waiting-data`（还没有字节）、`waiting-frame`（有字节尚未成帧）、`streaming`（曾产出帧）、`closed` 或 `error`；Node 串口另有 `reconnecting`，其恢复后的收数状态按本次连接判断。Node 的 `reconnectAttempt / reconnectMaxAttempts` 显示当前重连次数和上限，新连接收到有效帧后才清零次数。累计计数和 hint 用于缩小排查范围，不能自动判定根因；`streaming` 不证明设备仍在持续发送，也不代表协议、尺寸与线序都正确。Python 串口 frame_count 统计切帧器接受的 payload 数，批量读取时可能大于已返回给应用的 Frame 数。info 的行列为调用配置，应以实际 Frame 的尺寸为准。真机排错见 [串口参考](SERIAL.md)。
 
 ## 通讯 {#communication}
 

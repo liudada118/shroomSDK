@@ -15,7 +15,7 @@ export function listDeviceProducts() {
  * @param {object} options 产品名、串口路径/浏览器端口、手侧和 onData / onError 回调。
  * @returns {object} 串口入口使用的配置、独立解析器、产品信息与原回调；不会连接设备。
  */
-export function prepareProductConnection(options = {}) {
+export function prepareProductConnection(options = {}, runtime = 'web') {
   const invalid = (field, message) => {
     throw new ShroomError('INVALID_CONFIG', message, { stage: 'configure', details: { field } });
   };
@@ -27,10 +27,11 @@ export function prepareProductConnection(options = {}) {
   }
   const profile = adapter.profile;
   const allowed = new Set(['product', 'path', 'port', 'filters', 'onData', 'onError', ...adapter.optionFields]);
+  if (runtime === 'node') { allowed.add('reconnect'); allowed.add('onStateChange'); }
   for (const field of Object.keys(options)) {
     if (!allowed.has(field)) invalid(field, `产品接口不接受 ${field}；波特率、分帧和线序已经内置。自定义协议请使用 connect()。`);
   }
-  for (const field of ['onData', 'onError']) {
+  for (const field of ['onData', 'onError', ...(runtime === 'node' ? ['onStateChange'] : [])]) {
     if (options[field] !== undefined && typeof options[field] !== 'function') invalid(field, `${field} 必须是函数。`);
   }
   adapter.validateOptions(options, invalid);
@@ -39,6 +40,7 @@ export function prepareProductConnection(options = {}) {
     ...(options.path === undefined ? {} : { path: options.path }),
     ...(options.port === undefined ? {} : { port: options.port }),
     ...(options.filters === undefined ? {} : { filters: options.filters }),
+    ...(runtime === 'node' ? { reconnect: options.reconnect === undefined ? true : options.reconnect, onStateChange: options.onStateChange } : {}),
   };
   return {
     serialOptions,

@@ -1,6 +1,6 @@
 {
   "name": "shroom-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shroom 产品 SDK：取数、WS、分区渲染、带标签录制与下载",
   "type": "module",
   "types": "src/index.d.ts",

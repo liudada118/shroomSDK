@@ -4,6 +4,21 @@
 
 本文件记录 `shroom-sdk` 的版本。仓库原有 `shroom-backend-sdk@0.2.0` 属于另一套包与接口；其更新日志和代码保留在 `legacy-backend-sdk-0.2.0` 标签，迁移差异见 [MIGRATION.md](https://github.com/liudada118/shroomSDK/blob/main/MIGRATION.md)。两个包的版本号不构成升级或降级关系。
 
+## [0.2.0] - 2026-11-03
+
+### Node.js 串口与快速流程
+
+- Node.js 的 `connectProduct / connectGlove / connectHandPad` 和快速 `readProduct` 默认开启自动重连：意外断线后重试原串口，每 3 秒一次、最多 3 次。可设置 `reconnect: false` 保持关闭，或用 `{ intervalMs, maxAttempts }` 调整策略。通用 `connectSerial / Shroom.connect` 默认仍关闭。
+- 新增 `onStateChange` 选项与 `device.onStateChange()`，报告 `open / reconnecting / error / closed` 和尝试次数。重连保留同一设备对象、数据订阅和快速 WS 服务；有效帧到达后才清零尝试次数，诊断按本次连接判断是否恢复收数。
+- 首次连接失败仍拒绝 Promise，不进入后台重试。主动关闭、授权失效、解析错误或端口清理失败终止重试；只恢复原 `path`，设备改用新 COM 号时需重新查询并选择。
+- 断线将当前 SQLite 采集以 `error` 收尾，保留已采数据供导出；重连只恢复实时数据，重新录制由应用显式调用 `startRecording`。
+- 快速接入补充 `listPorts()` 搜索与用户选择串口，使用 `shroom-sdk/node` 基础入口。五个快速函数及其用途不变，README、npm、基础 API 和 AI 接入说明同步更新。
+
+### 兼容范围
+
+- Node 产品连接的默认行为发生变化；需要原先断线后完全由业务处理的项目，升级时显式传入 `reconnect: false`。
+- Web Serial、浏览器 WebSocket 客户端和 Python 未增加自动重连。Python 包版本随本次发行同步，语言能力仍以 Python 文档为准。
+
 ## [0.1.0] - 2026-10-29
 
 首次建立受管发布基线，汇总当前已有功能，并补齐版本、测试和制品追踪流程。

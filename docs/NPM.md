@@ -14,10 +14,10 @@ npm 从注册表下载 SDK 并安装到 `node_modules/shroom-sdk`，不用先查
 
 SDK 下载与安装不要求登记联系方式。真实设备使用的 **Shroom SDK 产品密钥另行申请**，下载完成不代表已经激活。
 
-需要固定版本时，使用 `npm install --save-exact shroom-sdk@0.1.0`。也可以在[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **下载安装包**，在保存 `.tgz` 的目录运行以下命令；文件名以实际下载版本为准：
+需要固定版本时，使用 `npm install --save-exact shroom-sdk@0.2.0`。也可以在[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **下载安装包**，在保存 `.tgz` 的目录运行以下命令；文件名以实际下载版本为准：
 
 ```bash
-npm install --save-exact ./shroom-sdk-0.1.0.tgz
+npm install --save-exact ./shroom-sdk-0.2.0.tgz
 ```
 
 历史官网安装包 URL 仍可作为 npm 的安装来源，已有项目无需立即改写依赖。安装后保存项目的 `package.json` 和锁文件，其他电脑或 CI 使用 `npm ci`；使用本地 `.tgz` 安装时，应将包放在 `vendor/` 并随项目保存，否则其他电脑找不到该文件。升级时选择已发布的目标版本，执行 `npm install --save-exact shroom-sdk@<目标版本>` 并提交新的锁文件；使用 URL 或本地包的项目也可以继续安装对应版本制品。首次安装需要能够下载运行依赖，或已有对应 npm 缓存。
@@ -35,6 +35,22 @@ import {
 ```
 
 Node.js 取数传入 `product / path` 等设备参数；网页取数传入 WS `url`。后三步共用同一个服务或网页连接。参数和调用位置见[五步调用说明](https://sdk.jq-industries.com/docs/quick-start)。
+
+连接前先用 Node 基础 API 搜索串口，把返回的 `path` 展示给用户选择，再交给 `readProduct()`；这属于接入准备，五函数入口不变。
+
+```js
+import { listPorts } from 'shroom-sdk/node';
+
+try {
+  const ports = await listPorts();
+  console.table(ports); // 展示给用户选择，不自动连接第一个端口。
+  if (ports.length === 0) console.log('未发现串口，请检查驱动和 USB 连接。');
+} catch (error) {
+  console.error(error.code, error.message); // 查询失败与列表为空分别处理。
+}
+```
+
+Node 产品连接从 0.2.0 起默认重连原串口，每 3 秒尝试一次、最多 3 次，原 `device` 与数据回调继续使用。`reconnect: false` 可关闭；`onStateChange` 通知连接状态。主动关闭、首次打开失败、授权或解析错误不自动重试；COM 号改变需重新选择。断线会中止当次录制，重连只恢复实时数据，重新采集由用户触发。Web Serial、浏览器 WS 和 Python 不提供本次自动重连能力。
 
 | 使用位置 | 入口与要求 |
 | --- | --- |

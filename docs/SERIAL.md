@@ -99,13 +99,14 @@ Node.js / 浏览器产品入口已经映射：手垫 `raw / pressure` 是原扫�
 
 JavaScript 查询或连接失败会拒绝 Promise；运行期错误用 `device.onError(handler)` 订阅，返回取消订阅函数。错误为 `ShroomError`，包含 `code / stage / suggestion / details / cause`，可用 `asShroomError(error)` 统一处理。Python 在同步查询、连接、读写和关闭调用处抛出结构化 `ShroomError`，包含 `code / stage / suggestion / details`；配置错误兼容 `ValueError`，I/O 错误兼容 `OSError`，无需后台线程或错误回调。
 
-两种语言都有 `device.state`（`open / closed / error`）。JavaScript 用 `device.getDiagnostics()`，Python 用 `device.get_diagnostics()` 获取当前快照：来源、状态、收到字节、完整帧、丢帧、锁定帧长、最近错误，以及 `status / hint`。Python 键名使用 snake_case，例如 `bytes_received / last_error`。
+两种语言都有 `device.state`（`open / closed / error`），Node 串口启用重连时还会出现 `reconnecting`。JavaScript 用 `device.getDiagnostics()`，Python 用 `device.get_diagnostics()` 获取当前快照：来源、状态、收到字节、完整帧、丢帧、锁定帧长、最近错误，以及 `status / hint`。Python 键名使用 snake_case，例如 `bytes_received / last_error`。
 
 Mock 也支持状态和诊断；其字节数与帧数累计模拟生成量，两种语言的帧长都在首帧前为 0、首帧后为模拟 payload 点数，丢帧为 0，不能当作串口吞吐。最近错误是可序列化快照，不含底层 `cause`；需要原始异常时读取捕获的错误对象。浏览器用户取消选择的错误码为 `USER_CANCELLED`，应用可单独处理。
 
 | status | 当前观测 | 下一步 |
 | --- | --- | --- |
 | `waiting-data` | 已打开，尚未收到字节 | 检查设备供电、端口与发送条件 |
+| `reconnecting` | Node 串口正在等待或执行有限重试 | 查看 `onStateChange` 的次数，不要同时创建重复连接 |
 | `waiting-frame` | 已收到字节，尚未切出完整帧 | 核对波特率、分隔符及长度配置 |
 | `streaming` | 曾产出帧 | 结合帧内容和持续计数检查尺寸与线序 |
 | `closed` | 已关闭 | 需要继续采集时由应用显式连接 |
@@ -119,6 +120,8 @@ Mock 也支持状态和诊断；其字节数与帧数累计模拟生成量，两
 4. 有字节没有帧：检查波特率、协议和分隔符。
 5. 有帧但位置不对：检查矩阵尺寸与点位排列。
 
-`close()` 可重复调用，SDK 不自动重连。JS 串口读取、解析或断开错误会自动停止并尝试清理，应用可读取诊断并 `await device.close()` 确认清理结果；应用帧回调的 `CALLBACK_FAILED` 不会停止采集。Python 同步调用用 `with` 或 `try / finally` 释放设备。正常结束时也要关闭连接，何时重新连接由应用决定。
+`close()` 可重复调用，并取消 Node 已安排的重连。Node 产品入口从 0.2.0 起默认在意外断线或读取失败后重连原 `path`，间隔 3000ms、最多 3 次；通用 `connectSerial / Shroom.connect` 默认关闭，可传 `reconnect: true` 或 `{ intervalMs, maxAttempts }` 开启。首次打开失败、主动关闭、授权失效和解析错误不重试；`CALLBACK_FAILED` 不会停止设备或触发重连。重连复用原句柄及数据订阅、清空旧半帧；端口号改变需重新查询选择。完整参数见[Node 自动重连](BACKEND-GUIDE.md#node-reconnect)。
+
+串口重连只恢复实时数据，断线中的录制会以 `error` 收尾，不能自动续录或伪造连续数据。Web Serial、浏览器 WS 和 Python 没有自动重连；Python 同步调用用 `with` 或 `try / finally` 释放设备。正常结束时也要显式关闭连接。
 
 不要直接把相对 ADC 值当成 kPa 或牛顿；物理单位换算需要产品对应的标定数据。

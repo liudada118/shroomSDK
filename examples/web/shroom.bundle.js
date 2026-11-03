@@ -1,5 +1,5 @@
 /**
- * Shroom SDK 0.1.0 —— 单文件版（自动生成，别手改）
+ * Shroom SDK 0.2.0 —— 单文件版（自动生成，别手改）
  *
  * 由 scripts/build-sdk-bundle.mjs 从 src/core/ + src/web/ 拼出来，内容和模块版完全一致。
  * 它是「经典脚本」而不是模块，所以用普通的 script 标签引进去就行，file:// 下也能加载，
@@ -1005,21 +1005,26 @@
     droppedCount,
     frameLength,
     lastError = null,
+    currentBytesReceived = bytesReceived,
+    currentFrameCount = frameCount,
   }) {
     let status;
     let hint;
-    if (state === 'closed') {
+    if (state === 'reconnecting') {
+      status = 'reconnecting';
+      hint = '串口已断开，正在尝试重新连接原端口；当前采集不会自动续录。';
+    } else if (state === 'closed') {
       status = 'closed';
       hint = '连接已关闭。';
     } else if (state === 'error') {
       status = 'error';
       hint = lastError?.suggestion || '连接发生错误；请查看 lastError，检查设备连接和串口配置。';
-    } else if (frameCount > 0) {
+    } else if (currentFrameCount > 0) {
       status = 'streaming';
       hint = droppedCount > 0
         ? `已成功解析 ${frameCount} 帧，已丢弃 ${droppedCount} 帧；请检查波特率、分隔符和帧长配置。`
         : `已成功解析 ${frameCount} 帧；此累计计数不表示设备仍在持续发送数据。`;
-    } else if (bytesReceived > 0) {
+    } else if (currentBytesReceived > 0) {
       status = 'waiting-frame';
       hint = '已收到字节，尚未解析出完整帧；请检查波特率、分隔符和帧长配置。';
       if (droppedCount > 0) hint += ` 已丢弃 ${droppedCount} 帧。`;
@@ -1538,7 +1543,7 @@
    * @param {object} options 产品名、串口路径/浏览器端口、手侧和 onData / onError 回调。
    * @returns {object} 串口入口使用的配置、独立解析器、产品信息与原回调；不会连接设备。
    */
-  function prepareProductConnection(options = {}) {
+  function prepareProductConnection(options = {}, runtime = 'web') {
     const invalid = (field, message) => {
       throw new ShroomError('INVALID_CONFIG', message, { stage: 'configure', details: { field } });
     };
@@ -1550,10 +1555,11 @@
     }
     const profile = adapter.profile;
     const allowed = new Set(['product', 'path', 'port', 'filters', 'onData', 'onError', ...adapter.optionFields]);
+    if (runtime === 'node') { allowed.add('reconnect'); allowed.add('onStateChange'); }
     for (const field of Object.keys(options)) {
       if (!allowed.has(field)) invalid(field, `产品接口不接受 ${field}；波特率、分帧和线序已经内置。自定义协议请使用 connect()。`);
     }
-    for (const field of ['onData', 'onError']) {
+    for (const field of ['onData', 'onError', ...(runtime === 'node' ? ['onStateChange'] : [])]) {
       if (options[field] !== undefined && typeof options[field] !== 'function') invalid(field, `${field} 必须是函数。`);
     }
     adapter.validateOptions(options, invalid);
@@ -1562,6 +1568,7 @@
       ...(options.path === undefined ? {} : { path: options.path }),
       ...(options.port === undefined ? {} : { port: options.port }),
       ...(options.filters === undefined ? {} : { filters: options.filters }),
+      ...(runtime === 'node' ? { reconnect: options.reconnect === undefined ? true : options.reconnect, onStateChange: options.onStateChange } : {}),
     };
     return {
       serialOptions,
@@ -3130,6 +3137,9 @@
     const invalid = (field, message) => {
       throw new ShroomError('INVALID_CONFIG', message, { stage: 'configure', details: { field } });
     };
+    for (const field of ['reconnect', 'onStateChange']) {
+      if (Object.hasOwn(options, field)) invalid(field, `${field} 仅适用于 Node 串口连接。`);
+    }
     if (options.port !== undefined && (!options.port || typeof options.port.open !== 'function'
       || typeof options.port.close !== 'function')) {
       invalid('port', 'port 必须是具有 open 和 close 方法的已授权串口对象。');
@@ -4014,7 +4024,7 @@
     decodeStreamFrame: decodeStreamFrame,
     STREAM_SCHEMA: STREAM_SCHEMA,
     isSupported: isSerialSupported,
-    version: "0.1.0",
+    version: "0.2.0",
     // 想自己接数据源（WebSocket、蓝牙、录制回放）就用这几个
     createFramer: createFramer,
     decodeFrame: decodeFrame,

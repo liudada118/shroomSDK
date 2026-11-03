@@ -4,13 +4,31 @@
 
 **运行前提**：设备驱动可用，业务项目已执行 `npm install shroom-sdk`，Node.js 已按 [SDK 授权](LICENSE.md)激活有效 SDK 产品密钥，功能包括 `serial / stream / recording`。安装和授权要点见文末[接入准备](#product-guide)。
 
-**只用五个函数**：`readProduct`、`createWS`、`startRecording`、`stopRecording`、`downloadRecording`，统一从 `shroom-sdk/quick-flow` 导入；Node.js 与浏览器分别调用各自的片段。
+**业务流程仍是五个函数**：`readProduct`、`createWS`、`startRecording`、`stopRecording`、`downloadRecording`，统一从 `shroom-sdk/quick-flow` 导入。连接前用 Node 基础 API 搜索串口并让用户选择，不增加第六个快速函数。
 
 它们调用的就是[基础文档中的公开 API](CUSTOM.md#quick-to-base)；参数与生命周期的详细说明统一从该对应表进入。
 
 ## 5 步调用 {#quick-call}
 
 示例放在自己的项目中，统一导入 `shroom-sdk/quick-flow`。`COM3` 替换为实际端口，手套 `side` 按实物选择。网页需使用 Vite 等构建工具；普通 HTML 使用源码 ZIP 并将导入改为 SDK 根目录的 `./quick-flow.js`，见[安装方式](NPM.md)。
+
+### 接入前：搜索并选择串口 {#flow-ports}
+
+**运行在 Node.js。** 安装驱动并连接设备后查询；不需要打开端口或先激活密钥。
+
+```js
+import { listPorts } from 'shroom-sdk/node';
+
+try {
+  const ports = await listPorts();
+  console.table(ports); // 把 path 和厂商信息展示在串口选择框中。
+  if (ports.length === 0) console.log('未发现串口，请检查驱动、USB 数据线和权限。');
+} catch (error) {
+  console.error(error.code, error.message); // 查询失败与“列表为空”分别提示。
+}
+```
+
+让用户选择列表中的 `path`，再填入第 1 步。不要默认取 `ports[0]`，串口列表不能识别产品型号或左右手；用户插拔设备后可以重新调用 `listPorts()` 刷新列表。
 
 ## 1. 取数 {#flow-read}
 
@@ -19,7 +37,7 @@
 ```js
 import { readProduct } from 'shroom-sdk/quick-flow';
 
-// SDK 授权完成后调用；path 替换为系统中的实际串口。
+// SDK 授权完成后调用；path 使用上方列表中用户选择的串口。
 const device = await readProduct({
   product: 'glove', // 手部检测垫改为 'pad'，并删除 side
   path: 'COM3',
@@ -35,6 +53,8 @@ const device = await readProduct({
 ```
 
 onData 持续返回产品帧；这一步已开始读取设备，还没有保存采集记录。
+
+从 0.2.0 起，Node 产品连接默认自动重连原串口：意外断开后每 3 秒尝试一次，最多 3 次；恢复后继续使用同一个 `device` 和 `onData`。首次打开失败仍由调用的 `catch` 处理，不会后台重试。需要关闭重连时传 `reconnect: false`，需要显示状态时增加 `onStateChange: status => console.log(status.state, status.attempt)`；详细配置见[自动重连](BACKEND-GUIDE.md#node-reconnect)。
 
 手部检测垫使用 `product: 'pad'`，不传 `side`，回调读取 `data.pressureMatrix / data.values`。手套读取 `data.fingers / data.palm / data.imu.raw`。数据已完成产品解析与点位映射。
 
@@ -92,6 +112,8 @@ console.log(recording?.id); // 等待本次记录写入完成
 
 界面可查看 `recording.status / recording.error / recording.frameCount`，说明本次结果；停止采集不等于关闭设备或服务。
 
+串口断线会将当次采集以 `error` 收尾并保存已经接收的数据。自动重连只恢复实时取数，不自动续录或补齐缺失数据；恢复后由用户重新开始一条记录。
+
 ## 5. 下载 {#flow-download}
 
 **浏览器**
@@ -110,6 +132,7 @@ downloadRecording(stream, { format: 'csv' });
 
 - 浏览器结束订阅：`await stream.close()`。
 - Node.js 退出：`await server.close()` 一并释放 WS 服务与设备。`createWS()` 创建失败也释放设备；只执行第 1 步时自行 `await device.close()`。
+- 主动关闭设备会取消重连；授权或解析错误也不会触发重试。重连只使用原 `path`，COM 号改变时需要重新搜索、选择并连接。浏览器 WS 和直接 Web Serial 连接不自动重连。
 - 三个采集函数也接受 Node.js 的 `server`；`downloadRecording(server, { format: 'csv' })` 返回 HTTP URL，由调用方下载文件。
 - 历史记录保留原始 API：`stream.listRecordings()` 选记录，再用 `stream.downloadRecording(id, { format })`；五函数入口只下载本次停止的记录。
 - 新记录保存在 Node.js 的 `.shroom-recordings/recordings.sqlite`，可在 `createWS()` 的 `recordingsDir` 中指定目录。SDK 批量写入 SQLite，停止时等待队列排空；CSV / JSONL 是从数据库生成的导出格式。CSV 数组/分区是 JSON 单元格；完整帧可用 JSONL，详见[数据存储](STORAGE.md)。
@@ -123,7 +146,7 @@ downloadRecording(stream, { format: 'csv' });
 
 ### 确认产品与串口 {#guide-config}
 
-整包手套使用 `product: 'glove'`，明确 `side: 'left' | 'right'`；手部检测垫使用 `product: 'pad'`，不传 `side`。也接受正式产品 ID `handGloveFullPacket / hand`。Node.js 可从 `shroom-sdk/node` 导入 `listPorts()` 查询实际 `path`；多端口不猜测产品。产品适配器内置波特率、拆帧和映射。
+整包手套使用 `product: 'glove'`，明确 `side: 'left' | 'right'`；手部检测垫使用 `product: 'pad'`，不传 `side`。也接受正式产品 ID `handGloveFullPacket / hand`。先按[搜索并选择串口](#flow-ports)查询实际 `path`；多端口不猜测产品。产品适配器内置波特率、拆帧和映射。
 
 ### 安装 SDK {#guide-run}
 
@@ -203,6 +226,7 @@ await Shroom.activateLicense(process.env.SHROOM_LICENSE_KEY, {
 | 现象 | 优先检查 |
 | --- | --- |
 | 找不到串口 | 系统驱动、USB 数据线、权限与实际端口，见[驱动排查](DRIVERS.md) |
+| 断线后未恢复 | 查看 Node 的 `onStateChange`；重试耗尽、主动关闭或端口号变化后需用户重新连接，不能靠刷新网页替代串口重连 |
 | 已连接但没有帧 | 实际产品与手侧、设备供数；查看 `device.getDiagnostics()` |
 | WS 连接失败 | Node 服务是否运行；数据端口是否为 `19999`；网页是否来自本机 HTTP 来源 |
 | 开始或停止失败 | 当前会话、授权功能、磁盘权限；展示返回错误，先查状态再重试 |

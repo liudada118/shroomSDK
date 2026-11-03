@@ -8,7 +8,7 @@
 
 1. 安装 Node.js 18+，在自己的项目终端执行 `npm install shroom-sdk`；无需先解压源码。也可下载 `.tgz`，安装方式见[npm 安装说明](NPM.md)。SDK 免登记下载，密钥单独申请。
 2. CH34x 设备先确认驱动可用：[Windows 驱动](https://shroom.jq-industries.com/drive/CH341SER.EXE) · [macOS 驱动](https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip)。安装后重新插拔，确认系统能识别串口；没有串口先查[驱动说明](DRIVERS.md)。
-3. 确认产品、左右手和实际串口；准备有效的 **Shroom SDK** 密钥，按[授权说明](LICENSE.md)在 Node.js 中激活。上位机密钥不能用于 SDK，密钥不要发进聊天或写进公开代码。
+3. 从 `shroom-sdk/node` 导入 `listPorts()` 搜索串口，让用户选择返回的 `path`，再确认产品与左右手；不要直接取列表第一项。准备有效的 **Shroom SDK** 密钥，按[授权说明](LICENSE.md)在 Node.js 中激活。上位机密钥不能用于 SDK，密钥不要发进聊天或写进公开代码。
 
 手套需要选左手或右手；检测垫不用选。授权不限制设备型号，但 SDK 仍需有该产品的协议适配。安装后直接通过包名调用，不需要阅读或移动 `node_modules` 内部文件。
 
@@ -26,6 +26,7 @@
 > SDK 已通过 npm install shroom-sdk 安装，函数从 shroom-sdk/quick-flow 导入，Node 基础 API 从 shroom-sdk/node 导入。
 >
 > 先给 Node.js 取数调用，带中文注释，通过 onData 把数据交给我的业务。处理调用失败和运行中报错，不先搭整套页面或采集服务。
+> 连接前用 listPorts 搜索串口，给用户明确的选择框与刷新入口。使用 SDK 内置的 Node 产品自动重连，用 onStateChange 显示状态，不另写重复重连循环。
 > 先给调用片段，不需要生成完整 HTML 或演示工程。授权从我的本地配置读取，不在代码中写真实密钥。
 
 需要采集与下载时，再补充：
@@ -44,6 +45,8 @@
 
 具体参数与带错误处理的片段见 [AI 五步说明](AI-CONTEXT.md#flow-read)。五个函数统一从 `shroom-sdk/quick-flow` 导入；网页的三个按钮共用一个 `stream`，SDK 会记住本次停止的记录 ID。授权使用 `shroom-sdk/node` 的 `Shroom.activateLicense(key, { deviceId })`，稳定安装标识按[授权说明](LICENSE.md)保存，不从精简包导入源码示例 helper。
 
+搜索串口是五步之前的准备，不增加快速函数。Node 产品连接从 0.2.0 起默认重连原端口，每 3 秒尝试一次、最多 3 次；`reconnect: false` 可关闭。主动断开、首次打开失败、授权或解析错误不重试；端口号变化需重新选择。浏览器 WS、Web Serial 和 Python 不自动重连。
+
 采集数据实际保存在 Node 电脑上的 SQLite，默认文件为 `.shroom-recordings/recordings.sqlite`。SDK 负责批量入库，停止时等待已接收帧写入完成；下载时再从数据库生成 CSV / JSONL。你不需要管理表结构或另写一套采集逻辑。
 
 仅在 Node.js 中取数时，第 1 步就已完成。需要网页接收时，先运行 Node.js 的设备与 WS 代码，再从同一台电脑的 localhost 网页连接。npm 网页项目使用 Vite 等构建工具与自己的开发服务器；普通 HTML 则使用源码 ZIP，把导入改为 SDK 根目录的 `./quick-flow.js`，通过 ZIP 的 `node start.mjs --no-open` 启动静态服务。静态服务**不会替你创建设备 WS 服务**。网页 HTTP 地址与 `ws://127.0.0.1:19999` 各有用途，不要互换，也不要双击 HTML。
@@ -58,9 +61,12 @@
 | --- | --- |
 | 前四个函数调用失败；下载函数同步报错 | 使用 `try / catch`，说明参数、授权、连接或采集问题 |
 | 连接之后断线、读流或解析出错 | 接收 `onError`，提示原因并更新连接状态 |
+| Node 产品串口自动重连 | 用 `onStateChange` 显示正在重连、恢复或失败；原数据回调继续使用 |
 | 录制过程出错，或停止结果是 `status: 'error'` | 监听 `stream.onRecording()`，检查停止结果的 `status / error / frameCount`，明确告诉用户可能只保存了部分数据 |
 
 超时不代表服务端没有执行。先查询实际采集状态，不要自动重复点击或重发开始命令。下载函数只触发下载，不保证文件已保存；出现异常记录时仍可尝试下载检查，但不能提示“完整采集成功”。
+
+断线会结束当次录制并标记异常。自动重连只恢复实时取数，不会自动继续保存中断的记录；用户确认恢复后重新开始新采集。
 
 向 AI 反馈时提供：**哪一步失败、错误码和消息、预期结果、实际结果**。Node.js 报错从终端复制，网页报错从开发者工具 Console 复制；删去真实密钥等私密配置。
 

@@ -6,7 +6,6 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { createSdkArchives, packSdk } from '../pack-sdk.mjs';
 import { prepareRelease as prepareActualRelease, readZipEntries, releaseNotes, verifyLatestPackages, verifyRelease } from '../sdk-release-artifacts.mjs';
@@ -77,6 +76,10 @@ async function fixture(t) {
   for (const path of ['src/quick-flow.js', 'src/node/index.js', 'src/web/index.js', 'src/index.d.ts', 'examples/node/quick-demo.js', 'scripts/start.mjs']) {
     await put('' + path, '// SDK fixture\r\nexport {};\r\n');
   }
+  // CLI 按自身位置定位项目；也在 fixture 内运行，避免读取维护仓库的当前版本。
+  for (const file of ['sdk-release-artifacts.mjs', 'pack-sdk.mjs', 'npm-archive.mjs']) {
+    await put('scripts/' + file, await readFile(new URL('../' + file, import.meta.url)));
+  }
   await put('CHANGELOG.md', '# SDK 更新日志\n\n## [0.1.0] - 2026-10-29\n\n- 新增五步函数和 SQLite 采集。\n\n## [0.0.1] - 2026-10-01\n\n- 初始测试。\n');
   await put('README.md', '# SDK\r\n\r\n客户说明。\r\n');
   await put('python/README.md', '# Python\n\n[更新日志](../CHANGELOG.md)\n');
@@ -138,10 +141,14 @@ test('release freezes three ZIPs and a verified npm package with Git provenance 
   assert.doesNotMatch(notes, /0\.0\.1|初始测试/);
   const repeated = await prepareRelease({ projectRoot: context.root, requireClean: true });
   assert.equal(repeated.reused, true);
-  const cli = new URL('../sdk-release-artifacts.mjs', import.meta.url);
-  const { stdout } = await runFile(process.execPath, [fileURLToPath(cli), 'verify',
-    '--directory', prepared.directory, '--require-clean', '--expected-commit', verified.manifest.source.commit], { windowsHide: true });
+  const cliArgs = [join(context.root, 'scripts', 'sdk-release-artifacts.mjs'), 'verify',
+    '--directory', prepared.directory, '--require-clean', '--expected-commit', verified.manifest.source.commit];
+  const { stdout } = await runFile(process.execPath, cliArgs, { windowsHide: true });
   assert.match(stdout, /版本制品校验通过/);
+  const metadata = JSON.parse(await readFile(join(context.root, 'package.json'), 'utf8'));
+  await context.put('package.json', JSON.stringify({ ...metadata, version: '0.1.1' }));
+  await assert.rejects(runFile(process.execPath, cliArgs, { windowsHide: true }),
+    (error) => error.code === 1 && /发布清单或源码来源无效/.test(error.stderr), 'CLI 必须拒绝与其项目版本不一致的制品');
 });
 
 test('organized repository delivers compatible product examples, module imports and documentation links', async (t) => {

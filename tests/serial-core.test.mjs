@@ -120,6 +120,11 @@ test('diagnostics distinguish waiting bytes/frames, streaming, errors and closed
   diagnostic.lastError.details.port = 'changed';
   assert.equal(error.details.port, 'COM3');
   assert.equal(serialDiagnostics({ ...base, state: 'closed' }).status, 'closed');
+  assert.equal(serialDiagnostics({ ...base, frameCount: 10, state: 'reconnecting' }).status, 'reconnecting');
+  assert.equal(serialDiagnostics({ ...base, frameCount: 10, bytesReceived: 100,
+    currentFrameCount: 0, currentBytesReceived: 0 }).status, 'waiting-data');
+  assert.equal(serialDiagnostics({ ...base, frameCount: 10, bytesReceived: 100,
+    currentFrameCount: 0, currentBytesReceived: 12 }).status, 'waiting-frame');
 });
 
 test('mock shares diagnostics/error interface, counters and idempotent close', async (t) => {

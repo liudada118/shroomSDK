@@ -13,7 +13,7 @@ import { readProduct, createWS, startRecording, stopRecording, downloadRecording
 
 SDK 从 npm 注册表安装到 `node_modules/shroom-sdk`，免登记下载，真实设备密钥单独申请。[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)继续提供 `.tgz` 下载；历史安装包 URL 仍可使用。安装包只含压缩运行代码、类型与说明；保存项目依赖和锁文件，以便重复安装。入口、升级和本地包安装见[npm 安装说明](docs/NPM.md)。压缩不等于加密，也不能防止有意修改代码。
 
-当前包为 `shroom-sdk`，首次受管版本为 `0.1.0`。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)，这不是原包的兼容升级。
+当前包为 `shroom-sdk`，`0.2.0` 在五函数基础上增加 Node.js 产品串口自动重连。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)，这不是原包的兼容升级。
 
 **取数 → 创建 WS → 开始采集 → 停止采集 → 下载**：五个函数保持不变。Node.js 连接设备并创建服务，网页连接一次后复用同一 `stream`。直接查看[五步 API 调用](docs/QUICK-START.md#quick-call)，使用上面的包名导入，接入自己的程序与按钮；源码 ZIP 的相对路径示例作为另一种交付方式保留。
 
@@ -26,6 +26,8 @@ SDK 从 npm 注册表安装到 `node_modules/shroom-sdk`，免登记下载，真
 驱动、SDK 依赖和 Node.js 授权是运行前提，简要配置见[接入准备](docs/QUICK-START.md#product-guide)。本流程使用 `serial / stream / recording` 功能；只需要产品数据时，可在取数后结束。新设备使用基础串口与自定义协议，已有主项目后端可使用 `BackendSdkClient` 客户端。
 
 Node.js 通过 `readProduct({ product: 'glove' | 'pad', path, side, onData })` 读取产品数据；手套必须指定左右手，检测垫不传 `side`。SDK 内置波特率、协议解析与点位映射。浏览器用 `readProduct({ url, onData })` 读取 WS 数据；浏览器直接访问串口时，继续使用下方 `Shroom.connectGlove()` / `Shroom.connectHandPad()`。通用协议见[串口接入](docs/SERIAL.md)。
+
+Node.js 产品连接默认在意外断线后重连原串口，每 3 秒尝试一次、最多 3 次。设备对象和数据订阅继续复用，可用 `onStateChange` 显示状态，或设置 `reconnect: false` 关闭。首次连接失败仍由调用方处理；手动关闭、授权失效和解析错误不触发重连。断线会结束当前录制，恢复数据后需重新开始采集。Web Serial、浏览器 WS 和 Python 没有新增自动重连，详见[重连参数与边界](docs/BACKEND-GUIDE.md#node-reconnect)。
 
 提供 **浏览器 / Node.js / Python** 三种入口。以上产品封装仅在 Node.js / 浏览器提供；Python 仍使用通用串口与矩阵接口，不支持整包手套。Python 3.10+ 可独立安装，不需要 Node；详见 [Python SDK](python/README.md)。
 
@@ -74,7 +76,7 @@ npm run pack:npm
 | --- | --- | --- |
 | `src/quick-flow.js` | 五个快速函数的统一入口 | `readProduct()` → `createWS()` → 三个采集函数 |
 | `src/flow/` | 五函数编排、当前记录 ID 与资源释放 | `runtime.js` |
-| `src/node/` | 串口取数、WS 服务、SQLite 采集与导出 | `serial.js` → `quick-server.js` → `recording.js` |
+| `src/node/` | 串口取数与重连、WS 服务、SQLite 采集与导出 | `serial.js`、`serial-reconnect.js` → `quick-server.js` → `recording.js` |
 | `src/web/` | 浏览器串口、WS 控制与二维显示 | `stream.js`；浏览器直连看 `serial.js` |
 | `src/core/` | 分帧、协议、点位映射、数据结构与授权 | `product.js`、`glove.js`、`license.js` |
 | `src/core/products/` | 各产品适配器、注册表与协议复用 | [扩展指南](src/core/products/README.md) |
@@ -88,6 +90,8 @@ npm run pack:npm
 客户 npm 导入仍为 `shroom-sdk/quick-flow`、`shroom-sdk/node` 等公开入口。兼容源码 ZIP 由打包器映射为原来的 `quick-flow.js`、`node/`、`web/` 与根目录示例、启动脚本；后文的 `./node/`、`./web/` 相对调用示例均以解压后的 ZIP 为准。Git 仓库中的自定义文件若放在根目录，则使用 `./src/quick-flow.js` 等源码路径。
 
 ## 五步调用概览 {#s1}
+
+**接入前先搜索串口**：从 `shroom-sdk/node` 导入 `listPorts`，执行 `await listPorts()` 获取列表，让用户选定 `path` 再取数。不要默认连接列表中的第一个串口；没有端口时检查驱动与 USB 连接。搜索是接入准备，不增加第六个快速函数，复制代码见[搜索并选择串口](docs/QUICK-START.md#flow-ports)。
 
 | 步骤 | 运行位置 | API |
 | --- | --- | --- |
@@ -383,13 +387,13 @@ device.info                    // { source, rows, cols, baudRate | path | fps }
 const off = device.onFrame(fn) // 订阅，返回取消订阅的函数
 // 产品设备也有 device.onData(fn)，与 onFrame 是别名
 const offError = device.onError((error) => console.error(error.code, error.suggestion))
-device.state                   // 'open' | 'closed' | 'error'
+device.state                   // 'open' | 'closed' | 'error'；Node 串口另有 'reconnecting'
 device.getDiagnostics()        // 当前观测快照，见下方排错说明
 device.bytesReceived           // 串口收到的原始字节数；Mock 为生成的模拟字节数
 device.frameCount              // 串口成功切出的 payload 数；Mock 为生成的帧数
 device.droppedCount            // 丢掉的无效长度帧数，增长时结合设备协议排查
 device.frameLength             // 串口锁定帧长；Mock 首帧前 0、首帧后为模拟点数
-await device.close()           // 断开，可重复调用；不自动重连
+await device.close()           // 主动断开并取消待执行的重连，可重复调用
 ```
 
 `onError(handler)` 的参数是 `ShroomError`，返回取消订阅函数；查询与连接失败则用 `try / catch` 捕获。可从 JS 入口具名导入 `ShroomError`、`asShroomError`、`ERROR_CODES`，通过 `code / stage / message / suggestion / details / cause` 展示或记录错误。Python 同步调用抛出 `ShroomError`，使用 `device.get_diagnostics()` 和 snake_case 字段，没有错误回调。详见[错误与诊断接口](docs/BACKEND-GUIDE.md#diagnostics)。
@@ -513,7 +517,7 @@ device.frameLength     // 锁定下来的帧长（字节）
 console.log(device.getDiagnostics()); // 包含 state、status、hint 和 lastError
 ```
 
-诊断快照的 `status` 为 `waiting-data / waiting-frame / streaming / closed / error`，`hint` 提供下一步检查建议。快照反映累计观测，不会自动判断根因；`streaming` 不证明设备仍在持续发送，也不代表尺寸、产品或线序选择正确。JS 串口读取、解析或断开错误会自动停止并尝试清理，应用可 `await device.close()` 确认清理结果；`CALLBACK_FAILED` 不会停止采集。Python 同步采集使用 `with` 或 `try / finally` 关闭设备。需要恢复时由应用重新连接。
+诊断快照的 `status` 为 `waiting-data / waiting-frame / streaming / closed / error`，Node 串口另有 `reconnecting`；`hint` 提供下一步检查建议。字节与帧数保留累计值，但 Node 重连后的收数状态按本次连接判断；`streaming` 不证明设备仍在持续发送，也不代表尺寸、产品或线序选择正确。Node 产品连接在可重试断线后自动重连，通用 `Shroom.connect()` 需显式开启；应用调用 `close()` 会取消重连。解析错误、授权失效或关闭失败会终止恢复，`CALLBACK_FAILED` 不会停止设备。Web Serial 与 Python 仍由应用决定重新连接；Python 同步采集使用 `with` 或 `try / finally` 关闭设备。
 
 ---
 

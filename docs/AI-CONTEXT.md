@@ -14,6 +14,24 @@
 
 SDK 密钥与上位机密钥互不通用。SDK 授权不限制传感器型号，但仍校验有效期、电脑名额与功能权限；授权不限制型号不等于所有协议已适配。在线及限定电脑数量的 RSA 授权需要持续联网复核。授权失效会中断实机与录制，已保存记录仍可查询下载。
 
+## 接入前：搜索并选择串口 {#flow-ports}
+
+在 Node.js 调用基础 API，不增加第六个快速函数。只列出串口，不识别型号或左右手，也不需要先打开串口或激活授权。
+
+```js
+import { listPorts } from 'shroom-sdk/node';
+
+try {
+  const ports = await listPorts();
+  console.table(ports); // 在应用中展示给用户选择，不能直接连接 ports[0]。
+  if (ports.length === 0) console.log('未发现串口，请检查驱动、USB 线和权限。');
+} catch (error) {
+  console.error(error.code, error.message);
+}
+```
+
+将用户选择的 `path` 传给下方 `readProduct()`；这里的 `COM3` 只是示例值。插拔后可重新查询并更新选择框。
+
 ## 1. 取数：readProduct {#flow-read}
 
 **运行在 Node.js。** 以下片段共享 `device`；`reportSdkError` 使用文末的[错误处理函数](#errors)。
@@ -39,6 +57,10 @@ try {
 ```
 
 这里已开始实时取数，尚未保存采集文件。检测垫回调改读 `data.pressureMatrix / data.values`；手套使用 `fingers / palm` 命名分区。`onData` 首帧可能早于连接 Promise 完成，回调内不要引用尚未赋值的 `device`。
+
+Node 产品连接从 0.2.0 起默认自动重连，不要在业务 `onError` 里再创建一套重连循环。默认重试原 `path`，间隔 3000ms、最多 3 次；重连保留同一 `device`、原数据订阅和 WS 服务。可传 `reconnect: false` 关闭，或 `reconnect: { intervalMs: 3000, maxAttempts: 3 }` 配置；`onStateChange({ state, path, attempt, maxAttempts })` 或 `device.onStateChange(handler)` 用于更新界面，状态为 `open / reconnecting / error / closed`。状态回调可能早于 Promise 完成，同样不要引用尚未赋值的 `device`。
+
+首次打开失败不会后台重试；主动 `close()`、授权失效、配置或解析错误不重连。SDK 不自动识别换号后的原设备，COM 号变化要重新查询、选择并连接。通用 Node `connectSerial()` 默认关闭重连，Web Serial、浏览器 WS 和 Python 没有本次自动重连能力。
 
 ## 2. 创建 WS：createWS {#flow-ws}
 
@@ -144,6 +166,7 @@ try {
 | `readProduct / createWS / startRecording / stopRecording` 调用失败 | `try { await ... } catch (error) { ... }` |
 | `downloadRecording` 调用失败 | 同步 `try / catch`，没有下载完成 Promise |
 | 设备或 WS 的断线、解析、同步数据回调错误 | `readProduct({ onError })`；握手失败也可能同时触发此回调与 Promise 拒绝，界面应避免重复弹窗 |
+| Node 串口正在重连或重试结束 | `onStateChange` 显示状态和尝试次数；不要因重连仍在进行就再调用 `readProduct()` |
 | 录制过程写盘失败、溢出或中断 | `stream.onRecording()` 检查状态，并在停止后检查 `recording.status / error / frameCount`；不能假定只靠 `onError` 会收齐 |
 
 下面是用于以上片段的最小日志函数；实际产品应把相同信息写到页面错误提示区。它兼容 SDK 错误、普通异常和创建/关闭时的多个错误，不从文案猜错误类型。
@@ -172,6 +195,8 @@ function reportSdkError(error) {
 | `RECORDING_WRITE_FAILED / RECORDING_OVERFLOW / RECORDING_INTERRUPTED` | 提示采集异常，检查磁盘、设备或授权，保留可用记录用于排查 |
 
 `getRecordingStatus()` 的失败也要捕获。网页刷新或重新连接会得到新的 `stream`，不会恢复旧连接的快捷下载 ID；先用基础 API `stream.listRecordings()` 让用户选定记录，再调用 `stream.downloadRecording(id, { format: 'csv' })`。不可自动下载“最近一条”，也不要把记录标签当 ID。
+
+串口断线时，当次采集以 `error` 收尾，保留已接收数据；重连成功不自动续录或补齐中断部分。等待恢复后由用户重新开始新记录。不要把“串口恢复”“网页 WS 恢复”和“采集已恢复”合成一个状态。
 
 SDK 会隔离同步数据回调的异常并报告 `CALLBACK_FAILED`；异步业务回调应自行捕获拒绝。避免在高频 `onData` 中执行重绘、网络请求或无界堆积数据。
 

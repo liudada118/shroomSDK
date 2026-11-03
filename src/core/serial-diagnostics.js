@@ -11,21 +11,26 @@ export function serialDiagnostics({
   droppedCount,
   frameLength,
   lastError = null,
+  currentBytesReceived = bytesReceived,
+  currentFrameCount = frameCount,
 }) {
   let status;
   let hint;
-  if (state === 'closed') {
+  if (state === 'reconnecting') {
+    status = 'reconnecting';
+    hint = '串口已断开，正在尝试重新连接原端口；当前采集不会自动续录。';
+  } else if (state === 'closed') {
     status = 'closed';
     hint = '连接已关闭。';
   } else if (state === 'error') {
     status = 'error';
     hint = lastError?.suggestion || '连接发生错误；请查看 lastError，检查设备连接和串口配置。';
-  } else if (frameCount > 0) {
+  } else if (currentFrameCount > 0) {
     status = 'streaming';
     hint = droppedCount > 0
       ? `已成功解析 ${frameCount} 帧，已丢弃 ${droppedCount} 帧；请检查波特率、分隔符和帧长配置。`
       : `已成功解析 ${frameCount} 帧；此累计计数不表示设备仍在持续发送数据。`;
-  } else if (bytesReceived > 0) {
+  } else if (currentBytesReceived > 0) {
     status = 'waiting-frame';
     hint = '已收到字节，尚未解析出完整帧；请检查波特率、分隔符和帧长配置。';
     if (droppedCount > 0) hint += ` 已丢弃 ${droppedCount} 帧。`;

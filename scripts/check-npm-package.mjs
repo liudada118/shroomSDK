@@ -105,6 +105,8 @@ assert.equal(node.activateLicense, web.activateLicense, '授权状态必须在�
 assert.equal(node.ShroomError, web.ShroomError);
 assert.equal(core.decodeFrame, node.decodeFrame);
 assert.equal(typeof backend.BackendSdkClient, 'function');
+assert.equal(typeof node.listPorts, 'function');
+assert.equal(node.listPorts, node.Shroom.listPorts);
 
 const require = createRequire(import.meta.url);
 assert.equal(typeof require('serialport').SerialPort, 'function');
@@ -217,12 +219,19 @@ assert.equal((await readFile(join(recordingsDir, 'recordings.sqlite'))).subarray
 
 const TYPES_CONSUMER = `
 import { Shroom, type Frame } from 'shroom-sdk';
-import { Shroom as NodeShroom } from 'shroom-sdk/node';
+import { Shroom as NodeShroom, listPorts } from 'shroom-sdk/node';
 import { Shroom as WebShroom } from 'shroom-sdk/web';
 import { BackendSdkClient } from 'shroom-sdk/backend';
 import { decodeFrame } from 'shroom-sdk/core';
 import { readProduct, createWS, startRecording, stopRecording, downloadRecording } from 'shroom-sdk/quick-flow';
 const server = await createWS(NodeShroom.mock({ rows: 2, cols: 2 }));
+const ports = await listPorts();
+const device = await readProduct({ product: 'pad', path: ports[0]?.path ?? 'COM_TEST',
+  reconnect: { intervalMs: 3000, maxAttempts: 3 },
+  onStateChange(status) { console.log(status.state, status.attempt); } });
+const unsubscribe = device.onStateChange(status => console.log(status.path));
+unsubscribe();
+await device.close();
 const stream = await readProduct({ url: server.url, onData(frame: Frame) { console.log(frame.values); } });
 await startRecording(stream, { label: '类型检查' });
 await stopRecording(stream);
@@ -235,6 +244,8 @@ await server.close();
 downloadRecording(stream, { format: 'xlsx' });
 // @ts-expect-error URL 连接不能混入串口产品参数。
 await readProduct({ url: 'ws://127.0.0.1:19999', product: 'pad' });
+// @ts-expect-error 串口重连配置不能用于 WS 客户端。
+await readProduct({ url: 'ws://127.0.0.1:19999', reconnect: true });
 `;
 
 export async function checkNpmPackage({ projectRoot = ROOT, packagePath, fromRegistry = false } = {}) {

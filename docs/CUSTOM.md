@@ -2,6 +2,8 @@
 
 快速接入的五个函数调用的就是本篇列出的基础 API。先用[五步调用](QUICK-START.md)完成接入；需要查看参数、控制资源或选择历史记录时，从下表进入对应说明。
 
+接入前使用基础 API `listPorts()` 搜索串口，让用户选择 `path`；它从 `shroom-sdk/node` 导入，不增加快速入口的函数数量。Node 产品连接默认自动重连，配置与状态订阅同样由基础串口 API 提供，见[搜索串口](QUICK-START.md#flow-ports)和[自动重连](BACKEND-GUIDE.md#node-reconnect)。
+
 ## 五个函数对应哪些基础 API {#quick-to-base}
 
 | 快速函数（`shroom-sdk/quick-flow`） | 实际调用的基础 API | 参考 |

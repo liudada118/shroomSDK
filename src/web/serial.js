@@ -18,6 +18,9 @@ function validateWebOptions(options) {
   const invalid = (field, message) => {
     throw new ShroomError('INVALID_CONFIG', message, { stage: 'configure', details: { field } });
   };
+  for (const field of ['reconnect', 'onStateChange']) {
+    if (Object.hasOwn(options, field)) invalid(field, `${field} 仅适用于 Node 串口连接。`);
+  }
   if (options.port !== undefined && (!options.port || typeof options.port.open !== 'function'
     || typeof options.port.close !== 'function')) {
     invalid('port', 'port 必须是具有 open 和 close 方法的已授权串口对象。');
