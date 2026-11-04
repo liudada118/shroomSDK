@@ -183,7 +183,7 @@
     -->
     <script>
     /**
-     * Shroom SDK 0.3.0 —— 单文件版（自动生成，别手改）
+     * Shroom SDK 0.4.0 —— 单文件版（自动生成，别手改）
      *
      * 由 scripts/build-sdk-bundle.mjs 从 src/core/ + src/web/ 拼出来，内容和模块版完全一致。
      * 它是「经典脚本」而不是模块，所以用普通的 script 标签引进去就行，file:// 下也能加载，
@@ -1320,7 +1320,7 @@
       }
 
       // ---------- core/glove.js ----------
-      /** 整包手套解码：拆出序号、压力和 IMU，再按明确手侧生成五指与手掌分区。 */
+      /** 手套通用压力映射与整包解码；分包协议直接复用映射，不伪造整包序号。 */
 
       // 沿用 handGloveFullPacket 旧展示的点位表，仅用于兼容矩阵；不是五指/手掌的标准分区表。
       const gloveFullPacketLayouts = {
@@ -1386,6 +1386,21 @@
       }
 
       /**
+       * 已完成组包的 256 通道压力共用这份映射；协议身份、元数据和 IMU 由各适配器添加。
+       * 复制输入，确保保留帧不会随串口缓存复用而改变；不构造不存在的 sequence。
+       */
+      function createGlovePressureFrame(raw, options) {
+        const pressure = Uint8Array.from(raw);
+        const pressureMatrix = gloveMapPressure(pressure, options.side);
+        const frame = decodeFrame(pressureMatrix, {
+          rows: 13, cols: 15, fullScale: options.fullScale, threshold: options.threshold,
+        });
+        // 分区从原始扫描压力取值，不经旧版 195 格展示矩阵，避免重复映射。
+        const regions = createGloveRegions(pressure, { side: options.side, fullScale: options.fullScale });
+        return { ...frame, raw: pressure, pressure, pressureMatrix, fingers: regions.fingers, palm: regions.palm };
+      }
+
+      /**
        * 解码一份 274 字节的手套整包载荷，不含串口尾分隔符。
        * 必须显式设置 side：当前接入不能可靠地通过 packetType 判断左右手。
        * IMU 仅保留 16 字节原始数据，不猜测轴序、四元数语义、角度或单位。
@@ -1408,24 +1423,12 @@
             suggestion: '确认设备为 handGloveFullPacket 整包协议；双包或旧版手套不能使用此解析器。',
           });
         }
-        const pressure = Uint8Array.from(payload.subarray(2, 258));
-        const pressureMatrix = gloveMapPressure(pressure, options.side);
-        const frame = decodeFrame(pressureMatrix, {
-          rows: 13, cols: 15, fullScale: options.fullScale, threshold: options.threshold,
-        });
-        // 五指/手掌直接从原始扫描压力取值，不经过旧展示的 195 格兼容矩阵，避免重复映射。
-        const regions = createGloveRegions(pressure, { side: options.side, fullScale: options.fullScale });
         return {
-          ...frame,
-          raw: pressure,
+          ...createGlovePressureFrame(payload.subarray(2, 258), options),
           product: 'handGloveFullPacket',
           side: options.side,
           sequence: payload[0],
           packetType: payload[1],
-          pressure,
-          pressureMatrix,
-          fingers: regions.fingers,
-          palm: regions.palm,
           imu: { raw: Uint8Array.from(payload.subarray(258, 274)) },
         };
       }
@@ -1605,14 +1608,12 @@
         };
       }
 
-      /** 白名单复制手套字段；旧展示矩阵和标准五指/手掌分区分别验证。 */
-      function readGloveStreamFields(input, output, typed) {
+      /** 两套手套协议共用压力、分区与 IMU 原始字节校验；协议字段由各适配器处理。 */
+      function readGloveDataFields(input, output, typed) {
         streamPressureFields(input, output, typed);
         if (output.rows !== 13 || output.cols !== 15 || output.raw.length !== 256) streamInvalid('glove.shape');
         if (!['left', 'right'].includes(input.side)) streamInvalid('side');
         output.side = input.side;
-        output.sequence = streamNumber(input.sequence, 'sequence', 0, 255, true);
-        output.packetType = streamNumber(input.packetType, 'packetType', 0, 255, true);
         streamObject(input.imu, 'imu');
         const imu = streamArray(input.imu.raw, 'imu.raw', { max: 16, byte: true });
         if (imu.length !== 16) streamInvalid('imu.raw.length');
@@ -1629,15 +1630,142 @@
         return output;
       }
 
+      /** 整包的 sequence 和 packetType 保持原有含义，不与分包的段号/手侧码混用。 */
+      function readGloveStreamFields(input, output, typed) {
+        readGloveDataFields(input, output, typed);
+        output.sequence = streamNumber(input.sequence, 'sequence', 0, 255, true);
+        output.packetType = streamNumber(input.packetType, 'packetType', 0, 255, true);
+        return output;
+      }
+
       /** 内部静态适配器；只有连接参数接受别名，输出帧始终使用 profile.product。 */
       const gloveProductAdapter = Object.freeze({
         profile: gloveProductProfile,
-        aliases: Object.freeze(['glove']),
+        aliases: Object.freeze([]),
         optionFields: Object.freeze(['side']),
         validateOptions: validateGloveProductOptions,
         connectionInfo: (options) => ({ side: options.side }),
         createParser: createGloveProductParser,
         readStreamFields: readGloveStreamFields,
+      });
+
+      // ---------- core/products/glove-segmented.js ----------
+      /**
+       * 手套分包协议：130 字节首包 + 146 字节尾包，各带 AA 55 03 99 帧尾。
+       * byte[0] 是段号 1/2，byte[1] 是配对类型（原始 0–255 字节），并非连续帧序号。
+       * 与上位机手动连接一致，输出手侧按显式 side 选择，不根据配对类型推断实物。
+       * 无 CRC 和真实序号，不能证明完整采样帧从未丢失；仅发布同连接、同类型的有效配对。
+       */
+
+      const TAIL = [0xaa, 0x55, 0x03, 0x99];
+      const FIRST_SIZE = 130;
+      const SECOND_SIZE = 146;
+      const PAIR_TIMEOUT_MS = 1000;
+      const profile = Object.freeze({
+        product: 'handGloveSegmented', label: '触觉手套（分包）', family: 'glove',
+        baudRate: 921600, payloadLength: 276, sensorPoints: 256, rows: 13, cols: 15,
+        firstPacketLength: FIRST_SIZE, secondPacketLength: SECOND_SIZE,
+      });
+
+      function validateOptions(options, invalid) {
+        if (!options || !['left', 'right'].includes(options.side)) {
+          invalid('side', '分包手套必须明确指定 side: left 或 right；该手侧用于本串口数据的线序映射。');
+        }
+      }
+
+      function createParser(options = {}) {
+        validateOptions(options, () => { throw new ShroomError('INVALID_CONFIG', '请选择有效的手套手侧。', { stage: 'configure' }); });
+        const { side } = options;
+        // 最大单包 146 + 4 字节；无论串口输入多大，解析器都不保留整块输入。
+        const buffer = new Uint8Array(SECOND_SIZE + TAIL.length);
+        // 每个连接对应一只手，只保留最新首包；新首包、错类型尾包都不能带过旧缓存。
+        let first = null, used = 0, overflow = false, dropped = 0, frameLength = 0;
+
+        function discardFirst() {
+          if (first) { first = null; dropped += 1; }
+        }
+        function expireFirst(now) {
+          if (first && (now < first.receivedAt || now - first.receivedAt > PAIR_TIMEOUT_MS)) discardFirst();
+        }
+        function processPacket(length, now) {
+          if (length === 1 && buffer[0] === 3) { discardFirst(); return null; }
+          if (!((length === FIRST_SIZE && buffer[0] === 1) || (length === SECOND_SIZE && buffer[0] === 2))) {
+            discardFirst(); dropped += 1; return null;
+          }
+          const packetType = buffer[1];
+          if (length === FIRST_SIZE) {
+            discardFirst();
+            first = { pressure: buffer.slice(2, FIRST_SIZE), packetType, receivedAt: now };
+            return null;
+          }
+          const head = first;
+          first = null; // 不论配对是否成功，尾包都消费缓存一次；孤立或重复尾包不能发布。
+          if (!head || head.packetType !== packetType) { dropped += 1; return null; }
+          const pressure = new Uint8Array(256);
+          pressure.set(head.pressure);
+          pressure.set(buffer.subarray(2, 130), 128);
+          frameLength = FIRST_SIZE + SECOND_SIZE;
+          return {
+            ...createGlovePressureFrame(pressure, { side }),
+            product: profile.product, protocol: 'segmented', side, packetType,
+            // 保留原始 16 字节，不猜测四元数轴序、单位，也不伪造 sequence。
+            imu: { raw: buffer.slice(130, SECOND_SIZE) },
+          };
+        }
+
+        return {
+          push(chunk) {
+            if (!(chunk instanceof Uint8Array)) throw new ShroomError('PARSE_FAILED', '手套分包输入必须是 Uint8Array 字节。', { stage: 'parse' });
+            const frames = [];
+            expireFirst(Date.now());
+            for (const byte of chunk) {
+              if (used === buffer.length) {
+                // 超长段丢弃至下个帧尾，仅留最后 3 字节以识别跨 chunk 分隔符。
+                overflow = true;
+                discardFirst();
+                buffer.copyWithin(0, used - (TAIL.length - 1), used);
+                used = TAIL.length - 1;
+              }
+              buffer[used++] = byte;
+              if (used < TAIL.length || !TAIL.every((value, i) => buffer[used - TAIL.length + i] === value)) continue;
+              const now = Date.now();
+              expireFirst(now);
+              if (overflow) dropped += 1;
+              else if (used > TAIL.length) {
+                const frame = processPacket(used - TAIL.length, now);
+                if (frame) frames.push(frame);
+              }
+              // 空帧尾也是边界；若位于首尾包之间，不能把首包带过未知数据段。
+              else discardFirst();
+              used = 0;
+              overflow = false;
+            }
+            return frames;
+          },
+          reset() { used = 0; overflow = false; first = null; dropped = 0; frameLength = 0; },
+          get droppedCount() { return dropped; },
+          get frameLength() { return frameLength; },
+        };
+      }
+
+      function readStreamFields(input, output, typed) {
+        readGloveDataFields(input, output, typed);
+        if (input.protocol !== 'segmented') streamInvalid('protocol');
+        if (Object.hasOwn(input, 'sequence')) streamInvalid('sequence');
+        const packetType = streamNumber(input.packetType, 'packetType', 0, 255, true);
+        output.protocol = 'segmented';
+        output.packetType = packetType;
+        return output;
+      }
+
+      const segmentedGloveProductAdapter = Object.freeze({
+        profile,
+        aliases: Object.freeze(['glove']),
+        optionFields: Object.freeze(['side']),
+        validateOptions,
+        connectionInfo: options => ({ side: options.side, protocol: 'segmented' }),
+        createParser,
+        readStreamFields,
       });
 
       // ---------- core/products/pad.js ----------
@@ -2188,7 +2316,7 @@
        * 新产品实现独立适配器后在此登记；不会根据参数、数据长度或设备名猜测产品。
        */
 
-      const deviceProductAdapters = Object.freeze([gloveProductAdapter, padProductAdapter, bodyProductAdapter, insoleProductAdapter]);
+      const deviceProductAdapters = Object.freeze([segmentedGloveProductAdapter, gloveProductAdapter, padProductAdapter, bodyProductAdapter, insoleProductAdapter]);
       const deviceProductCanonicalRegistry = new Map();
       const deviceProductConnectionRegistry = new Map();
 
@@ -2302,25 +2430,40 @@
         if (Object.keys(options).some((field) => !['product', 'side'].includes(field))) {
           throw new ShroomError('INVALID_CONFIG', '产品模拟仅支持 product 和 side。', { stage: 'configure' });
         }
-        const glove = session.info.product === 'handGloveFullPacket';
+        if (!['handGloveSegmented', 'handGloveFullPacket', 'hand'].includes(session.info.product)) {
+          throw new ShroomError('INVALID_CONFIG', '产品模拟仅支持分包手套、整包手套和手部检测垫。', { stage: 'configure' });
+        }
+        const segmented = session.info.product === 'handGloveSegmented';
+        const glove = segmented || session.info.product === 'handGloveFullPacket';
         const source = createMockDevice({ rows: glove ? 16 : 32, cols: glove ? 16 : 32 });
         const hub = createFrameHub();
         let sequence = 0;
         source.onFrame((frame) => {
+          const tail = [0xaa, 0x55, 0x03, 0x99];
+          if (segmented) {
+            // 分包没有设备帧序号；固定类型 2 同样可用于左/右手，点位表由显式 side 决定。
+            const packetType = 2;
+            const first = Uint8Array.from([1, packetType, ...frame.raw.slice(0, 128), ...tail]);
+            const second = Uint8Array.from([2, packetType, ...frame.raw.slice(128), ...new Uint8Array(16), ...tail]);
+            for (const packet of [first, second]) {
+              for (const productFrame of session.parser.push(packet)) hub.emit(productFrame);
+            }
+            return;
+          }
           const payload = new Uint8Array(glove ? 274 : 1024);
           if (glove) {
             payload[0] = sequence++ & 255;
             payload[1] = 2;
             payload.set(frame.raw, 2);
           } else payload.set(frame.raw);
-          for (const productFrame of session.parser.push(Uint8Array.from([...payload, 0xaa, 0x55, 0x03, 0x99]))) hub.emit(productFrame);
+          for (const productFrame of session.parser.push(Uint8Array.from([...payload, ...tail]))) hub.emit(productFrame);
         });
         source.onError(hub.emitError);
         const device = {
           info: { ...source.info, ...session.info },
           onFrame: hub.onFrame, onData: hub.onFrame, onError: hub.onError,
           get state() { return source.state; },
-          get bytesReceived() { return source.frameCount * (glove ? 274 : 1024); },
+          get bytesReceived() { return source.frameCount * (segmented ? 284 : glove ? 278 : 1028); },
           get frameCount() { return source.frameCount; },
           get droppedCount() { return session.parser.droppedCount; },
           get frameLength() { return session.parser.frameLength; },
@@ -3861,11 +4004,11 @@
       }
 
       /**
-       * 使用整包手套协议连接；options.side 必填 left/right，不自动识别实物手侧。
+       * 使用分包手套协议连接；options.side 必填 left/right，单串口配对同类型首尾包后按实物手侧映射。
        * 可在 options.onData 中直接读取 fingers、palm 和 imu；连接前注册可避免遗漏首帧。
        */
       async function connectGlove(options = {}) {
-        return connectProduct(productOptionsFor(options, 'handGloveFullPacket'));
+        return connectProduct(productOptionsFor(options, 'handGloveSegmented'));
       }
 
       /** 使用手部检测垫内置协议连接；onData 返回已映射的 32×32 数据，无需配置 side。 */
@@ -4473,14 +4616,14 @@
             || !Array.from(frame.values).every((value) => Number.isFinite(value) && value >= 0)) {
             throw productViewError('手部检测垫需要 32×32 的有效数据', 'PARSE_FAILED');
           }
-        } else if (frame?.product === 'handGloveFullPacket') {
+        } else if (['handGloveSegmented', 'handGloveFullPacket'].includes(frame?.product)) {
           if (!['left', 'right'].includes(frame.side)) throw productViewError('手套数据缺少左右手信息', 'PARSE_FAILED');
           for (const [key, name] of Object.entries(productViewFingerNames)) {
             productViewValidateRegion(frame.fingers?.[key], [3, 3, 3, 3], name);
             productViewValidateRegion(frame.fingers[key].pulp, [1], `${name}指腹`);
           }
           productViewValidateRegion(frame.palm, [12, 15, 15, 15, 15], '手掌');
-        } else throw productViewError('产品视图仅支持整包触觉手套和手部检测垫');
+        } else throw productViewError('产品视图仅支持分包/整包触觉手套和手部检测垫');
       }
 
       /**
@@ -4499,7 +4642,7 @@
           throw productViewError('source 需要提供 onData 或 onFrame 订阅方法');
         }
         const initialProduct = options.product ?? options.source?.info?.product;
-        if (initialProduct && !['handGloveFullPacket', 'hand'].includes(initialProduct)) throw productViewError('当前产品不支持标准视图');
+        if (initialProduct && !['handGloveSegmented', 'handGloveFullPacket', 'hand'].includes(initialProduct)) throw productViewError('当前产品不支持标准视图');
         const documentRef = container.ownerDocument ?? document;
         const root = documentRef.createElement('section');
         root.setAttribute('aria-label', 'Shroom 产品实时数据');
@@ -4707,7 +4850,7 @@
         decodeStreamFrame: decodeStreamFrame,
         STREAM_SCHEMA: STREAM_SCHEMA,
         isSupported: isSerialSupported,
-        version: "0.3.0",
+        version: "0.4.0",
         // 想自己接数据源（WebSocket、蓝牙、录制回放）就用这几个
         createFramer: createFramer,
         decodeFrame: decodeFrame,

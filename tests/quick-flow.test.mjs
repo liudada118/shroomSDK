@@ -379,20 +379,28 @@ test('five-function Node flow connects registered products and releases every ow
       onData: frame => acquired.push(frame), onError: error => errors.push(error) });
     server = await createWS(device, { port: 0, recordingsDir: directory });
     const port = FlowNodePort.instances[0];
-    assert.equal(device.info.product, product === 'glove' ? 'handGloveFullPacket' : 'hand');
+    assert.equal(device.info.product, product === 'glove' ? 'handGloveSegmented' : 'hand');
     assert.equal(port.options.path, 'FLOW_COM');
     assert.equal(port.options.baudRate, product === 'glove' ? 921600 : 1000000);
     stream = await readProduct({ url: server.url, onError: error => errors.push(error) });
     const session = await startRecording(server, { label: `${product} 采集` });
     const received = framesFrom(stream, 1);
-    const payload = product === 'glove'
-      ? Uint8Array.from({ length: 274 }, (_, index) => index & 255)
-      : Uint8Array.from({ length: 1024 }, (_, index) => index % 251);
-    port.emit('data', Uint8Array.from([...payload, 0xaa, 0x55, 0x03, 0x99]));
+    const payload = Uint8Array.from({ length: product === 'glove' ? 256 : 1024 }, (_, index) => index % 251);
+    const tail = [0xaa, 0x55, 0x03, 0x99];
+    if (product === 'glove') {
+      port.emit('data', Uint8Array.from([1, 2, ...payload.slice(0, 128), ...tail]));
+      assert.equal(acquired.length, 0, '首包不能提前发布或写入 SQLite');
+      port.emit('data', Uint8Array.from([2, 2, ...payload.slice(128), ...new Uint8Array(16), ...tail]));
+    } else port.emit('data', Uint8Array.from([...payload, ...tail]));
     const [frame] = await received;
     assert.equal(acquired.length, 1);
     assert.equal(frame.product, device.info.product);
-    if (product === 'glove') assert.equal(frame.side, 'right');
+    if (product === 'glove') {
+      assert.equal(frame.side, 'right');
+      assert.equal(frame.protocol, 'segmented');
+      assert.equal(frame.sequence, undefined);
+      assert.deepEqual(Array.from(frame.pressure), Array.from(payload));
+    }
     else assert.equal(frame.pressureMatrix.length, 1024);
     assert.equal(errors.length, 0);
     const recording = await stopRecording(server);
@@ -404,6 +412,11 @@ test('five-function Node flow connects registered products and releases every ow
     const row = JSON.parse((await fetch(downloadUrl).then(response => response.text())).trim());
     assert.equal(row.sessionId, session.id);
     assert.equal(row.frame.product, device.info.product);
+    if (product === 'glove') {
+      assert.equal(row.frame.protocol, 'segmented');
+      assert.equal(row.frame.sequence, undefined);
+      assert.deepEqual(row.frame.raw, Array.from(payload));
+    }
     await stream.close();
     await Promise.all([server.close(), server.close()]);
     assert.equal(device.state, 'closed');

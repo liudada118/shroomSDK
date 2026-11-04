@@ -59,7 +59,7 @@ Node.js / 浏览器连接已封装的手套、手部检测垫、人体全身和�
 
 ### Shroom.connectGlove(options) {#node-connect-glove}
 
-**用途**：连接整包手套 `handGloveFullPacket`，内置 921600 波特率、整包解析和左右手映射。浏览器提供同名方法。
+**用途**：连接分包手套 `handGloveSegmented`，内置 921600 波特率、130+146 字节配对和左右手映射。浏览器提供同名方法。从 0.4.0 起默认使用分包协议；整包设备使用显式 `connectProduct({ product: 'handGloveFullPacket', ... })`。
 
 | 参数 | 类型 | 必填 / 默认值 |
 | --- | --- | --- |
@@ -93,7 +93,7 @@ try {
 }
 ```
 
-**注意事项**：`side` 不能从包类型或端口推断。Node 零端口为 `PORT_NOT_FOUND`、多端口为 `PORT_AMBIGUOUS`，不会随意打开第一个；显式 path 仍需由应用选择。浏览器必须在用户手势中调用，不扫描硬件型号。连接前失败仍拒绝 Promise，不交给 `onError`。不接受 `baudRate / delimiter / rows / cols / layout` 等底层协议覆盖；其他协议使用通用 `connect()`。
+**注意事项**：一只手一个串口，`side` 由应用按该串口实物明确选择线序；不从 packetType 或端口名称推断。Node 零端口为 `PORT_NOT_FOUND`、多端口为 `PORT_AMBIGUOUS`，不会随意打开第一个；显式 path 仍需由应用选择。浏览器必须在用户手势中调用，不扫描硬件型号。连接前失败仍拒绝 Promise，不交给 `onError`。不接受 `baudRate / delimiter / rows / cols / layout` 等底层协议覆盖；其他协议使用通用 `connect()`。
 
 ### Shroom.connectHandPad(options) {#node-connect-hand-pad}
 
@@ -120,11 +120,11 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 
 **用途**：按明确的产品标识连接，统一实现产品选择菜单。
 
-**参数**：必填 `product`，支持手套 `'glove' / 'handGloveFullPacket'`、检测垫 `'pad' / 'hand'`、人体 `'body' / 'humanBody'`、鞋垫 `'insole' / 'jqInsole'`。手套与鞋垫必须提供 `side: 'left' | 'right'`，检测垫和人体不传 side。鞋垫增加 `protocol?: '12bit' | '8bit'`（默认12bit）、`baudRate?`（默认921600，限来源列举值）；其他产品不接受协议覆盖。所有产品支持 path/onData/onError，Node另支持reconnect/onStateChange。新增两类要求0.3.0，格式详见[鞋垫](INSOLE.md)、[人体](HUMAN-BODY.md)。
+**参数**：必填 `product`，支持分包手套 `'glove' / 'handGloveSegmented'`、兼容整包手套 `'handGloveFullPacket'`、检测垫 `'pad' / 'hand'`、人体 `'body' / 'humanBody'`、鞋垫 `'insole' / 'jqInsole'`。手套与鞋垫必须提供 `side: 'left' | 'right'`，检测垫和人体不传 side。鞋垫增加 `protocol?: '12bit' | '8bit'`（默认12bit）、`baudRate?`（默认921600，限来源列举值）；其他产品不接受协议覆盖。所有产品支持 path/onData/onError，Node另支持reconnect/onStateChange。新增两类要求0.3.0，格式详见[鞋垫](INSOLE.md)、[人体](HUMAN-BODY.md)。
 
 **返回值**：对应产品设备的 Promise，设备提供 `onData / onFrame / onError / close` 与诊断方法；回调数据类型由产品决定。具名 `connectProduct()` 是相同入口。
 
-**示例**：`await Shroom.connectProduct({ product: 'handGloveFullPacket', path: 'COM3', side: 'right', onData: console.log })`。
+**示例**：`await Shroom.connectProduct({ product: 'handGloveSegmented', path: 'COM3', side: 'right', onData: console.log })`。
 
 **注意事项**：快速 `readProduct()` 在 Node 直接调用本接口，复用相同校验、解析与返回设备。别名只用于连接，`device.info.product` 和 `frame.product` 使用正式 ID。product、鞋垫protocol和实物side均由调用方选择，不是硬件自动识别结果；通用协议继续使用 `Shroom.connect()`。Python 未提供这些产品方法。
 
@@ -136,6 +136,7 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 
 | product | label / family | 波特率 / payload 字节数 | 采样点数 / 产品数据 |
 | --- | --- | --- | --- |
+| `handGloveSegmented` | 触觉手套（分包）/ glove | 921600 / 130+146=276 | 256 / 两包配对后交付五指、独立指腹与手掌 |
 | `handGloveFullPacket` | 触觉手套（整包）/ glove | 921600 / 274 | 256 / 五指、独立指腹与手掌分区 |
 | `humanBody` | 人体全身 / body | 1000000 / 1024 | 1024扫描通道 / 10区400真实映射点 |
 | `jqInsole` | 鞋垫A版 / insole | 默认921600 / 默认552（8bit为272） | 256扫描通道 / 112真实点；payload不包含魔术头和分包type/index |
@@ -155,16 +156,17 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 
 **注意事项**：需要从首帧开始接收时，优先在连接选项中提供 `onData`，它在打开端口前注册。首帧可能早于连接 Promise 完成，回调应直接使用传入的 data，不要假定外层 `const device` 已初始化；需要访问设备时可先声明 `let device` 并判空，或连接后调用 `device.onData()`。`onData` 和 `onFrame` 订阅相同数据，不要重复订阅后再把同一帧计算两次；回调错误为 `CALLBACK_FAILED`，不自动停止采集。
 
-### 产品帧与整包手套数据 {#node-product-data}
+### 产品帧与手套数据 {#node-product-data}
 
 0.3.0新增两类产品：人体使用 `HumanBodyFrame.regions`，鞋垫使用 `InsoleFrame.sensors / imu`。人体 `sourceIndices` 最大可到1023，用Uint16Array保存。鞋垫12bit的 `pressure / pressureMatrix / sensors.raw` 是Uint16Array，绝不可转成Uint8Array；`raw`始终表示ADC原始字节(12bit512/8bit256)。下面原有手套与手垫的Uint8/IMU字节说明仅适用于这两类产品；完整新字段见[人体线序](HUMAN-BODY.md)和[鞋垫协议](INSOLE.md)。
 
 | 产品 | 原始压力字段 | 推荐业务字段 | 其他字段 |
 | --- | --- | --- | --- |
 | `hand` | `raw / pressure`：1024 个扫描顺序 ADC | `pressureMatrix`：1024 个映射 ADC；`values`：归一化 32×32 | 基础 Frame 的矩阵统计与时间戳 |
+| `handGloveSegmented` | `raw / pressure`：两包合并的 256 个压力 ADC | `fingers.*.raw / fingers.*.pulp.raw / palm.matrix` | `protocol: segmented / side / packetType / imu.raw`，无 sequence |
 | `handGloveFullPacket` | `raw / pressure`：256 个压力 ADC | `fingers.*.raw`：五指主体；`fingers.*.pulp.raw`：独立指腹；`palm.matrix`：72 点手掌 | `side / sequence / packetType / imu.raw`，IMU 原始字节数为 16 |
 
-整包手套固定 274 字节 payload：序号 1 字节、包类型 1 字节、压力 256 字节、IMU 16 字节，包尾为 `AA 55 03 99`。左右手映射由必填 side 决定，不能通过 packetType 猜测。
+默认分包手套由首包 `[1, 包类型, 128 个 ADC]`（130 字节）和尾包 `[2, 同包类型, 128 个 ADC, 16 字节 IMU]`（146 字节）组成，每包尾为 `AA 55 03 99`。每只手套独占一个串口，显式 side 决定实物手侧与线序；packetType 保留原始 0–255 值，只校验首尾一致，不推断左右手。两包配对后才交付一帧，没有 sequence。整包入口保留 274 字节载荷和原序号，不能由其 packetType 推断侧别。具体限制见[手套协议](GLOVE.md)。
 
 **示例**：手套读取 `data.fingers.thumb.raw`、`data.fingers.index.pulp.raw[0]` 和 `data.palm.matrix`。手部检测垫按行列读取 `data.values[y * data.cols + x]`，已映射 ADC 使用 `data.pressureMatrix`；两个产品的原始扫描数据均使用 `data.pressure`。
 
@@ -192,9 +194,9 @@ console.log(data.palm.sourceIndices);       // 对应原 256 点扫描的 0-base
 
 五指主体 60 点、独立指腹 5 点、手掌 72 点合计 137 个映射位置，不要求覆盖全部 256 通道。分区直接依照左右手点位表从原始 `pressure` 提取，通过命名属性访问，不从其他矩阵切片获取。五指和手掌的统计由应用按目标分区计算，不把基础 Frame 的矩阵统计解释为这些分区的汇总。分区 `raw / matrix` 是 ADC，分区 `values` 是相对值，都不是力、物理压力或弯曲角度。
 
-点位表中的 `btPacketSize: 128` 仅为表元数据，不新增蓝牙或双包传输。连接仍是 274 字节整包串口，IMU 仍只保留 16 字节原始数据。上述分区仅 Node.js / 浏览器整包手套提供，Python 和通用 Mock 未实现。
+点位表中的 `btPacketSize: 128` 仅为表元数据；实际分包组帧由独立 `handGloveSegmented` 适配器完成，不新增蓝牙链路。整包入口仍为 274 字节，两个手套入口均保留 16 字节原始 IMU 和同一套命名分区；Python 和通用 Mock 未实现这些分区。
 
-**注意事项**：两种产品的 `raw / pressure`、手套分区的 `raw` 和 `imu.raw` 均为 `Uint8Array`；手套 `palm.matrix` 为按实际行长排列的 ADC 二维数组，分区 `values` 为 `Float32Array`。手部检测垫的 `pressureMatrix` 为 `Uint8Array`、`values` 为 `Float32Array`。产品帧带有 `product` 标识；手套 `sequence` 为可能回绕的单字节序号，不是毫秒时间戳。产品解析和映射已完成，不再调用 `decodeFrame()` 或套用 layout。产品诊断 frameLength 在首个合法包前为 0，之后为 payload 字节数（手套 274 / 手垫 1024），不是映射后的点数。IMU 仅保留原始字节，不承诺单位解析或姿态解算；不提供手势识别或物理压力标定。其他手套协议仍需单独适配。
+**注意事项**：两种产品的 `raw / pressure`、手套分区的 `raw` 和 `imu.raw` 均为 `Uint8Array`；手套 `palm.matrix` 为按实际行长排列的 ADC 二维数组，分区 `values` 为 `Float32Array`。手部检测垫的 `pressureMatrix` 为 `Uint8Array`、`values` 为 `Float32Array`。产品帧带有 `product` 标识；仅整包手套的 `sequence` 是可能回绕的单字节序号，不是毫秒时间戳；分包帧没有此字段，不能从首尾包标志或包类型字节补造。产品解析和映射已完成，不再调用 `decodeFrame()` 或套用 layout。产品诊断 frameLength 在首个合法包前为 0，之后为 payload 字节数（分包手套两包合计 276 / 整包手套 274 / 手垫 1024），不是映射后的点数。IMU 仅保留原始字节，不承诺单位解析或姿态解算；不提供手势识别或物理压力标定。其他手套协议仍需单独适配。
 
 ### Shroom.listPorts() {#node-list-ports}
 
@@ -491,7 +493,7 @@ const device = Shroom.mock({ rows: product.rows, cols: product.cols, layout: pro
 await device.close();
 ```
 
-**注意事项**：导出的 `PRODUCTS` 是原始定义数组。raw 产品使用通用接口时必须传相应 `rows / cols`，查产品不会连接硬件。此表仍用于通用矩阵产品，整包手套走 `connectGlove({ side })` 与 `listDeviceProducts()`，不使用通用 layout；其他协议和多串口整椅采集不因此获得支持。
+**注意事项**：导出的 `PRODUCTS` 是原始定义数组。raw 产品使用通用接口时必须传相应 `rows / cols`，查产品不会连接硬件。此表仍用于通用矩阵产品，分包手套走 `connectGlove({ side })`，整包手套走显式 `connectProduct()`，可用协议见 `listDeviceProducts()`，不使用通用 layout；其他协议和多串口整椅采集不因此获得支持。
 
 ### Shroom.renderAscii(frame, options) {#node-ascii}
 

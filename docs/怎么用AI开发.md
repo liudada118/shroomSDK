@@ -10,7 +10,7 @@
 2. CH34x 设备先确认驱动可用：[Windows 驱动](https://shroom.jq-industries.com/drive/CH341SER.EXE) · [macOS 驱动](https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip)。安装后重新插拔，确认系统能识别串口；没有串口先查[驱动说明](DRIVERS.md)。
 3. 从 `shroom-sdk/node` 导入 `listPorts()` 搜索串口，让用户选择返回的 `path`，再确认产品与左右手；不要直接取列表第一项。准备有效的 **Shroom SDK** 密钥，按[授权说明](LICENSE.md)在 Node.js 中激活。上位机密钥不能用于 SDK，密钥不要发进聊天或写进公开代码。
 
-手套和鞋垫需要按实物明确左右侧；检测垫和人体全身不用选侧别。鞋垫还需说明12bit或8bit格式。鞋垫/人体全身由0.3.0新增，先确认安装版本，旧项目需升级到0.3.0或更高版本，Node与网页使用相同版本并重新构建前端。授权不限制设备型号，但 SDK 仍需有该产品的协议适配。产品字段见[鞋垫](INSOLE.md)和[人体全身](HUMAN-BODY.md)。
+手套默认使用 130+146 字节分包：`glove` / `connectGlove()` 从 0.4.0 起对应 `handGloveSegmented`，安装命令为 `npm install --save-exact shroom-sdk@0.4.0`。整包设备必须明确使用 `handGloveFullPacket`；分包帧没有 sequence，详见[手套协议](GLOVE.md)。手套一只手一个串口，双手分别建立连接；side 按实物决定线序，不能根据 packetType 推断手侧。手套和鞋垫需要按实物明确左右侧；检测垫和人体全身不用选侧别。鞋垫还需说明12bit或8bit格式。鞋垫/人体全身由 0.3.0 新增；Node 与网页使用相同版本，升级后重新构建前端。授权不限制设备型号，但 SDK 仍需有该产品的协议适配。产品字段见[鞋垫](INSOLE.md)和[人体全身](HUMAN-BODY.md)。
 
 ## 2. 把说明与需求交给 AI {#give-context}
 

@@ -76,6 +76,8 @@ function downloadById(recordingId) {
 - JSONL：每行一条完整帧记录，更适合保留手套五指、指腹、手掌和附加字段。
 - 下载通过 HTTP 附件响应交付文件；服务端记录不会因为下载而被删除。`downloadRecording()` 同步触发浏览器下载并返回 URL，不确认浏览器已保存完毕，下载结果由浏览器管理。
 
+分包手套帧没有设备 `sequence`，因此 CSV 的兼容 `sequence` 列为空；不要填入首尾包标志或包类型字节。需要保留 `protocol: 'segmented'` 等完整字段时读取 `frame` 单元格或使用 JSONL。采集 `index` 是本次记录的本地帧索引，不是设备的采样序号。
+
 默认数据库位置为相对 Node.js 当前工作目录的 `.shroom-recordings/recordings.sqlite`；显式传入 `recordingsDir` 可指定保存目录。下载时按记录 ID 从 SQLite 分页读取并流式生成 CSV / JSONL；这两种格式是导出文件，不是新记录的底层存储格式。下载接口不直接提供 `.sqlite` 数据库文件。
 
 同目录已有的旧版 `.meta.json` / `.jsonl` 记录仍可查询和下载，不自动重写或迁移。SQLite 持久化不等于备份或无限存储；长期运行仍要为磁盘容量、目录权限、访问控制和记录保留制定策略。

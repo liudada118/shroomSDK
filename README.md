@@ -3,7 +3,7 @@
 **一步拿到产品数据。** 在自己项目的终端安装 SDK，无需查找仓库、解压或复制源码：
 
 ```bash
-npm install shroom-sdk
+npm install --save-exact shroom-sdk@0.4.0
 ```
 
 ```js
@@ -13,7 +13,7 @@ import { readProduct, createWS, startRecording, stopRecording, downloadRecording
 
 SDK 从 npm 注册表安装到 `node_modules/shroom-sdk`，免登记下载，真实设备密钥单独申请。[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)继续提供 `.tgz` 下载；历史安装包 URL 仍可使用。安装包只含压缩运行代码、类型与说明；保存项目依赖和锁文件，以便重复安装。入口、升级和本地包安装见[npm 安装说明](docs/NPM.md)。压缩不等于加密，也不能防止有意修改代码。
 
-当前版本为 `shroom-sdk@0.3.0`，新增鞋垫双协议和人体全身物理线序，五个函数保持不变。新产品要求0.3.0或更高版本；旧项目运行 `npm install --save-exact shroom-sdk@0.3.0` 升级，让 Node 服务端与网页使用相同版本并重新构建前端。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)。
+**0.4.0 起**，手套默认使用 130 + 146 字节分包，五个函数保持不变。`shroom-sdk@0.3.0` 只支持整包手套；升级时让 Node 服务端与网页同时安装 0.4.0，并重新构建前端。整包设备升级时改为显式 `product: 'handGloveFullPacket'`，见[手套协议与迁移](docs/GLOVE.md)。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)。
 
 **取数 → 创建 WS → 开始采集 → 停止采集 → 下载**：五个函数保持不变。Node.js 连接设备并创建服务，网页连接一次后复用同一 `stream`。直接查看[五步 API 调用](docs/QUICK-START.md#quick-call)，使用上面的包名导入，接入自己的程序与按钮；源码 ZIP 的相对路径示例作为另一种交付方式保留。
 
@@ -29,7 +29,7 @@ Node.js 通过 `readProduct({ product, path, onData })` 读取已注册产品。
 
 Node.js 产品连接默认在意外断线后重连原串口，每 3 秒尝试一次、最多 3 次。设备对象和数据订阅继续复用，可用 `onStateChange` 显示状态，或设置 `reconnect: false` 关闭。首次连接失败仍由调用方处理；手动关闭、授权失效和解析错误不触发重连。断线会结束当前录制，恢复数据后需重新开始采集。Web Serial、浏览器 WS 和 Python 没有新增自动重连，详见[重连参数与边界](docs/BACKEND-GUIDE.md#node-reconnect)。
 
-提供 **浏览器 / Node.js / Python** 三种入口。以上产品封装仅在 Node.js / 浏览器提供；Python 仍使用通用串口与矩阵接口，不包含整包手套、鞋垫或人体区域解析。Python 3.10+ 可独立安装，不需要 Node；详见 [Python SDK](python/README.md)。
+提供 **浏览器 / Node.js / Python** 三种入口。以上产品封装仅在 Node.js / 浏览器提供；Python 仍使用通用串口与矩阵接口，不包含手套分包/整包、鞋垫或人体区域解析。Python 3.10+ 可独立安装，不需要 Node；详见 [Python SDK](python/README.md)。
 
 官网下载时可选择 **Python** 或 **Node.js（含浏览器）**，下载文件名包含 SDK 版本。`shroom-sdk-python.zip` / `shroom-sdk-node.zip` 的兼容 URL 仍指向当前构建；需要固定版本时保留对应版本包或使用 GitHub Release 附件。Node.js 包不含 Python 源码；Python 包内的 `python/README.md` 和 `python/AI-CONTEXT.md` 提供专用说明。旧链接 `shroom-sdk.zip` 仍保留完整包，兼容已有使用方式。
 
@@ -126,12 +126,12 @@ document.querySelector('#btn').onclick = async () => {
 
 `connectHandPad()` 内置手部检测垫 `hand` 的 1000000 波特率、1024 点与 `mat32` 映射。所有浏览器连接入口**必须写在点击回调里**；连接前失败仍需在点击函数中用 `try / catch` 处理。
 
-整包手套改用下面的入口，`side` 必须由应用明确选择：
+分包手套使用下面的入口，一只手一个串口，`side` 由应用按该串口所接实物明确选择并决定线序，不由包类型推断：
 
 ```js
 document.querySelector('#glove').onclick = async () => {
   const device = await Shroom.connectGlove({
-    side: 'left', // 或 'right'，不能根据包类型猜左右手
+    side: 'left', // 或 'right'；按这条串口的实物指定线序，packetType 不决定手侧
     onData: (data) => {
       console.log(data.fingers.thumb.raw);          // 大拇指主体的 12 个 ADC
       console.log(data.fingers.index.pulp.raw[0]);  // 食指独立指腹点
@@ -207,7 +207,7 @@ Python 使用同步迭代和 snake_case 参数；字段语义、float32 数值�
 
 ## 通用 Frame 与产品分区数据 {#s5}
 
-本节先列通用串口、Mock 与检测垫使用的基础 `Frame` 字段，再说明产品数据。整包手套通过 `fingers / palm` 命名分区访问，不将整只手套当成规则矩阵。`BackendSdkClient` 的 `frame` 事件保留后端原始结构，不能直接当成这里的 `Frame` 使用。
+本节先列通用串口、Mock 与检测垫使用的基础 `Frame` 字段，再说明产品数据。手套分包/整包均通过 `fingers / palm` 命名分区访问，不将整只手套当成规则矩阵。`BackendSdkClient` 的 `frame` 事件保留后端原始结构，不能直接当成这里的 `Frame` 使用。
 
 以下是通用矩阵的 JavaScript `onFrame` 基础字段；Python 使用 `Frame` 数据类，`raw` 为 bytes、`values` 为 array('f')：
 
@@ -226,15 +226,15 @@ Python 使用同步迭代和 snake_case 参数；字段语义、float32 数值�
 | 产品入口 | 推荐产品数据 |
 | --- | --- |
 | `connectHandPad()` | `raw / pressure` 为原扫描顺序的 1024 个 ADC；`pressureMatrix` 为映射后的 1024 个 ADC，`values` 为映射并归一化的 32×32 矩阵 |
-| `connectGlove({ side })` | `raw / pressure` 为 256 个原始压力 ADC；`fingers.*.raw` 为五指主体，`fingers.*.pulp.raw` 为独立指腹，`palm.matrix` 为 72 点手掌；另有 `side / sequence / packetType / imu.raw` |
+| `connectGlove({ side })` | `raw / pressure` 为两包合并的 256 个原始压力 ADC；`fingers.*.raw` 为五指主体，`fingers.*.pulp.raw` 为独立指腹，`palm.matrix` 为 72 点手掌；另有 `protocol / side / packetType / imu.raw`，无 sequence |
 
-整包手套使用 921600 波特率，274 字节 payload 为序号 1 字节、包类型 1 字节、压力 256 字节、IMU 16 字节，尾标记为 `AA 55 03 99`。`imu.raw` 仅保留 16 个原始字节，不承诺单位或姿态解算。手套按命名分区读取与展示；检测垫使用已映射的 `pressureMatrix / values`。产品解析和映射已完成，无需再次套用 `layout`。Python 不提供这些产品字段和入口。
+默认手套使用 921600 波特率，由 130 字节首包与 146 字节尾包组成，每包尾标记为 `AA 55 03 99`；合并后为 256 个压力 ADC 和 16 字节 IMU。分包帧 `product` 为 `handGloveSegmented`，没有 `sequence`。显式 `handGloveFullPacket` 保留原来的 274 字节整包和序号，详见[协议差异](docs/GLOVE.md)。`imu.raw` 仅保留 16 个原始字节，不承诺单位或姿态解算。手套按命名分区读取与展示；检测垫使用已映射的 `pressureMatrix / values`。产品解析和映射已完成，无需再次套用 `layout`。Python 不提供这些产品字段和入口。
 
 手套分区按最新左右手点位表直接从 256 个扫描 ADC 提取：`fingers.thumb / index / middle / ring / little` 分别为大拇指、食指、中指、无名指、小拇指，每指主体为 4×3、12 点；各指 `.pulp` 是独立 1×1 指腹点，不混入主体。`palm` 为 5 行、声明列宽 15，但首行只有 12 点，其余各 15 点，共 72 点，`rowLengths` 为 `[12, 15, 15, 15, 15]`，matrix 不补零。
 
 每个分区有 `name / rows / cols / rowLengths / sourceIndices / raw / values / matrix`：`sourceIndices` 为 `Uint16Array`，是用户表 1-based 点号减 1 后的扫描索引；raw 为 ADC，values 按父帧相同 fullScale 归一化，matrix 是按实际行长排列的 ADC 二维数组。五指、指腹和手掌合计 137 个映射位置，无需覆盖全部 256 通道。各分区直接按左右手点位表从原始扫描数据提取，统计由应用根据对应分区计算，不把基础 Frame 的矩阵统计当作五指和手掌的汇总。
 
-这些分区值不是力、物理压力或弯曲角度。点位表中的 `btPacketSize: 128` 只是元数据，不表示 SDK 新增蓝牙或双包传输；当前仍为上述整包串口协议。
+这些分区值不是力、物理压力或弯曲角度。点位表中的 `btPacketSize: 128` 只是元数据，不决定传输协议，也不提供蓝牙连接能力；默认分包与兼容整包分别由上述产品适配器解析。
 
 检测垫和通用矩阵的 `values`、手套各分区的 `values` 都是**相对值**，不是物理单位。默认满量程下为 0~1；要换算成 kPa 需要每台设备的标定数据，
 不在这个 SDK 里。
@@ -303,7 +303,7 @@ Shroom.listLayouts();  // [{ name: 'mat32', label: '32×32 压力垫', rows: 32,
 
 **但界面下拉框别用它**——上面这张表是按**走线**列的，用户手里拿的是**产品**。
 好几款产品共用一条走线（手部检测、小床监测、宠物看护走的都是 `mat32`），
-下拉框里写「32×32 压力垫」，用户对不上自己那台设备。通用矩阵产品的旧下拉框用 `listProducts()`；高层可直连产品清单用 `Shroom.listDeviceProducts()`，目前为 `handGloveFullPacket / hand`，不要把两份清单混为一谈：
+下拉框里写「32×32 压力垫」，用户对不上自己那台设备。通用矩阵产品的旧下拉框用 `listProducts()`；高层可直连产品清单用 `Shroom.listDeviceProducts()`，目前为 `handGloveSegmented / handGloveFullPacket / hand / humanBody / jqInsole`，不要把两份清单混为一谈：
 
 ```js
 Shroom.listProducts();
@@ -348,7 +348,7 @@ await Shroom.connect({ layout: p.layout });   // 下拉里的 value 是产品名
 - 大多数产品一帧是 1024 个点，`smallSample` 和 `footInsole` 是 256 个。排列自己知道要几个点，
   不用你操心；但**排列选错了帧长，画面会大片是空的**——这是选错型号最明显的症状。
 - `tempFullBed` 只给压力矩阵，那三个温度点不在排列里，需要温度得自己从原始帧取。
-- **整包手套 `handGloveFullPacket` 已通过 Node.js / 浏览器的 `connectGlove({ side })` 封装**；它不是这张通用线序表中的 layout。其他手套型号与 Python 手套接入仍需另行适配。
+- **分包手套 `handGloveSegmented` 通过 Node.js / 浏览器的 `connectGlove({ side })` 封装**；整包设备通过 `connectProduct({ product: 'handGloveFullPacket', side })`。两者都不是这张通用线序表中的 layout；其他手套型号与 Python 手套接入仍需另行适配。
 
 拿不准手里是哪一款？打开网页测试台，挨个换着看，按下去的地方和画面上亮的地方对上了就是它。
 
@@ -360,9 +360,9 @@ await Shroom.connect({ layout: p.layout });   // 下拉里的 value 是产品名
 
 | 方法 | 说明 |
 | --- | --- |
-| `Shroom.connectGlove(options)` | 整包手套入口，必填 `side`，可传 `onData / onError` |
+| `Shroom.connectGlove(options)` | 分包手套入口，必填 `side`，可传 `onData / onError` |
 | `Shroom.connectHandPad(options?)` | 手部检测垫入口，内置协议和映射 |
-| `Shroom.connectProduct(options)` | 通过 `product: 'handGloveFullPacket' \| 'hand'` 选择上述产品 |
+| `Shroom.connectProduct(options)` | 按 `product` 选择分包手套、整包手套、检测垫、人体或鞋垫 |
 | `Shroom.listDeviceProducts()` | 列出已封装的可直连产品，不查询硬件 |
 | `Shroom.connect(options?)` | 连接串口，返回 `Promise<Device>`。必须在用户点击里调用 |
 | `Shroom.mock(options?)` | 模拟设备，接口与 `connect()` 完全一致 |

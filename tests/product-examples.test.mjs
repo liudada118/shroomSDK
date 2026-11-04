@@ -28,7 +28,7 @@ function storage() {
 function device() {
   return {
     state: 'open', closed: 0,
-    getDiagnostics: () => ({ source: 'web-serial', state: 'open', status: 'streaming', bytesReceived: 400, frameCount: 1, droppedCount: 0, frameLength: 274, key: 'DO_NOT_COPY', details: { key: 'DO_NOT_COPY' } }),
+    getDiagnostics: () => ({ source: 'web-serial', state: 'open', status: 'streaming', bytesReceived: 400, frameCount: 1, droppedCount: 0, frameLength: 276, key: 'DO_NOT_COPY', details: { key: 'DO_NOT_COPY' } }),
     async close() { this.closed += 1; this.state = 'closed'; },
   };
 }
@@ -36,7 +36,7 @@ function device() {
 function frame() {
   const palm = Array.from({ length: 5 }, (_, row) => Array.from({ length: row === 0 ? 12 : 15 }, (_, column) => row * 15 + column));
   return {
-    product: 'handGloveFullPacket', side: 'left', pressure: Uint8Array.of(1, 2), pressureMatrix: Uint8Array.of(2, 1),
+    product: 'handGloveSegmented', protocol: 'segmented', side: 'left', pressure: Uint8Array.of(1, 2), pressureMatrix: Uint8Array.of(2, 1),
     fingers: Object.fromEntries(['thumb', 'index', 'middle', 'ring', 'little'].map((name, index) => [name, { raw: Uint8Array.of(index + 12), pulp: { raw: Uint8Array.of(index + 22) } }])),
     palm: { matrix: palm },
   };
@@ -105,7 +105,7 @@ test('generator validates explicit glove side and supports every OS/runtime/prod
       : source;
     const parsed = javascript.replace(/^import .*;\s*$/gm, '').replace(/^await \(/m, '(').replace(/const device = await Shroom.connectProduct/g, 'const device = Shroom.connectProduct');
     assert.doesNotThrow(() => new vm.Script(parsed), [product, side, env, platform, kind].join('/'));
-    assert.match(source, product === 'glove' ? /handGloveFullPacket/ : /product.*hand/);
+    assert.match(source, product === 'glove' ? /handGloveSegmented/ : /product.*hand/);
     if (product === 'pad' && kind === 'snippet') assert.doesNotMatch(source, /side:/);
     if (kind === 'complete' && env === 'node') {
       assert.match(source, /license-env\.js/);
@@ -422,7 +422,7 @@ test('diagnostics whitelist fields without key, installation ID or SDK request d
   await harness.element('connect').onclick();
   await harness.element('copy-diagnostics').onclick();
   const diagnostic = harness.calls.clipboard[0];
-  assert.equal(JSON.parse(diagnostic).product, 'handGloveFullPacket');
+  assert.equal(JSON.parse(diagnostic).product, 'handGloveSegmented');
   assert.doesNotMatch(diagnostic, /TEST_LICENSE|DO_NOT_COPY|deviceId|installation/);
   assert.ok(!diagnostic.includes(harness.calls.activation[0].options.deviceId));
   const blocked = browserHarness({ clipboard: false });

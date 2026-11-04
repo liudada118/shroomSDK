@@ -11,7 +11,7 @@ import { activateLicenseFromEnv } from '../node/license-env.js';
 // 使用：node examples/products/glove-right-example.mjs <系统中实际识别到的串口路径>。按 Ctrl+C 释放端口。
 // SDK 授权不限制设备型号；产品协议与左右手仍需与实物对应。
 // 当前示例使用 Windows 端口提示；macOS/Linux 等其他系统可在产品接入页面选择实际系统后重新生成。
-// 当前产品配置：handGloveFullPacket；手侧为 右手（right），由实物选择，不由串口自动识别。
+// 当前产品配置：handGloveSegmented；手侧为 右手（right），由实物选择，不由串口自动识别。
 
 await (async function nodeRuntime(Shroom, activateLicenseFromEnv, configuration) {
   // 一、实际端口：取命令行第二个参数，不默认猜 COM 号或 /dev 路径，避免连到其他设备。
@@ -63,7 +63,7 @@ await (async function nodeRuntime(Shroom, activateLicenseFromEnv, configuration)
     console.log('连接中：' + path);
     // 四、connectProduct：SDK 已内置产品的波特率、分帧和映射，不要再次传入协议参数。
     device = await Shroom.connectProduct({
-      // handGloveFullPacket 使用整包手套协议；hand 使用手部检测垫协议，不能用显示名代替。
+      // handGloveSegmented 使用分包手套协议；hand 使用手部检测垫协议，不能用显示名代替。
       product: configuration.product,
       // side 只给手套使用，必须与实物左右手对应；path 使用上面传入的实际系统串口路径。
       ...(configuration.side ? { side: configuration.side } : {}), path,
@@ -119,4 +119,4 @@ await (async function nodeRuntime(Shroom, activateLicenseFromEnv, configuration)
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
   }
-})(Shroom, activateLicenseFromEnv, {"product":"handGloveFullPacket","side":"right","env":"node","platform":"windows","kind":"complete","label":"右手触觉手套","filename":"examples/products/glove-right-example.mjs"});
+})(Shroom, activateLicenseFromEnv, {"product":"handGloveSegmented","side":"right","env":"node","platform":"windows","kind":"complete","label":"右手触觉手套","filename":"examples/products/glove-right-example.mjs"});

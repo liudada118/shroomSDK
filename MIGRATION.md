@@ -2,7 +2,19 @@
 
 2026-10-30，本仓库主线切换为官网正在使用的五步 SDK。原代码保留在 [legacy-backend-sdk-0.2.0](https://github.com/liudada118/shroomSDK/tree/legacy-backend-sdk-0.2.0) 标签及 Git 历史中。此次按项目决定直接替换，不提供旧接口的兼容层。
 
-## 先确认使用的是哪套包
+## 0.4.0 手套默认协议修正
+
+从 `shroom-sdk@0.3.0` 升级到 0.4.0 时，`product: 'glove'`、Node/Web 的 `connectGlove()` 改为 **130 + 146 字节分包**，输出 `product: 'handGloveSegmented'`。五个快速函数的名称和调用方式保持不变。
+
+在 Node 服务端与网页项目中分别执行 `npm install --save-exact shroom-sdk@0.4.0`，保存依赖与锁文件，并重新构建前端。
+
+- 分包设备继续用 `glove` 并明确 `side`；一只手一个串口，两只手分别建立连接，side 按实物决定线序，不从 packetType 推断。两包合并后才收到一帧 256 通道数据，分包帧不含 `sequence`。
+- 整包设备改为 `readProduct({ product: 'handGloveFullPacket', path, side, onData })`，或基础 `connectProduct()` 的同名产品入口。整包字段和 274 字节协议保持兼容，不能继续使用已改为分包的 `glove` 别名或 `connectGlove()`。
+- Node 服务与网页需使用相同版本，否则旧 WS 客户端不认识 `handGloveSegmented`。
+
+完整字段和分包限制见[手套协议](https://github.com/liudada118/shroomSDK/blob/sdk-v0.4.0/docs/GLOVE.md)。以下内容继续说明更早的 `shroom-backend-sdk` 迁移。
+
+## 原有包与五步 SDK
 
 | 项目 | 原有版本 | 当前版本 |
 | --- | --- | --- |

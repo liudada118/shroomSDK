@@ -1,22 +1,22 @@
 import { readProduct, createWS, startRecording, stopRecording, downloadRecording } from 'shroom-sdk/quick-flow';
 import { connectProduct as connectNodeProduct, listPorts, type SerialConnectionStatus } from 'shroom-sdk/node';
-import { connectProduct as connectWebProduct, type GloveFrame, type HandPadFrame, type HumanBodyFrame, type InsoleFrame, type ProductFrame, type ProductDevice, type NodeProductDevice } from 'shroom-sdk';
+import { connectProduct as connectWebProduct, type SegmentedGloveFrame, type HandPadFrame, type HumanBodyFrame, type InsoleFrame, type ProductFrame, type ProductDevice, type NodeProductDevice } from 'shroom-sdk';
 
 async function fiveFunctions() {
   const ports = await listPorts();
   const path: string | undefined = ports[0]?.path;
   void path;
   const glove = await readProduct({ product: 'glove', side: 'left', onData(frame) {
-    const data: GloveFrame = frame; void data.fingers;
+    const data: SegmentedGloveFrame = frame; void data.fingers;
   } });
-  glove.onData(frame => { const data: GloveFrame = frame; void data.imu; });
+  glove.onData(frame => { const data: SegmentedGloveFrame = frame; void data.imu; });
   const pad = await readProduct({ product: 'pad', reconnect: { intervalMs: 3000, maxAttempts: 3 },
     onStateChange(status) { const state: SerialConnectionStatus = status; void state.attempt; }, onData(frame) {
     const data: HandPadFrame = frame; void data.pressureMatrix;
   } });
   pad.onStateChange(status => { void status.state; });
   const server = await createWS(pad);
-  const stream = await readProduct<GloveFrame>({ url: server.url, onData(frame) { void frame.palm; } });
+  const stream = await readProduct<SegmentedGloveFrame>({ url: server.url, onData(frame) { void frame.palm; } });
   await startRecording(stream, { label: '抓握' });
   const record = await stopRecording(stream);
   const url: string = downloadRecording(stream, { format: 'jsonl' });

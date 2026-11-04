@@ -7,17 +7,17 @@
 在自己的项目终端执行：
 
 ```bash
-npm install shroom-sdk
+npm install --save-exact shroom-sdk@0.4.0
 ```
 
 npm 从注册表下载 SDK 并安装到 `node_modules/shroom-sdk`，不用先查找仓库、下载或解压源码。
 
 SDK 下载与安装不要求登记联系方式。真实设备使用的 **Shroom SDK 产品密钥另行申请**，下载完成不代表已经激活。
 
-需要固定版本时，使用 `npm install --save-exact shroom-sdk@0.3.0`。鞋垫双协议与人体区域线序要求0.3.0或更高版本；Node服务端与网页依赖保持相同版本，升级后重新构建前端。也可以在[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **下载安装包**，在保存 `.tgz` 的目录运行以下命令；文件名以实际下载版本为准：
+以上命令固定安装 **0.4.0**。手套分包从 0.4.0 起提供，`glove` 与 `connectGlove()` 默认使用分包协议；整包设备需显式使用 `handGloveFullPacket`，迁移见[手套协议](https://github.com/liudada118/shroomSDK/blob/sdk-v0.4.0/docs/GLOVE.md)。鞋垫双协议与人体区域线序要求 0.3.0 或更高版本。Node 服务端与网页依赖保持相同版本，升级后重新构建前端。也可以在[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **下载安装包**，在保存 `.tgz` 的目录运行以下命令；文件名以实际下载版本为准：
 
 ```bash
-npm install --save-exact ./shroom-sdk-0.3.0.tgz
+npm install --save-exact ./shroom-sdk-0.4.0.tgz
 ```
 
 历史官网安装包 URL 仍可作为 npm 的安装来源，已有项目无需立即改写依赖。安装后保存项目的 `package.json` 和锁文件，其他电脑或 CI 使用 `npm ci`；使用本地 `.tgz` 安装时，应将包放在 `vendor/` 并随项目保存，否则其他电脑找不到该文件。升级时选择已发布的目标版本，执行 `npm install --save-exact shroom-sdk@<目标版本>` 并提交新的锁文件；使用 URL 或本地包的项目也可以继续安装对应版本制品。首次安装需要能够下载运行依赖，或已有对应 npm 缓存。

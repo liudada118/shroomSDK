@@ -266,7 +266,7 @@ import { Shroom } from '../../src/web/index.js';
       // 在点击中直接调用 connectProduct，前面不能先 await 远程激活或其他异步工作。
       // 浏览器由用户选择实际串口，不传 Node 的 path；串口列表也不会识别产品型号。
       session.device = await Shroom.connectProduct({
-        // product 必须与实物协议一致：handGloveFullPacket 为整包手套，hand 为手部检测垫。
+        // handGloveSegmented 为分包手套；SDK 配对首尾包后才回调，hand 为手部检测垫。
         product: configuration.product,
         // side 仅手套需要，来自实物左右手选择，SDK 不会从串口或包类型猜测。
         ...(configuration.side ? { side: configuration.side } : {}),

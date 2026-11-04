@@ -27,25 +27,40 @@ export function createProductMockDevice(options = {}) {
   if (Object.keys(options).some((field) => !['product', 'side'].includes(field))) {
     throw new ShroomError('INVALID_CONFIG', '产品模拟仅支持 product 和 side。', { stage: 'configure' });
   }
-  const glove = session.info.product === 'handGloveFullPacket';
+  if (!['handGloveSegmented', 'handGloveFullPacket', 'hand'].includes(session.info.product)) {
+    throw new ShroomError('INVALID_CONFIG', '产品模拟仅支持分包手套、整包手套和手部检测垫。', { stage: 'configure' });
+  }
+  const segmented = session.info.product === 'handGloveSegmented';
+  const glove = segmented || session.info.product === 'handGloveFullPacket';
   const source = createMockDevice({ rows: glove ? 16 : 32, cols: glove ? 16 : 32 });
   const hub = createFrameHub();
   let sequence = 0;
   source.onFrame((frame) => {
+    const tail = [0xaa, 0x55, 0x03, 0x99];
+    if (segmented) {
+      // 分包没有设备帧序号；固定类型 2 同样可用于左/右手，点位表由显式 side 决定。
+      const packetType = 2;
+      const first = Uint8Array.from([1, packetType, ...frame.raw.slice(0, 128), ...tail]);
+      const second = Uint8Array.from([2, packetType, ...frame.raw.slice(128), ...new Uint8Array(16), ...tail]);
+      for (const packet of [first, second]) {
+        for (const productFrame of session.parser.push(packet)) hub.emit(productFrame);
+      }
+      return;
+    }
     const payload = new Uint8Array(glove ? 274 : 1024);
     if (glove) {
       payload[0] = sequence++ & 255;
       payload[1] = 2;
       payload.set(frame.raw, 2);
     } else payload.set(frame.raw);
-    for (const productFrame of session.parser.push(Uint8Array.from([...payload, 0xaa, 0x55, 0x03, 0x99]))) hub.emit(productFrame);
+    for (const productFrame of session.parser.push(Uint8Array.from([...payload, ...tail]))) hub.emit(productFrame);
   });
   source.onError(hub.emitError);
   const device = {
     info: { ...source.info, ...session.info },
     onFrame: hub.onFrame, onData: hub.onFrame, onError: hub.onError,
     get state() { return source.state; },
-    get bytesReceived() { return source.frameCount * (glove ? 274 : 1024); },
+    get bytesReceived() { return source.frameCount * (segmented ? 284 : glove ? 278 : 1028); },
     get frameCount() { return source.frameCount; },
     get droppedCount() { return session.parser.droppedCount; },
     get frameLength() { return session.parser.frameLength; },

@@ -4,7 +4,7 @@
 
 串口接入的工作是把设备字节转换成统一 `Frame`。Python 与 Node.js 可直接访问系统串口；网页直连方式见[前端通讯](FRONTEND-COMMUNICATION.md)。
 
-Node.js / 浏览器接入整包手套或手部检测垫时，优先用 `Shroom.connectGlove({ side, onData, onError })` / `connectHandPad({ onData, onError })`；Node 可传 path，浏览器在用户手势中选择端口。SDK 内置产品波特率、帧解析和映射，应用直接读取数据。Python 本次没有这些产品入口或整包手套协议，仍使用通用串口。
+Node.js / 浏览器接入分包手套或手部检测垫时，优先用 `Shroom.connectGlove({ side, onData, onError })` / `connectHandPad({ onData, onError })`；Node 可传 path，浏览器在用户手势中选择端口。SDK 内置产品波特率、帧解析和映射，应用直接读取数据。Python 本次没有这些产品入口或手套分包/整包协议，仍使用通用串口。
 
 通用协议进阶按 **查询串口 → 配置并连接 → 自动拆帧与解码 → 错误处理和诊断** 接入。查询只列出操作系统可见端口，不识别硬件型号；自定义协议才需要按设备资料提供参数。错误可能发生在查询、参数校验、打开端口、读取、解析和关闭等阶段，应贯穿整条流程处理。
 
@@ -18,7 +18,7 @@ Node.js / 浏览器接入整包手套或手部检测垫时，优先用 `Shroom.c
 - 关闭占用该端口的上位机或其他采集程序。
 - 先用模拟设备运行代码，再换成真实端口。
 
-通用 SDK 默认以 `AA 55 03 99` 分帧，每个采样点为一个字节。产品入口固定整包手套 `handGloveFullPacket`（921600、274 字节 payload）或手部检测垫 `hand`（1000000、1024 点）；它们也使用 `AA 55 03 99` 包尾，但由各自产品解析器处理。其他协议仍需显式适配，不能把任意手套套入整包入口。
+通用 SDK 默认以 `AA 55 03 99` 分帧，每个采样点为一个字节。默认手套入口 `handGloveSegmented / glove` 使用 921600 波特率和 130 + 146 字节分包，每包以 `AA 55 03 99` 结尾；完整配对才输出 256 通道压力与 16 字节 IMU。显式 `handGloveFullPacket` 保留 274 字节整包，手部检测垫 `hand` 使用 1000000 波特率和 1024 点。各自适配器解析协议，不能把设备协议分包等同于串口 chunk 碎片。手套分包从 0.4.0 起提供，详见[手套协议](GLOVE.md)。
 
 ## Node.js 连接
 
@@ -35,7 +35,7 @@ const device = await Shroom.connectGlove({
 process.once('SIGINT', () => { void device.close().catch(console.error); });
 ```
 
-手部检测垫用 `Shroom.connectHandPad({ path: 'COM3', onData: console.log, onError: console.error })`。统一入口示例为 `Shroom.connectProduct({ product: 'hand', path: 'COM3', onData: console.log })`，手套则选 product 为 `handGloveFullPacket` 并提供 side。`Shroom.listDeviceProducts()` 返回可直连产品清单。省略 Node path 时仅单个端口可自动选择；零口报 `PORT_NOT_FOUND`、多口报 `PORT_AMBIGUOUS`，不自动扫描产品型号。协议与线序参数不可覆盖。
+手部检测垫用 `Shroom.connectHandPad({ path: 'COM3', onData: console.log, onError: console.error })`。统一入口示例为 `Shroom.connectProduct({ product: 'hand', path: 'COM3', onData: console.log })`，默认分包手套选 product 为 `handGloveSegmented`（或 `glove`）并提供 side；整包设备显式选 `handGloveFullPacket`。`Shroom.listDeviceProducts()` 返回可直连产品清单。省略 Node path 时仅单个端口可自动选择；零口报 `PORT_NOT_FOUND`、多口报 `PORT_AMBIGUOUS`，不自动扫描产品型号。协议与线序参数不可覆盖。
 
 产品 `onData / onError` 在打开前注册，连接前失败仍需 `try / catch`。可直接运行包内示例：`node node/product-demo.js glove left COM3` 或 `node node/product-demo.js hand-pad COM5`。
 
@@ -93,7 +93,7 @@ Python 用 `with` 释放连接；Node.js 在结束时调用 `device.close()`。�
 - `max` / `avg` / `area` / `center`：帧统计。
 - `timestamp`：毫秒时间戳。
 
-Node.js / 浏览器产品入口已经映射：手垫 `raw / pressure` 是原扫描的 1024 个 ADC，`pressureMatrix` 是已映射 ADC，`values` 是 32×32 归一化值；整包手套 `raw / pressure` 是 256 个 ADC，`pressureMatrix / values` 是 195 点、13×15 左右手映射，另有 `side / sequence / packetType / imu.raw`。IMU 保留 16 字节原始数据，不承诺单位或姿态解算；side 必须指定，不能由 packetType 猜测。产品帧不要再次套 layout。
+Node.js / 浏览器产品入口已经映射：手垫 `raw / pressure` 是原扫描的 1024 个 ADC，`pressureMatrix` 是已映射 ADC，`values` 是 32×32 归一化值；两种手套的 `raw / pressure` 都是 256 个 ADC，`pressureMatrix / values` 是保留兼容用途的 195 点、13×15 映射，业务读取 `fingers / palm`。分包帧含 `protocol: segmented / side / packetType / imu.raw`，不含 `sequence`；整包帧保留原 sequence。IMU 保留 16 字节原始数据，不承诺单位或姿态解算；一只手一个串口，side 必须按实物明确指定；packetType 仅校验首尾包类型一致，不决定侧别。产品帧不要再次套 layout。
 
 通用 Node.js 连接可指定 `layout`。Python 当前仅内置 `raw` / `mat32`，也可提供自定义排列，不能照搬 JS 产品入口或全部产品名称。点位配置与 API 对照见[SDK 说明与排错](../README.md)及[Python SDK](../python/README.md)。
 

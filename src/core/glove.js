@@ -1,4 +1,4 @@
-/** 整包手套解码：拆出序号、压力和 IMU，再按明确手侧生成五指与手掌分区。 */
+/** 手套通用压力映射与整包解码；分包协议直接复用映射，不伪造整包序号。 */
 import { decodeFrame } from './frame.js';
 import { ShroomError } from './errors.js';
 import { createGloveRegions } from './glove-regions.js';
@@ -67,6 +67,21 @@ function gloveMapPressure(pressure, side) {
 }
 
 /**
+ * 已完成组包的 256 通道压力共用这份映射；协议身份、元数据和 IMU 由各适配器添加。
+ * 复制输入，确保保留帧不会随串口缓存复用而改变；不构造不存在的 sequence。
+ */
+export function createGlovePressureFrame(raw, options) {
+  const pressure = Uint8Array.from(raw);
+  const pressureMatrix = gloveMapPressure(pressure, options.side);
+  const frame = decodeFrame(pressureMatrix, {
+    rows: 13, cols: 15, fullScale: options.fullScale, threshold: options.threshold,
+  });
+  // 分区从原始扫描压力取值，不经旧版 195 格展示矩阵，避免重复映射。
+  const regions = createGloveRegions(pressure, { side: options.side, fullScale: options.fullScale });
+  return { ...frame, raw: pressure, pressure, pressureMatrix, fingers: regions.fingers, palm: regions.palm };
+}
+
+/**
  * 解码一份 274 字节的手套整包载荷，不含串口尾分隔符。
  * 必须显式设置 side：当前接入不能可靠地通过 packetType 判断左右手。
  * IMU 仅保留 16 字节原始数据，不猜测轴序、四元数语义、角度或单位。
@@ -89,24 +104,12 @@ export function decodeGlovePacket(payload, options = {}) {
       suggestion: '确认设备为 handGloveFullPacket 整包协议；双包或旧版手套不能使用此解析器。',
     });
   }
-  const pressure = Uint8Array.from(payload.subarray(2, 258));
-  const pressureMatrix = gloveMapPressure(pressure, options.side);
-  const frame = decodeFrame(pressureMatrix, {
-    rows: 13, cols: 15, fullScale: options.fullScale, threshold: options.threshold,
-  });
-  // 五指/手掌直接从原始扫描压力取值，不经过旧展示的 195 格兼容矩阵，避免重复映射。
-  const regions = createGloveRegions(pressure, { side: options.side, fullScale: options.fullScale });
   return {
-    ...frame,
-    raw: pressure,
+    ...createGlovePressureFrame(payload.subarray(2, 258), options),
     product: 'handGloveFullPacket',
     side: options.side,
     sequence: payload[0],
     packetType: payload[1],
-    pressure,
-    pressureMatrix,
-    fingers: regions.fingers,
-    palm: regions.palm,
     imu: { raw: Uint8Array.from(payload.subarray(258, 274)) },
   };
 }

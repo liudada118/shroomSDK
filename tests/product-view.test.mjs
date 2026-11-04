@@ -76,6 +76,22 @@ for (const side of ['left', 'right']) {
   });
 }
 
+test('segmented glove product view consumes the same anatomical regions without inventing a sequence', t => {
+  const { container, canvases } = viewEnvironment(t);
+  const tail = [170, 85, 3, 153];
+  const raw = Array.from({ length: 256 }, (_, i) => i % 251);
+  const parser = createProductParser('glove', { side: 'right' });
+  const [frame] = parser.push(Uint8Array.from([1, 2, ...raw.slice(0, 128), ...tail,
+    2, 2, ...raw.slice(128), ...new Uint8Array(16), ...tail]));
+  const view = createProductView(container, { product: 'handGloveSegmented' });
+  view.render(frame);
+  assert.equal(view.product, 'handGloveSegmented');
+  assert.equal(frame.sequence, undefined);
+  assert.deepEqual(canvases.map(canvas => canvas.context.points.length), [12, 1, 12, 1, 12, 1, 12, 1, 12, 1, 72]);
+  view.destroy();
+  assert.equal(container.children.length, 0);
+});
+
 test('product view subscribes with one call and destroys only its own view', (t) => {
   const { container, documentRef } = viewEnvironment(t);
   const existing = documentRef.createElement('p');

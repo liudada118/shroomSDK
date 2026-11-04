@@ -2,7 +2,7 @@
 
 网页直连实机前先[安装并确认串口驱动](DRIVERS.md)，再激活 SDK 密钥。CH34x 设备缺少驱动时系统不能提供串口，浏览器选择框也可能为空。SDK 授权不限制设备型号；仅通过 WS 查看 Node 采集服务时，驱动应安装在连接 USB 设备的采集电脑上。
 
-浏览器入口优先通过产品方法连接整包手套或手部检测垫，内置协议与映射；同时保留通用 Web Serial、Mock 和已有后端 HTTP / WebSocket。先确定设备由谁连接；本页按接口说明参数、返回值和生命周期。
+浏览器入口优先通过产品方法连接分包手套或手部检测垫，内置协议与映射；同时保留通用 Web Serial、Mock 和已有后端 HTTP / WebSocket。先确定设备由谁连接；本页按接口说明参数、返回值和生命周期。
 
 五步流程中的网页 `readProduct({ url })` 直接调用下方 `connectStream()`。各快速函数与基础 API 的关系见[对应表](CUSTOM.md#quick-to-base)。
 
@@ -60,17 +60,17 @@ Node.js 先连接设备，再用 [serveDevice()](BACKEND-GUIDE.md#node-serve-dev
 
 ### Shroom.connectGlove(options) {#connect-glove}
 
-**用途**：选择并连接整包手套 `handGloveFullPacket`，内置 921600 波特率、274 字节 payload 解析及左右手的五指、指腹与手掌映射。
+**用途**：选择并连接分包手套 `handGloveSegmented`，内置 921600 波特率、130+146 字节组帧及五指、指腹与手掌映射。从 0.4.0 起默认使用分包协议；整包设备改用显式 `connectProduct({ product: 'handGloveFullPacket', side, ... })`，见[手套协议](GLOVE.md)。
 
 | 参数 | 类型 | 必填 / 默认值 |
 | --- | --- | --- |
-| `side` | `'left' \| 'right'` | 必填；由应用明确选择，不能从 packetType 推断 |
+| `side` | `'left' \| 'right'` | 必填；一只手一个串口，按实物决定线序与输出标识，不由 packetType 推断 |
 | `port` | 已授权 SerialPort | 可选；省略时弹设备选择框 |
 | `filters` | USB 筛选对象数组 | 可选，作用与通用 connect() 相同 |
 | `onData` | `(data) => void` | 可选，在打开端口前注册 |
 | `onError` | `(error: ShroomError) => void` | 可选，在打开端口前注册 |
 
-**返回值**：`Promise<ProductDevice<GloveFrame>>`；有 `onData / onFrame / onError / state / getDiagnostics() / close()`。
+**返回值**：`Promise<ProductDevice<SegmentedGloveFrame>>`；有 `onData / onFrame / onError / state / getDiagnostics() / close()`。
 
 **示例**：
 
@@ -93,7 +93,7 @@ document.querySelector('#connect').onclick = async () => {
 };
 ```
 
-**注意事项**：连接前失败仍拒绝 Promise，不能只提供 onError。不接受 `baudRate / delimiter / rows / cols / layout` 等底层覆盖；自定义协议继续使用通用 `connect()`。只支持指定整包协议，不自动识别其他手套型号，也不提供 Python 同名入口。
+**注意事项**：连接前失败仍拒绝 Promise，不能只提供 onError。不接受 `baudRate / delimiter / rows / cols / layout` 等底层覆盖；自定义协议继续使用通用 `connect()`。该便捷入口只支持指定分包协议，不自动识别分包/整包或其他手套型号，也不提供 Python 同名入口。
 
 ### Shroom.connectHandPad(options) {#connect-hand-pad}
 
@@ -111,13 +111,13 @@ document.querySelector('#connect').onclick = async () => {
 
 **用途**：按产品标识连接，或同步获取可直连产品清单。
 
-**参数**：`connectProduct()` 必填 `product`：手套接受 `handGloveFullPacket / glove`，检测垫接受 `hand / pad`；其余与对应产品入口相同。手套必须提供 `side`，检测垫不传；`listDeviceProducts()` 无参数。
+**参数**：`connectProduct()` 必填 `product`：分包手套接受 `handGloveSegmented / glove`；兼容整包手套只接受 `handGloveFullPacket`，检测垫接受 `hand / pad`；其余与对应产品入口相同。手套必须提供 `side`，检测垫不传；`listDeviceProducts()` 无参数。
 
 **返回值**：connectProduct 返回对应的产品设备 Promise；listDeviceProducts 返回 `{ product, label, family, baudRate, payloadLength, sensorPoints, rows, cols }[]`。
 
-**示例**：`console.log(Shroom.listDeviceProducts())`；在点击回调中 `await Shroom.connectProduct({ product: 'handGloveFullPacket', side: 'right', onData: console.log })`。
+**示例**：`console.log(Shroom.listDeviceProducts())`；在点击回调中 `await Shroom.connectProduct({ product: 'handGloveSegmented', side: 'right', onData: console.log })`。
 
-**注意事项**：连接别名不改变返回的 `device.info.product / frame.product`，它们仍使用正式 ID `handGloveFullPacket / hand`。清单不查询硬件，不等于旧 `listProducts()` 的通用矩阵产品菜单；不要把所有旧产品都当成已有高层入口。
+**注意事项**：连接别名不改变返回的 `device.info.product / frame.product`，它们使用相应的正式 ID，例如 `handGloveSegmented / handGloveFullPacket / hand`。清单不查询硬件，不等于旧 `listProducts()` 的通用矩阵产品菜单；不要把所有旧产品都当成已有高层入口。
 
 ### 产品数据与 device.onData(handler) {#product-data}
 
@@ -126,6 +126,7 @@ document.querySelector('#connect').onclick = async () => {
 | 产品 | 原始压力 | 映射后数据 | 其他字段 |
 | --- | --- | --- | --- |
 | `hand` | `raw / pressure`，1024 个原扫描 ADC | `pressureMatrix`，1024 个 ADC；`values`，归一化 32×32 | 基础 Frame 统计与时间戳 |
+| `handGloveSegmented` | `raw / pressure`，两包合并的 256 个 ADC | 旧 `pressureMatrix / values` 保留兼容，业务读取命名分区 | `fingers / palm / side / protocol / packetType / imu.raw`（16 字节），无 sequence |
 | `handGloveFullPacket` | `raw / pressure`，256 个 ADC | 旧 `pressureMatrix / values`，195 点、13×15 展示映射 | `fingers / palm / side / sequence / packetType / imu.raw`（16 字节） |
 
 **示例**：`const off = device.onData((data) => heatmap.render(data))`；优先把首个回调作为连接选项 `onData` 提供，以避免连接期间漏掉首帧。
@@ -134,7 +135,7 @@ document.querySelector('#connect').onclick = async () => {
 
 每个分区含 `name / rows / cols / rowLengths / sourceIndices / raw / values / matrix`。sourceIndices 是 `Uint16Array`，按行展开的原扫描 0-based 索引（用户表点号已减 1）；raw 是 ADC `Uint8Array`，values 是按父帧 fullScale 归一化的 `Float32Array`，matrix 是按实际行长排列的 ADC `number[][]`，不要假定 raw.length=rows*cols。
 
-新分区按最新左右手表独立提取，共 137 个映射位置，不要求覆盖全部 256 通道；不能直接切片旧 pressureMatrix 取得。顶层 max/avg/area/center 等仍基于旧 195 点展示矩阵，未新增分区统计。分区值不是物理压力、力或弯曲角度。点位表 btPacketSize=128 不表示蓝牙或双包支持；当前仍为 274 字节整包串口和 16 字节 IMU 原数据。Python 与通用 Mock 不提供这些分区。
+新分区按最新左右手表独立提取，共 137 个映射位置，不要求覆盖全部 256 通道；不能直接切片旧 pressureMatrix 取得。顶层 max/avg/area/center 等仍基于旧 195 点展示矩阵，未新增分区统计。分区值不是物理压力、力或弯曲角度。点位表元数据本身不提供传输能力。0.4.0 的分包由独立 `handGloveSegmented` 解析器实现，整包入口仍为 274 字节；两者均保留 16 字节 IMU 原数据，不新增蓝牙链路。Python 与通用 Mock 不提供这些分区。
 
 **注意事项**：首帧可能早于连接 Promise 完成，onData 直接使用传入的 data，不要依赖尚未初始化的外层 `const device`；需要设备引用时先声明 let 并判空，或在连接后订阅。压力字节与映射矩阵均为 `Uint8Array`，values 为 `Float32Array`；数据已经映射，不能再次套 layout。sequence 是可能回绕的单字节序号，不是时间戳。IMU 只交付原始字节，没有单位、姿态或手势识别承诺。通用 `Shroom.mock()` 不提供产品 onData、手套附加字段或 IMU；它只模拟基础矩阵。
 

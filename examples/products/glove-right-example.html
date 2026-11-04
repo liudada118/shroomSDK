@@ -21,7 +21,7 @@
 <p><strong>CH34x 设备未安装驱动时，系统可能无法识别串口。</strong>先安装对应驱动，重新插拔设备，再核对系统中的端口。</p>
 <p><a href="https://shroom.jq-industries.com/drive/CH341SER.EXE">Windows 驱动（EXE）</a> · <a href="https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip">macOS 驱动（ZIP）</a></p>
 <p class="note">Windows：在设备管理器的“端口（COM 和 LPT）”中确认设备。 关闭占用端口的上位机或其他采集程序。</p>
-<p class="note">当前示例配置：<strong>右手触觉手套</strong>。这来自你选择的配置，尚未识别实物；请核对左右手，手侧错误仍可能收到数据。</p>
+<p class="note">当前示例配置：<strong>右手触觉手套</strong>。这来自你选择的配置，尚未识别实物；一只手使用一个串口，请按实物指定左右手；包类型不用于猜测手侧。</p>
 </section>
 <!-- 授权区：独立点击激活，不把远程激活和串口选择塞进同一次点击流程。 -->
 <section aria-labelledby="license-title">
@@ -49,7 +49,7 @@
 <script type="module">
 // SDK 导入：这是浏览器入口，路径相对本 HTML；不要直接通过 file:// 打开模块。
 import { Shroom } from '../../src/web/index.js';
-// 当前产品配置：handGloveFullPacket，实物手侧为 右手（right）；手侧会影响点位映射。
+// 当前产品配置：handGloveSegmented，实物手侧为 右手（right）；手侧会影响点位映射。
 // 此配置只声明应用要使用的协议和映射，不表示 SDK 已自动识别实物。
 (function webRuntime(Shroom, configuration) {
   // 一、连接状态：一个页面只保留一个当前会话，按钮状态由授权、连接和清理进度共同决定。
@@ -266,7 +266,7 @@ import { Shroom } from '../../src/web/index.js';
       // 在点击中直接调用 connectProduct，前面不能先 await 远程激活或其他异步工作。
       // 浏览器由用户选择实际串口，不传 Node 的 path；串口列表也不会识别产品型号。
       session.device = await Shroom.connectProduct({
-        // product 必须与实物协议一致：handGloveFullPacket 为整包手套，hand 为手部检测垫。
+        // handGloveSegmented 为分包手套；SDK 配对首尾包后才回调，hand 为手部检测垫。
         product: configuration.product,
         // side 仅手套需要，来自实物左右手选择，SDK 不会从串口或包类型猜测。
         ...(configuration.side ? { side: configuration.side } : {}),
@@ -357,7 +357,7 @@ import { Shroom } from '../../src/web/index.js';
     refresh();
   });
   refresh();
-})(Shroom, {"product":"handGloveFullPacket","side":"right","env":"web","platform":"windows","kind":"complete","label":"右手触觉手套","filename":"glove-right-example.html"});
+})(Shroom, {"product":"handGloveSegmented","side":"right","env":"web","platform":"windows","kind":"complete","label":"右手触觉手套","filename":"glove-right-example.html"});
 </script>
 </body>
 </html>

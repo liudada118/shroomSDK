@@ -1,5 +1,10 @@
 [
   {
+    "slug": "glove", "file": "docs/GLOVE.md", "label": "手套分包协议与数据", "navLabel": "手套分包协议",
+    "summary": "一只手一个串口，130+146字节分包配对、显式左右手线序，以及整包设备的迁移方式。",
+    "forAi": false, "area": "guides", "group": "guides"
+  },
+  {
     "slug": "insole", "file": "docs/INSOLE.md", "label": "鞋垫协议与数据", "navLabel": "鞋垫协议",
     "summary": "A版鞋垫12bit/8bit协议、112真实点映射、原始ADC与IMU，以及解析边界。",
     "forAi": false, "area": "guides", "group": "guides"
@@ -51,7 +56,7 @@
   },
   {
     "slug": "node", "file": "docs/NODE.md", "label": "Node.js SDK", "navLabel": "Node.js",
-    "summary": "按产品连接整包手套或手部检测垫，进阶使用通用串口与已有后端。",
+    "summary": "按产品连接分包手套或手部检测垫，进阶使用通用串口与已有后端。",
     "forAi": false, "area": "backend", "group": "languages", "hidden": true
   },
   {
@@ -69,14 +74,14 @@
       { "id": "storage", "label": "存储" }
     ],
     "tocDescriptions": {
-      "node-connect-glove": "连接整包手套并选择左右手",
+      "node-connect-glove": "连接分包手套并指定实物左右手",
       "node-connect-hand-pad": "连接手部检测垫",
       "node-connect-product": "按产品类型连接设备",
       "node-serve-device": "创建独立 WS 与下载服务",
       "node-server": "控制采集、获取下载地址与关闭服务",
       "node-device-products": "列出已封装的设备产品",
       "node-on-data": "订阅高层产品数据",
-      "node-product-data": "读取产品压力矩阵与手套整包字段",
+      "node-product-data": "读取产品压力矩阵与手套分包/整包字段",
       "node-list-ports": "列出可用串口",
       "node-connect": "连接串口设备",
       "node-mock": "生成模拟传感器数据",
@@ -168,7 +173,7 @@
       "connect-stream": "创建 WS 订阅连接",
       "stream-device": "订阅数据、控制采集与关闭连接",
       "web-serial": "浏览器串口通讯",
-      "connect-glove": "连接整包手套并选择左右手",
+      "connect-glove": "连接分包手套并指定实物左右手",
       "connect-hand-pad": "连接手部检测垫",
       "connect-product": "按产品连接与查询支持清单",
       "product-data": "读取产品数据与订阅数据回调",

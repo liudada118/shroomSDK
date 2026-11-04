@@ -1,5 +1,5 @@
 /**
- * 产品取数命令行示例：先激活，再读取整包手套或手部检测垫。
+ * 产品取数命令行示例：先激活，再读取分包手套或手部检测垫。
  * 产品函数内置波特率、帧长和线序；手套的左右手仍必须按实物选择。
  */
 import { Shroom } from '../../src/node/index.js';
@@ -10,7 +10,7 @@ const [product, ...args] = process.argv.slice(2);
 /** 打印产品帧摘要；完整矩阵和 IMU 原始字节在回调 data 中。 */
 function printProductData(data) {
   console.log({
-    product: data.product, side: data.side, sequence: data.sequence,
+    product: data.product, side: data.side, protocol: data.protocol,
     rows: data.rows, cols: data.cols, max: data.max, area: data.area,
     ...(data.fingers ? {
       fingerAdc: Object.fromEntries(Object.entries(data.fingers).map(([name, finger]) => [name, Array.from(finger.raw)])),

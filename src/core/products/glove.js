@@ -57,14 +57,12 @@ function gloveStreamRegion(value, field, typed, expectedRows) {
   };
 }
 
-/** 白名单复制手套字段；旧展示矩阵和标准五指/手掌分区分别验证。 */
-function readGloveStreamFields(input, output, typed) {
+/** 两套手套协议共用压力、分区与 IMU 原始字节校验；协议字段由各适配器处理。 */
+export function readGloveDataFields(input, output, typed) {
   streamPressureFields(input, output, typed);
   if (output.rows !== 13 || output.cols !== 15 || output.raw.length !== 256) streamInvalid('glove.shape');
   if (!['left', 'right'].includes(input.side)) streamInvalid('side');
   output.side = input.side;
-  output.sequence = streamNumber(input.sequence, 'sequence', 0, 255, true);
-  output.packetType = streamNumber(input.packetType, 'packetType', 0, 255, true);
   streamObject(input.imu, 'imu');
   const imu = streamArray(input.imu.raw, 'imu.raw', { max: 16, byte: true });
   if (imu.length !== 16) streamInvalid('imu.raw.length');
@@ -81,10 +79,18 @@ function readGloveStreamFields(input, output, typed) {
   return output;
 }
 
+/** 整包的 sequence 和 packetType 保持原有含义，不与分包的段号/手侧码混用。 */
+function readGloveStreamFields(input, output, typed) {
+  readGloveDataFields(input, output, typed);
+  output.sequence = streamNumber(input.sequence, 'sequence', 0, 255, true);
+  output.packetType = streamNumber(input.packetType, 'packetType', 0, 255, true);
+  return output;
+}
+
 /** 内部静态适配器；只有连接参数接受别名，输出帧始终使用 profile.product。 */
 export const gloveProductAdapter = Object.freeze({
   profile: gloveProductProfile,
-  aliases: Object.freeze(['glove']),
+  aliases: Object.freeze([]),
   optionFields: Object.freeze(['side']),
   validateOptions: validateGloveProductOptions,
   connectionInfo: (options) => ({ side: options.side }),

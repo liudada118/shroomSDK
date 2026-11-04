@@ -63,7 +63,7 @@ await (async function nodeRuntime(Shroom, activateLicenseFromEnv, configuration)
     console.log('连接中：' + path);
     // 四、connectProduct：SDK 已内置产品的波特率、分帧和映射，不要再次传入协议参数。
     device = await Shroom.connectProduct({
-      // handGloveFullPacket 使用整包手套协议；hand 使用手部检测垫协议，不能用显示名代替。
+      // handGloveSegmented 使用分包手套协议；hand 使用手部检测垫协议，不能用显示名代替。
       product: configuration.product,
       // side 只给手套使用，必须与实物左右手对应；path 使用上面传入的实际系统串口路径。
       ...(configuration.side ? { side: configuration.side } : {}), path,

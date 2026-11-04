@@ -10,7 +10,7 @@ export {
 } from '../index.js';
 export { BackendSdkClient } from './backend.js';
 import type { NodeConnectOptions, Device, NodeSerialDevice, MockOptions, Frame, AsciiOptions, PortInfo, ShroomError, ERROR_CODES, asShroomError } from '../index.js';
-import type { NodeProductOptions, NodeGloveOptions, NodeHandPadOptions, NodeProductDevice, GloveFrame, HandPadFrame, ProductFrameFor, DeviceProductName, ProductOptionsFor, listDeviceProducts } from '../index.js';
+import type { NodeProductOptions, NodeGloveOptions, NodeHandPadOptions, NodeProductDevice, SegmentedGloveFrame, HandPadFrame, ProductFrameFor, DeviceProductName, ProductOptionsFor, listDeviceProducts } from '../index.js';
 import type { FrameSource, RecordingSession, encodeStreamFrame, decodeStreamFrame, STREAM_SCHEMA } from '../index.js';
 import type { activateLicense, getLicenseStatus, clearLicense } from '../index.js';
 
@@ -58,8 +58,8 @@ export function serveDevice<T extends Frame>(device: FrameSource<T>, options?: D
 export function connectSerial(options?: NodeConnectOptions): Promise<NodeSerialDevice>;
 /** 查询本机串口及元信息，不打开设备，也不要求激活 SDK 授权。 */
 export function listPorts(): Promise<PortInfo[]>;
-/** 连接整包手套，side 必须明确；onData 返回手指、手掌和原始 IMU。 */
-export function connectGlove(options: NodeGloveOptions): Promise<NodeProductDevice<GloveFrame>>;
+/** 连接分包手套，side 必须明确；SDK 配对首尾包后返回手指、手掌和原始 IMU。 */
+export function connectGlove(options: NodeGloveOptions): Promise<NodeProductDevice<SegmentedGloveFrame>>;
 /** 连接手部检测垫，使用内置 32×32 矩阵协议，无需填写 side。 */
 export function connectHandPad(options?: NodeHandPadOptions): Promise<NodeProductDevice<HandPadFrame>>;
 /** 产品类型由统一类型注册表推导，支持别名；未指定 path 且有多个串口时拒绝猜测。 */

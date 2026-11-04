@@ -6,7 +6,7 @@
 
 本仓库维护独立的 `shroom-sdk`：读取传感器数据、按需创建 WebSocket 服务、采集到 SQLite、停止采集并导出 CSV / JSONL。快速入口只导出五个函数，产品协议和点位映射由内部适配器管理。Node.js、浏览器和 Python 共享版本号，但语言能力按各自文档定义。
 
-当前源码版本为 **0.3.0**，新增人体全身和鞋垫 A 版的 JavaScript 产品适配器。发布交付使用受控生成的 npm TGZ；客户可用 `npm install --save-exact shroom-sdk@0.3.0` 固定版本，Node服务端与网页保持相同版本并重建前端。Python 没有随版本号增加这些产品协议或五步服务能力。注册表发布结果以版本查询、制品完整性及真实安装验证为准。
+当前版本 **0.4.0 正在准备发布**，补充 130+146 字节手套分包，将 `glove` 别名与 `connectGlove()` 默认切换到分包；整包入口继续显式使用 `handGloveFullPacket`。客户安装说明统一为 `npm install --save-exact shroom-sdk@0.4.0`，Node 服务端与网页使用相同版本并重新构建前端。0.3.0 具有人体全身和鞋垫 A 版适配器，但不具有手套分包。Python 没有随版本号增加这些产品协议或五步服务能力。发布前需重新打包最终文档，注册表发布结果以版本查询、制品完整性及真实安装验证为准。
 
 官网与文档展示位于独立的 `shroomSDKWEB` 仓库，通过 `sdk/` Git 子模块固定本仓库的具体提交。SDK 的安装、测试、构建和发布均不依赖官网。官网构建使用固定提交中的文档、示例生成函数及下载包，不自动跟随 SDK 主分支。
 
@@ -33,7 +33,7 @@ shroomSDK/
 │  ├─ quick-flow.js      五个函数的统一导出
 │  ├─ flow/              快速调用编排
 │  ├─ core/              协议、产品适配、数据结构与授权
-│  │  └─ products/       registry、glove/pad/body/insole 适配器及独立物理线序
+│  │  └─ products/       registry、glove-segmented/glove/pad/body/insole 适配器及物理线序
 │  ├─ node/              Node 串口与重连、WS 与 SQLite 采集
 │  ├─ web/               浏览器串口、WS 与二维显示
 │  └─ backend/           已有后端的 HTTP / WS 客户端
@@ -88,16 +88,19 @@ Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产�
 
 产品代码集中在 `src/core/products/`。增加产品通过适配器与注册表扩展协议、映射和 WS 字段校验，不改五个函数签名。产品扩展测试会在临时副本注册测试产品，验证串口、五步调用、录制、导出和浏览器 bundle 的一致性。
 
-0.3.0 注册表包含手套 `handGloveFullPacket`（`glove`）、手垫 `hand`（`pad`）、人体 `humanBody`（`body`）及鞋垫 `jqInsole`（`insole`）。别名只用于连接，帧和 WS 始终使用规范 ID。`prepareProductConnection` 先执行产品专属参数校验，再调用可选的 `adapter.resolveProfile(options)`；未实现该方法的适配器使用静态 profile。鞋垫以此选择显式 `protocol` 和支持的 `baudRate`，公共连接层不按产品添加条件分支，也不自动探测协议或速率。
+0.4.0 注册表包含分包手套 `handGloveSegmented`（`glove`）、兼容整包手套 `handGloveFullPacket`、手垫 `hand`（`pad`）、人体 `humanBody`（`body`）及鞋垫 `jqInsole`（`insole`）。别名只用于连接，帧和 WS 始终使用规范 ID。`prepareProductConnection` 先执行产品专属参数校验，再调用可选的 `adapter.resolveProfile(options)`；未实现该方法的适配器使用静态 profile。鞋垫以此选择显式 `protocol` 和支持的 `baudRate`，公共连接层不按产品添加条件分支，也不自动探测协议或速率。
 
 | 适配器 / 线序文件 | 配置与输出边界 |
 | --- | --- |
+| `glove-segmented.js` / `glove.js` / `../glove.js` | 默认分包在单连接内按相同原始包类型配对 130/146 字节包，最大间隔 1 秒；重置/非法包清缓存，孤立尾包不交付。一只手一个串口，显式 side 决定五指/手掌线序，不根据 packetType 自动路由手侧，不构造整包假序号；输出无 sequence。整包适配器保留 274 字节与原 sequence |
 | `body.js` / `body-layout.js` | 无 side；1000000 baud，1024 字节 uint8 载荷与尾分隔。保留 1024 原扫描 ADC，十个 `regions` 映射 400 唯一通道，索引用 Uint16；没有模型 UV、翻转、显示重复行或插值 |
 | `insole.js` / `insole-layout.js` | 必须明确脚侧；默认 12bit、921600 baud，可选 8bit 及限定速率。12bit 的 raw 是 512 个原始 ADC 字节、pressure 是 256 个 Uint16 ADC（0–4095）；8bit 分别为 256 字节与 256 个 Uint8 ADC。`sensors` 是 A 版 112 真实点，不含显示插值点 |
 
 人体的 32×32 与鞋垫的 16×16 顶层矩阵都是扫描存储形状，不能当人体/鞋形平面或物理重心。鞋垫保留 IMU 原始字节和 w/x/y/z 四元数，12bit 另提供陀螺仪/加速度的三个原始分量；不猜测单位、不融合姿态、不换算物理压力。来源和协议细节分别见 [HUMAN-BODY.md](docs/HUMAN-BODY.md)、[INSOLE.md](docs/INSOLE.md)。`profile.sensorPoints` 表示扫描通道数，新增可选 `mappedSensorPoints` 表示物理表覆盖的点数。
 
-`src/index.d.ts` 的 `DeviceProductTypes` 同步登记两种产品，派生 Node/Web 选项与帧类型；鞋垫帧按 `protocol` 区分 12bit/8bit、ADC 类型和可用 IMU 字段。`stream-codec.js` 仍只处理基础帧，扩展字段由各适配器验证并复制；人体核对十块固定线序和 ADC 一致性，鞋垫核对精度、原始字节、真实点位及 IMU，避免 Uint8 截断或丢失负数 IMU。新产品由应用消费 `onData` 展示，不承诺现有 `createProductView` 已提供人体/鞋垫渲染器。
+`src/index.d.ts` 的 `DeviceProductTypes` 登记所有产品，派生 Node/Web 选项与帧类型；分包与整包手套由 product 区分，只有整包帧有 sequence；鞋垫帧按 `protocol` 区分 12bit/8bit、ADC 类型和可用 IMU 字段。`stream-codec.js` 仍只处理基础帧，扩展字段由各适配器验证并复制；人体核对十块固定线序和 ADC 一致性，鞋垫核对精度、原始字节、真实点位及 IMU，避免 Uint8 截断或丢失负数 IMU。`createProductView` 支持分包/整包手套和手垫；人体/鞋垫仍由应用消费 `onData` 展示。
+
+手套分包的 profile.payloadLength 与解析器 frameLength 都表示两包载荷合计 276 字节，不含各自 `AA 55 03 99` 帧尾。包标志 1/2 和包类型字节不是帧序号；packetType 仅校验首尾一致，不决定实物手侧。协议没有 CRC、连续帧标识和转义，配对与超时保护不能保证检测所有同类型丢包错配；载荷出现完整尾标记可能丢帧。说明与迁移入口见 [GLOVE.md](docs/GLOVE.md)。
 
 录制使用 SQLite 事务批量写入；停止与关闭等待待写队列落库，导出按页读取。记录目录有独占所有权；异常退出记录可恢复为中断状态。兼容读取旧 JSONL 文件，不兼容原 `shroom-backend-sdk` 的 `captures / frames` 数据库。
 
@@ -169,6 +172,11 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-11-04 | 0.3.0 人体与鞋垫产品适配 | 独立协议/物理线序、动态 profile、类型与 WS 验证接入原五函数；合成数据通过真实 WS/SQLite/HTTP 闭环，保留 12bit 精度与原始 IMU；版本仅本地构建，尚未发布或真机验收 |
 | 2026-11-04 | 0.3.0 完整 SDK 发布门禁 | 261 JS、25 发布工具、69 Python 测试及类型/原生依赖/客户 ZIP/npm TGZ 安装全部通过；经典脚本新增三种协议验证，官网门禁、远端发布与真机验收仍独立 |
 | 2026-11-04 | 0.3.0 发布准备 | 按用户指令准备推送与npm发布；安装指南和示例转为0.3.0最低版本要求，保留双方同版本与真机未验证边界，发布结果另行验证 |
+| 2026-11-04 | 分包手套接入说明与迁移 | 0.4.0 本地修订以 130+146 分包为默认，整包显式保留；补充字段、组帧限制、五函数/基础 API/AI 文档及迁移说明，测试结果待最终汇总 |
+| 2026-11-04 | 单手单串口协议边界对齐 | 根据实物接入方式明确 side 决定线序，packetType 只作同连接配对键；同步协议、API、AI 与文档导航，不移植自动双手路由 |
+| 2026-11-04 | 0.4.0 分包修订验证 | 281 项 JS、25 项发布工具、TypeScript 检查通过；65 文件 npm TGZ 在独立安装后验证分包、浏览器与 Node WS 及采集导出和 NodeNext/Bundler 类型，未发布 npm 或做真机验收 |
+| 2026-11-04 | 共享版本回归 | Python 0.4.0 元数据与锁定依赖检查通过，69 项 Python 回归测试通过；Python 产品能力范围保持原样 |
+| 2026-11-04 | 0.4.0 发布文档准备 | 客户安装命令固定到 0.4.0，移除当前版本的本地修订提示，保留整包手套显式入口、双端同版本与实物验收边界；最终打包与注册表发布结果另行记录 |
 
 ## 9. 更新日志
 
@@ -185,6 +193,10 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-11-04 | 新增功能 | 增加 humanBody/body 与 jqInsole/insole 适配器和来源文档；人体保留 1024 扫描/400 映射点，鞋垫保留双协议 ADC、112 真实点和 IMU；resolveProfile 与类型扩展不改变五函数，明确 0.3.0 未发布及真机验证边界 |
 | 2026-11-04 | 验证完成 | 0.3.0 完整 SDK 门禁通过，含合成新产品的经典脚本和五步 WS/SQLite/HTTP 链路、客户 ZIP/TGZ 安装与 NodeNext/Bundler 类型解析；未执行远端发布或实机验收 |
 | 2026-11-04 | 文档更新 | 准备正式0.3.0交付说明，更新npm固定版本命令并移除示例中的开发版限制提示；未改变协议、五函数或产品运行逻辑 |
+| 2026-11-04 | 新增功能 | 补充分包手套适配器与明确的分包/整包类型边界，默认 glove/connectGlove 改分包；原五函数不变，整包需显式产品 ID，0.4.0 尚未发布与真机验收 |
+| 2026-11-04 | 文档更新 | 修正分包类型字节与实物手侧的关系，明确单手单串口、显式左右手线序和无自动双手路由，并在文档目录登记手套协议页 |
+| 2026-11-04 | 验证完成 | 0.4.0 分包解析、整包兼容、默认入口、模拟源、五步 WS/SQLite/HTTP 链路和独立 npm 安装通过；原五函数导出不变 |
+| 2026-11-04 | 文档更新 | 准备 0.4.0 客户交付说明，统一 npm 固定版本与 TGZ 安装示例，保留协议迁移提示，并修正点位表元数据与分包适配器的关系；未改变运行代码或五函数 |
 
 ## 10. 原 SDK 历史记录
 

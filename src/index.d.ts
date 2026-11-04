@@ -236,7 +236,8 @@ export interface NodeSerialDevice extends Device {
 /** 已核实并封装串口协议的产品；与旧 listProducts() 的展示线序清单不同。 */
 /** 新产品的公开类型集中登记于此，与 core/products/registry.js 的运行时注册对应。 */
 export interface DeviceProductTypes {
-  handGloveFullPacket: { names: 'handGloveFullPacket' | 'glove'; frame: GloveFrame; node: NodeGloveOptions; web: WebGloveOptions };
+  handGloveSegmented: { names: 'handGloveSegmented' | 'glove'; frame: SegmentedGloveFrame; node: NodeGloveOptions; web: WebGloveOptions };
+  handGloveFullPacket: { names: 'handGloveFullPacket'; frame: GloveFrame; node: NodeFullPacketGloveOptions; web: WebFullPacketGloveOptions };
   hand: { names: 'hand' | 'pad'; frame: HandPadFrame; node: NodeHandPadOptions; web: WebHandPadOptions };
   humanBody: { names: 'humanBody' | 'body'; frame: HumanBodyFrame; node: NodeHumanBodyOptions; web: WebHumanBodyOptions };
   jqInsole: { names: 'jqInsole' | 'insole'; frame: InsoleFrame; node: NodeInsoleOptions; web: WebInsoleOptions };
@@ -257,6 +258,9 @@ export interface DeviceProductInfo {
   family: string;
   baudRate: number;
   payloadLength: number;
+  /** 分包手套分别为 130、146；payloadLength 为二者合计 276，均不含帧尾。 */
+  firstPacketLength?: number;
+  secondPacketLength?: number;
   /** 协议扫描通道数；不等于物理布局中已定义的传感器数量。 */
   sensorPoints: number;
   /** 有明确物理点位表时，给出不含显示插值/重复格的点数。 */
@@ -313,6 +317,15 @@ export interface GloveFrame extends ProductFrame<Uint8Array> {
   imu: { raw: Uint8Array };
 }
 export interface HandPadFrame extends ProductFrame<Uint8Array> { product: 'hand'; }
+
+/** 默认手套协议：130 字节首包与 146 字节尾包组成一帧，无设备帧序号。 */
+export interface SegmentedGloveFrame extends Omit<GloveFrame, 'product' | 'sequence' | 'packetType'> {
+  product: 'handGloveSegmented';
+  protocol: 'segmented';
+  /** 首尾包配对使用的原始类型字节，不代表实物左右手，也不是采样序号。 */
+  packetType: number;
+  sequence?: never;
+}
 
 /** 来源物理矩阵标识；不按模型朝向交换左右，也不加入显示翻转或插值。 */
 export type HumanBodyRegionId = 'back' | 'chest' | 'rightArm' | 'rightShoulder'
@@ -458,7 +471,7 @@ export interface ProductViewOptions<T extends Frame = Frame> extends HeatmapOpti
   /** 提供时自动订阅 onData/onFrame；不提供时手动调用视图 render。 */
   source?: FrameSource<T>;
   /** 可提前约束产品类型，收到其他产品帧时报错。 */
-  product?: 'handGloveFullPacket' | 'hand';
+  product?: 'handGloveSegmented' | 'handGloveFullPacket' | 'hand';
 }
 export interface ProductView {
   /** 提交一帧产品数据，相邻刷新周期内只绘制最新帧。 */
@@ -482,7 +495,7 @@ export function connectStream<T extends Frame = Frame>(options?: StreamOptions<T
 /** source 存在时自动订阅；手套为二维分区视图，不包含三维模型。 */
 export function createProductView<T extends Frame = Frame>(target: HTMLElement | string, options?: ProductViewOptions<T>): ProductView;
 export interface ProductDevice<T extends Frame & { product: DeviceProductId } = RegisteredProductFrame> extends Omit<Device, 'info' | 'onFrame'> {
-  info: DeviceInfo & { product: T['product']; label: string; side?: 'left' | 'right'; protocol?: InsoleProtocol };
+  info: DeviceInfo & { product: T['product']; label: string; side?: 'left' | 'right'; protocol?: InsoleProtocol | 'segmented' };
   onFrame(handler: (frame: T) => void): () => void;
   /** onFrame 的产品入口别名。 */
   onData(handler: (frame: T) => void): () => void;
@@ -492,8 +505,8 @@ export interface ProductCallbacks<T extends Frame & { product: DeviceProductId }
   onData?: (frame: T) => void;
   onError?: (error: ShroomError) => void;
 }
-export interface WebGloveOptions extends ProductCallbacks<GloveFrame> {
-  /** 实物左/右手决定点位表，设备不会自动报告或推断此值。 */
+export interface WebGloveOptions extends ProductCallbacks<SegmentedGloveFrame> {
+  /** 一只手一个串口；显式选择实物手侧用于线序，包类型不能推断左右手。 */
   side: 'left' | 'right';
   port?: unknown;
   filters?: WebConnectOptions['filters'];
@@ -503,11 +516,14 @@ export interface WebHandPadOptions extends ProductCallbacks<HandPadFrame> {
   port?: unknown;
   filters?: WebConnectOptions['filters'];
 }
-export interface NodeGloveOptions extends ProductCallbacks<GloveFrame>, NodeSerialLifecycleOptions {
+export interface NodeGloveOptions extends ProductCallbacks<SegmentedGloveFrame>, NodeSerialLifecycleOptions {
   side: 'left' | 'right';
   /** 未指定时仅一个端口可自动选择；多端口抛 PORT_AMBIGUOUS。 */
   path?: string;
 }
+/** 兼容整包设备：通过显式 product: handGloveFullPacket 使用。 */
+export interface WebFullPacketGloveOptions extends Omit<WebGloveOptions, 'onData'>, ProductCallbacks<GloveFrame> {}
+export interface NodeFullPacketGloveOptions extends Omit<NodeGloveOptions, 'onData'>, ProductCallbacks<GloveFrame> {}
 export interface NodeHandPadOptions extends ProductCallbacks<HandPadFrame>, NodeSerialLifecycleOptions {
   side?: never;
   path?: string;
@@ -546,8 +562,8 @@ export type NodeProductDevice<T extends Frame & { product: DeviceProductId } = R
   ProductDevice<T> & Pick<NodeSerialDevice, 'onStateChange'>;
 /** 列出已有产品协议封装；不会枚举串口或扫描实物。 */
 export function listDeviceProducts(): DeviceProductInfo[];
-/** 浏览器整包手套入口：先激活授权，在用户点击中选择串口，按 side 解析分区。 */
-export function connectGlove(options: WebGloveOptions): Promise<ProductDevice<GloveFrame>>;
+/** 浏览器分包手套入口：先激活授权，在用户点击中选择串口，首尾包配对后按 side 解析分区。 */
+export function connectGlove(options: WebGloveOptions): Promise<ProductDevice<SegmentedGloveFrame>>;
 /** 浏览器手部检测垫入口：内置 32×32 协议与映射，不需要 side。 */
 export function connectHandPad(options?: WebHandPadOptions): Promise<ProductDevice<HandPadFrame>>;
 /** 按 product 选择已适配协议；产品配置决定波特率和解析器，回调接收产品帧。 */

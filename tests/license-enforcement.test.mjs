@@ -168,7 +168,8 @@ test('only SDK-created mocks receive license-free relay and recording access', a
   t.after(() => rm(directory, { recursive: true, force: true }));
   const spoofed = { info: { source: 'mock' }, onFrame: () => () => {} };
   await assert.rejects(serveDevice(spoofed, { port: 0, recordingsDir: directory }), { code: 'LICENSE_REQUIRED' });
-  for (const device of [createMockDevice(), createProductMockDevice({ product: 'handGloveFullPacket', side: 'left' })]) {
+  for (const device of [createMockDevice(), createProductMockDevice({ product: 'handGloveFullPacket', side: 'left' }),
+    createProductMockDevice({ product: 'glove', side: 'right' })]) {
     assert.throws(() => { device.onData = spoofed.onFrame; }, TypeError);
     assert.throws(() => { device.onFrame = spoofed.onFrame; }, TypeError);
     const server = await serveDevice(device, { port: 0, recordingsDir: directory });

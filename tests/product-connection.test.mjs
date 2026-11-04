@@ -130,11 +130,11 @@ test('browser product errors reach callbacks supplied at connection time', async
   assert.equal(port.closeCalls, 1);
 });
 
-test('browser glove handles split packets and delivers pressure, mapping and opaque IMU bytes', async (t) => {
+test('explicit full-packet browser glove handles fragmented serial reads and keeps legacy fields', async (t) => {
   const port = new ProductWebPort();
   webEnvironment(t, async () => port);
   const frames = [];
-  const device = await connectWebGlove({ side: 'left', onData: (frame) => frames.push(frame) });
+  const device = await connectWebProduct({ product: 'handGloveFullPacket', side: 'left', onData: (frame) => frames.push(frame) });
   t.after(() => device.close());
   port.controller.enqueue(glovePacket.subarray(0, 105));
   await tick();
@@ -162,6 +162,37 @@ test('browser glove handles split packets and delivers pressure, mapping and opa
   assert.equal(device.frameLength, 274);
 });
 
+for (const [side, type] of [['left', 1], ['left', 2], ['right', 2]]) test(`browser default ${side} glove pairs type ${type} packets before delivering one frame`, async t => {
+  const port = new ProductWebPort();
+  webEnvironment(t, async () => port);
+  const frames = [];
+  const device = await connectWebGlove({ side, onData: frame => frames.push(frame) });
+  t.after(() => device.close());
+  assert.equal(device.info.product, 'handGloveSegmented');
+  port.controller.enqueue(glovePacket);
+  await tick();
+  assert.equal(frames.length, 0, '完整旧整包不能误通过默认分包解析器');
+  const first = Uint8Array.from([1, type, ...glovePressure.slice(0, 128), ...delimiter]);
+  const second = Uint8Array.from([2, type, ...glovePressure.slice(128), ...gloveImu, ...delimiter]);
+  port.controller.enqueue(first.slice(0, 50));
+  port.controller.enqueue(first.slice(50));
+  await tick();
+  assert.equal(frames.length, 0);
+  port.controller.enqueue(second.slice(0, 40));
+  port.controller.enqueue(second.slice(40));
+  await tick();
+  assert.equal(frames.length, 1);
+  assert.equal(frames[0].product, 'handGloveSegmented');
+  assert.equal(frames[0].protocol, 'segmented');
+  assert.equal(frames[0].packetType, type);
+  assert.equal(frames[0].sequence, undefined);
+  assert.equal(frames[0].side, side);
+  assert.deepEqual(frames[0].pressure, glovePressure);
+  assert.deepEqual(frames[0].imu.raw, gloveImu);
+  assert.equal(frames[0].palm.raw.length, 72);
+  assert.equal(device.frameLength, 276);
+});
+
 test('browser convenience entry fixes its product and reuses authorized ports', async (t) => {
   const port = new ProductWebPort();
   webEnvironment(t, async () => { throw new Error('must not request another port'); });
@@ -170,7 +201,7 @@ test('browser convenience entry fixes its product and reuses authorized ports', 
   await pad.close();
   const glovePort = new ProductWebPort();
   const glove = await connectWebGlove({ port: glovePort, side: 'left' });
-  assert.equal(glove.info.product, 'handGloveFullPacket');
+  assert.equal(glove.info.product, 'handGloveSegmented');
   assert.equal(glove.info.side, 'left');
   assert.deepEqual(glovePort.openCalls, [{ baudRate: 921600 }]);
   await glove.close();
@@ -253,15 +284,21 @@ test('Node products use safe port selection and preserve the generic first-port 
     ProductNodePort.instances = [];
     ProductNodePort.ports = [{ path: 'FIRST' }, { path: 'SECOND' }];
     const device = await connectNodeGlove({ path: 'SECOND', side: 'right', product: 'hand' });
-    assert.equal(device.info.product, 'handGloveFullPacket');
+    assert.equal(device.info.product, 'handGloveSegmented');
     assert.equal(device.info.side, 'right');
     assert.equal(device.info.path, 'SECOND');
     assert.equal(ProductNodePort.instances[0].options.baudRate, 921600);
     const frames = [];
     device.onData((frame) => frames.push(frame));
     ProductNodePort.instances[0].emit('data', glovePacket);
+    assert.equal(frames.length, 0, '默认分包入口不能把旧整包当成有效数据');
+    ProductNodePort.instances[0].emit('data', Uint8Array.from([1, 2, ...glovePressure.slice(0, 128), ...delimiter]));
+    assert.equal(frames.length, 0, '只收到首包不发布不完整产品帧');
+    ProductNodePort.instances[0].emit('data', Uint8Array.from([2, 2, ...glovePressure.slice(128), ...gloveImu, ...delimiter]));
     assert.equal(frames.length, 1);
     assert.equal(frames[0].side, 'right');
+    assert.equal(frames[0].protocol, 'segmented');
+    assert.equal(frames[0].sequence, undefined);
     assert.deepEqual(frames[0].pressure, glovePressure);
     assert.deepEqual(frames[0].imu.raw, gloveImu);
     assert.equal(frames[0].pressureMatrix[0], glovePressure[189]);

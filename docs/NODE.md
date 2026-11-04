@@ -6,7 +6,7 @@
 
 适合 Node.js 服务、命令行采集和 Electron 应用。通过串口直接读取设备，或通过 HTTP / WebSocket 连接已经运行的后端。
 
-整包手套与手部检测垫优先按 **选产品 → 选端口与手侧 → onData 接收数据 → 错误诊断** 接入，波特率、协议和线序由产品入口内置。通用 `connect()` 保留为进阶配置；串口查询只列端口，不识别硬件型号，每个阶段都应处理结构化错误。
+分包手套与手部检测垫优先按 **选产品 → 选端口与手侧 → onData 接收数据 → 错误诊断** 接入，波特率、协议和线序由产品入口内置。通用 `connect()` 保留为进阶配置；串口查询只列端口，不识别硬件型号，每个阶段都应处理结构化错误。
 
 连接前从 `shroom-sdk/node` 导入 `listPorts()`，将返回的 `path` 展示给用户选择；不要直接取第一项。查询不打开串口，也不需要先激活授权；完整片段见[快速接入准备](QUICK-START.md#flow-ports)。
 
@@ -42,7 +42,7 @@ try {
 }
 ```
 
-`mock()` 同步返回设备，通用 `connect()` 异步返回设备。两者使用相同的 `onFrame() / onError() / state / getDiagnostics()` 与关闭接口；Mock 计数反映模拟生成量，不是串口吞吐。Mock 不提供产品 onData、手套序号或 IMU，不能直接作为整包手套替身。
+`mock()` 同步返回设备，通用 `connect()` 异步返回设备。两者使用相同的 `onFrame() / onError() / state / getDiagnostics()` 与关闭接口；Mock 计数反映模拟生成量，不是串口吞吐。Mock 不提供产品 onData、手套序号或 IMU，不能直接作为手套分包/整包替身。
 
 ## 改为串口采集
 
@@ -67,7 +67,7 @@ try {
 }
 ```
 
-手部检测垫换为 `Shroom.connectHandPad({ path: 'COM3', onData: console.log, onError: console.error })`。`connectGlove()` 固定整包协议 `handGloveFullPacket`，side 必填；`connectHandPad()` 固定 `hand`。也可使用 `Shroom.connectProduct({ product, ...options })`，清单来自 `Shroom.listDeviceProducts()`。这些方法同样具名导出。
+手部检测垫换为 `Shroom.connectHandPad({ path: 'COM3', onData: console.log, onError: console.error })`。`connectGlove()` 从 0.4.0 起固定分包协议 `handGloveSegmented`，side 必填；整包设备使用 `connectProduct({ product: 'handGloveFullPacket', ...options })`。`connectHandPad()` 固定 `hand`。也可使用 `Shroom.connectProduct({ product, ...options })`，清单来自 `Shroom.listDeviceProducts()`。这些方法同样具名导出。
 
 产品入口省略 path 时，只在恰好一个端口时自动选择；零个为 `PORT_NOT_FOUND`、多个为 `PORT_AMBIGUOUS`。`onData / onError` 在打开前注册，避免漏首帧；连接前失败仍拒绝 Promise。产品入口不接受 delimiter、layout 等底层覆盖；只有鞋垫明确支持 protocol 和来源列出的 baudRate，其他产品固定波特率。
 
@@ -83,11 +83,11 @@ node node/product-demo.js glove right COM4
 node node/product-demo.js hand-pad COM5
 ```
 
-手套按 921600 波特率解析 274 字节 payload：1 字节序号、1 字节包类型、256 字节压力和 16 字节 IMU，包尾 `AA 55 03 99`。`raw / pressure` 保留 256 个 ADC，`pressureMatrix` 为映射后 195 个 ADC，`values` 是归一化 13×15；side 不从包类型猜测，IMU 只保留原字节。检测垫内置 1000000、1024 点、32×32 与 mat32；pressure 是原扫描值，pressureMatrix 和 values 已映射。产品字段仅 JS 提供，Python 未实现这些入口。
+默认手套按 921600 波特率解析 130 字节首包 + 146 字节尾包，每包尾为 `AA 55 03 99`，合并出 256 个压力 ADC 和 16 字节 IMU；分包帧没有 `sequence`，`packetType` 只是首尾包配对类型（0–255）。显式 `handGloveFullPacket` 仍保留 274 字节整包与序号，详见[手套协议](GLOVE.md)。`raw / pressure` 保留 256 个 ADC，`pressureMatrix` 为映射后 195 个 ADC，`values` 是归一化 13×15；一只手一个串口，side 由应用按该串口实物明确选择线序，不从 packetType 推断，IMU 只保留原字节。检测垫内置 1000000、1024 点、32×32 与 mat32；pressure 是原扫描值，pressureMatrix 和 values 已映射。产品字段仅 JS 提供，Python 未实现这些入口。
 
-整包手套还按最新点位表直接给出 `fingers.thumb / index / middle / ring / little` 五指，每指主体 4×3、12 点，各指 `.pulp` 是独立 1×1 指腹点；`palm` 为手掌，rows=5、cols=15，但 rowLengths=`[12, 15, 15, 15, 15]`，共 72 点，不补零。区域含中文 name、rows、cols、rowLengths、0-based 扫描索引 sourceIndices（Uint16Array）、raw（ADC）、values（按父帧 fullScale 归一化）、matrix（按实际行长排列的 ADC 二维数组），完整字段见[产品帧 API](BACKEND-GUIDE.md#node-product-data)。
+两种手套协议均按同一份点位表直接给出 `fingers.thumb / index / middle / ring / little` 五指，每指主体 4×3、12 点，各指 `.pulp` 是独立 1×1 指腹点；`palm` 为手掌，rows=5、cols=15，但 rowLengths=`[12, 15, 15, 15, 15]`，共 72 点，不补零。区域含中文 name、rows、cols、rowLengths、0-based 扫描索引 sourceIndices（Uint16Array）、raw（ADC）、values（按父帧 fullScale 归一化）、matrix（按实际行长排列的 ADC 二维数组），完整字段见[产品帧 API](BACKEND-GUIDE.md#node-product-data)。
 
-这 137 个分区映射位置独立于保留兼容的旧 195 点展示矩阵，不能通过切片 pressureMatrix 获取，也不要求覆盖全部 256 通道。顶层 max/area/center 等仍按旧矩阵计算，未新增分区统计。分区值不是力学单位或弯曲角度；表中的 btPacketSize=128 仅为元数据，不新增蓝牙或双包传输。
+这 137 个分区映射位置独立于保留兼容的旧 195 点展示矩阵，不能通过切片 pressureMatrix 获取，也不要求覆盖全部 256 通道。顶层 max/area/center 等仍按旧矩阵计算，未新增分区统计。分区值不是力学单位或弯曲角度；表中的 btPacketSize=128 仅为元数据，不决定传输协议，也不提供蓝牙连接能力。分包与整包分别由对应的产品适配器解析。
 
 **通用串口进阶**：自定义协议时枚举端口，再按设备资料配置：
 

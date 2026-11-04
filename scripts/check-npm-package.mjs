@@ -25,6 +25,15 @@ function supportsNewProducts(version) {
     || (Number(minor) === 3 && (Number(patch) > 0 || !prerelease));
 }
 
+/** 分包手套从 0.4.0 起提供；仍允许对旧的 0.3.x 发布包做独立验收。 */
+function supportsSegmentedGlove(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([\w.-]+))?(?:\+[\w.-]+)?$/.exec(version);
+  if (!match) throw new Error('无法判断 npm 验收版本：' + version);
+  const [, major, minor, patch, prerelease] = match;
+  return Number(major) > 0 || Number(minor) > 4
+    || (Number(minor) === 4 && (Number(patch) > 0 || !prerelease));
+}
+
 /** 不经过 shell，Windows 上同样以参数数组启动 npm。 */
 async function npmCli() {
   const binary = dirname(process.execPath);
@@ -105,7 +114,9 @@ import * as core from 'shroom-sdk/core';
 
 const [recordingsDir, expectedVersion, browserBundle] = process.argv.slice(2);
 ${supportsNewProducts.toString()}
+${supportsSegmentedGlove.toString()}
 const checkExpandedProducts = supportsNewProducts(expectedVersion);
+const checkSegmentedGlove = supportsSegmentedGlove(expectedVersion);
 const names = ['createWS', 'downloadRecording', 'readProduct', 'startRecording', 'stopRecording'];
 assert.deepEqual(Object.keys(flow).sort(), names);
 for (const name of names) assert.equal(typeof flow[name], 'function');
@@ -169,7 +180,7 @@ assert.equal(closedUnsupported, true);
 // 安装包的真实公开基础入口解析合成串口字节，随后跨 Node/浏览器 WS 编解码。
 // 不导入 runtime 内部适配器、不访问硬件或授权后台；同时覆盖 browser 条件产物。
 if (checkExpandedProducts) {
-  const products = ['hand', 'handGloveFullPacket', 'humanBody', 'jqInsole'].sort();
+  const products = ['hand', 'handGloveFullPacket', 'humanBody', 'jqInsole', ...(checkSegmentedGlove ? ['handGloveSegmented'] : [])].sort();
   for (const entry of [root, web, node, consumer.root, consumer.web]) {
     assert.deepEqual(Array.from(entry.listDeviceProducts(), profile => profile.product).sort(), products);
     assert.deepEqual(Array.from(entry.Shroom.listDeviceProducts(), profile => profile.product).sort(), products);
@@ -190,18 +201,31 @@ if (checkExpandedProducts) {
     return { adc, wire: Uint8Array.from(is12 ? [...header, ...bytes]
       : [...header, 1, 31, ...bytes.subarray(0, 128), ...header, 2, 31, ...bytes.subarray(128)]) };
   }
+  function gloveSample(side) {
+    const packetType = 2; // 单手单串口：相同类型也能对应左/右手，side 决定点位映射。
+    const adc = Array.from({ length: 256 }, (_, i) => i % 251);
+    const imu = new Uint8Array(16);
+    const view = new DataView(imu.buffer);
+    [1, -0.25, 0.5, 0].forEach((value, i) => view.setFloat32(i * 4, value, true));
+    return { adc, imu, packetType,
+      wire: Uint8Array.from([1, packetType, ...adc.slice(0, 128), ...header,
+        2, packetType, ...adc.slice(128), ...imu, ...header]) };
+  }
   const browserBytes = runInNewContext('Uint8Array', browser);
   const typed = (value, name) => assert.equal(Object.prototype.toString.call(value), '[object ' + name + ']');
   browser.navigator = { serial: { async requestPort() { throw new Error('验收必须使用显式模拟端口'); } } };
   await consumer.web.activateLicense(key, { mode: 'offline', publicKey });
   try {
     for (const config of [
+      ...(checkSegmentedGlove ? [{ product: 'glove', side: 'left' }, { product: 'handGloveSegmented', side: 'right' }] : []),
       { product: 'body' },
       { product: 'insole', side: 'left', protocol: '12bit', baudRate: 1500000 },
       { product: 'jqInsole', side: 'right', protocol: '8bit' },
     ]) {
       const isBody = config.product === 'body';
-      const sample = isBody ? { adc: Array.from(bodyAdc), wire: Uint8Array.from([...bodyAdc, ...header]) } : insoleSample(config.protocol);
+      const isGlove = ['glove', 'handGloveSegmented'].includes(config.product);
+      const sample = isBody ? { adc: Array.from(bodyAdc), wire: Uint8Array.from([...bodyAdc, ...header]) }
+        : isGlove ? gloveSample(config.side) : insoleSample(config.protocol);
       const chunks = [];
       for (let i = 0; i < sample.wire.length; i += 13) chunks.push(new browserBytes(sample.wire.subarray(i, i + 13)));
       let chunkIndex = 0, finishRead, closed = 0, baudRate;
@@ -222,7 +246,8 @@ if (checkExpandedProducts) {
       const errors = [];
       const received = new Promise((resolve, reject) => { resolveFrame = resolve; rejectFrame = reject; });
       try {
-        productDevice = await consumer.web.connectProduct({ ...config, port,
+        const connect = config.product === 'glove' ? consumer.web.connectGlove : consumer.web.connectProduct;
+        productDevice = await connect({ ...config, port,
           onData: resolveFrame, onError(error) { errors.push(error); rejectFrame(error); } });
         timer = setTimeout(() => rejectFrame(new Error('安装包新产品合成帧超时')), 5000);
         const frame = await received;
@@ -236,7 +261,18 @@ if (checkExpandedProducts) {
         for (const copy of [frame, restoredNode, restoredBrowser]) {
           assert.deepEqual(Array.from(copy.pressure), sample.adc);
           typed(copy.raw, 'Uint8Array'); typed(copy.values, 'Float32Array');
-          if (isBody) {
+          if (isGlove) {
+            assert.equal(copy.product, 'handGloveSegmented');
+            assert.equal(copy.protocol, 'segmented');
+            assert.equal(copy.side, config.side);
+            assert.equal(copy.packetType, sample.packetType);
+            assert.equal('sequence' in copy, false, '分包无设备帧号，不能伪造 sequence');
+            assert.equal(copy.raw.length, 256);
+            assert.equal(copy.palm.raw.length, 72);
+            assert.equal(Object.keys(copy.fingers).length, 5);
+            assert.deepEqual(Array.from(copy.imu.raw), Array.from(sample.imu));
+            typed(copy.pressure, 'Uint8Array'); typed(copy.pressureMatrix, 'Uint8Array');
+          } else if (isBody) {
             assert.equal(copy.product, 'humanBody');
             typed(copy.pressure, 'Uint8Array'); typed(copy.pressureMatrix, 'Uint8Array');
             assert.equal(copy.raw.length, 1024);
@@ -283,7 +319,7 @@ if (checkExpandedProducts) {
       }
       assert.equal(closed, 1, '每个合成串口都必须完整释放');
     }
-    console.log('npm 四产品注册、人体400通道、鞋垫双协议精度与 Node/浏览器 WS 编解码通过。');
+    console.log('npm 产品注册、' + (checkSegmentedGlove ? '分包手套左右手、' : '') + '人体400通道、鞋垫双协议精度与 Node/浏览器 WS 编解码通过。');
   } finally {
     consumer.web.clearLicense();
     delete browser.navigator;
@@ -436,6 +472,28 @@ await readProduct({ product: 'body', side: 'left', path: 'COM_TEST' });
 await readProduct({ product: 'body', protocol: '12bit', path: 'COM_TEST' });
 `;
 
+const SEGMENTED_GLOVE_TYPES_CONSUMER = `
+import type { SegmentedGloveFrame, GloveFrame } from 'shroom-sdk';
+const segmented = await readProduct({ product: 'glove', side: 'left', onData(frame) {
+  const typed: SegmentedGloveFrame = frame;
+  const protocol: 'segmented' = typed.protocol;
+  const packetType: number = typed.packetType;
+  // @ts-expect-error 分包协议没有设备帧号。
+  const sequence: number = typed.sequence;
+  console.log(protocol, packetType, sequence, typed.fingers);
+} });
+await segmented.close();
+const explicitSegments = await WebShroom.connectProduct({ product: 'handGloveSegmented', side: 'right' });
+explicitSegments.onData(frame => { const typed: SegmentedGloveFrame = frame; console.log(typed.palm); });
+await explicitSegments.close();
+const legacy = await readProduct({ product: 'handGloveFullPacket', side: 'left', onData(frame) {
+  const typed: GloveFrame = frame;
+  const sequence: number = typed.sequence;
+  console.log(sequence);
+} });
+await legacy.close();
+`;
+
 export async function checkNpmPackage({ projectRoot = ROOT, packagePath, fromRegistry = false } = {}) {
   const { version } = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8'));
   const archive = resolve(packagePath ?? join(projectRoot, 'dist', `shroom-sdk-${version}.tgz`));
@@ -482,7 +540,9 @@ export async function checkNpmPackage({ projectRoot = ROOT, packagePath, fromReg
     await execute(['smoke.mjs', join(temporary, 'recordings'), version, browserBundle],
       { cwd: consumer, env, label: 'npm 消费者五步流程', timeout: 30000 });
 
-    await writeFile(join(consumer, 'types.mts'), TYPES_CONSUMER + (supportsNewProducts(version) ? NEW_PRODUCT_TYPES_CONSUMER : ''));
+    await writeFile(join(consumer, 'types.mts'), TYPES_CONSUMER
+      + (supportsNewProducts(version) ? NEW_PRODUCT_TYPES_CONSUMER : '')
+      + (supportsSegmentedGlove(version) ? SEGMENTED_GLOVE_TYPES_CONSUMER : ''));
     for (const [module, moduleResolution, types] of [['NodeNext', 'NodeNext', ['node']], ['ESNext', 'Bundler', []]]) {
       const config = { compilerOptions: { target: 'ES2022', lib: ['ES2022', 'DOM', 'DOM.Iterable'],
         module, moduleResolution, strict: true, noEmit: true, skipLibCheck: false, types,

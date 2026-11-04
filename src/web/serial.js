@@ -59,11 +59,11 @@ export async function connectProduct(options = {}) {
 }
 
 /**
- * 使用整包手套协议连接；options.side 必填 left/right，不自动识别实物手侧。
+ * 使用分包手套协议连接；options.side 必填 left/right，单串口配对同类型首尾包后按实物手侧映射。
  * 可在 options.onData 中直接读取 fingers、palm 和 imu；连接前注册可避免遗漏首帧。
  */
 export async function connectGlove(options = {}) {
-  return connectProduct(productOptionsFor(options, 'handGloveFullPacket'));
+  return connectProduct(productOptionsFor(options, 'handGloveSegmented'));
 }
 
 /** 使用手部检测垫内置协议连接；onData 返回已映射的 32×32 数据，无需配置 side。 */

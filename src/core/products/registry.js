@@ -3,11 +3,12 @@
  * 新产品实现独立适配器后在此登记；不会根据参数、数据长度或设备名猜测产品。
  */
 import { gloveProductAdapter } from './glove.js';
+import { segmentedGloveProductAdapter } from './glove-segmented.js';
 import { padProductAdapter } from './pad.js';
 import { bodyProductAdapter } from './body.js';
 import { insoleProductAdapter } from './insole.js';
 
-export const deviceProductAdapters = Object.freeze([gloveProductAdapter, padProductAdapter, bodyProductAdapter, insoleProductAdapter]);
+export const deviceProductAdapters = Object.freeze([segmentedGloveProductAdapter, gloveProductAdapter, padProductAdapter, bodyProductAdapter, insoleProductAdapter]);
 const deviceProductCanonicalRegistry = new Map();
 const deviceProductConnectionRegistry = new Map();
 

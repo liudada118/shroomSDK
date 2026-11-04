@@ -9,7 +9,8 @@
 - **驱动**：CH34x 设备需有可用串口驱动，安装在连接 USB 的电脑上。[Windows CH341SER.EXE](https://shroom.jq-industries.com/drive/CH341SER.EXE) · [macOS CH34xVCPDriver.zip](https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip)。安装后重新插拔，确认系统能列出串口；Linux 检查驱动与权限，见[驱动排查](DRIVERS.md)。
 - **安装**：Node.js 18+，在业务项目终端执行 `npm install shroom-sdk`，通过 npm 安装 SDK 及其声明的依赖。真实串口、WS 与 SQLite 分别需要 `serialport / ws / better-sqlite3` 可用。SDK 免登记下载，密钥另行申请；固定版本、下载 `.tgz` 与历史 URL 安装见[npm 安装](NPM.md)。
 - **授权**：在 Node.js 连接实机前，按 [SDK 授权](LICENSE.md)调用 `await Shroom.activateLicense(key, { deviceId })`；`Shroom` 从 `shroom-sdk/node` 导入。应用保存稳定的安装标识，不能每次启动重新生成。仅取数需要 `serial`，完整五步还需 `stream / recording`；浏览器连接此 Node 服务时无需重复激活。不要导入精简安装包未交付的 `node/license-env.js`。
-- **产品**：手套 `glove`、鞋垫 `insole` 必须指定实物 `side: 'left' | 'right'`；检测垫 `pad`、人体全身 `body` 不传side。规范ID依次为 `handGloveFullPacket / jqInsole / hand / humanBody`。鞋垫/人体要求0.3.0或更高版本；先核对本机版本，升级时让 Node 和网页安装同版本并重新构建前端。端口枚举不能识别产品或侧别。
+- **产品**：手套 `glove`、鞋垫 `insole` 必须指定实物 `side: 'left' | 'right'`；检测垫 `pad`、人体全身 `body` 不传side。规范ID依次为 `handGloveSegmented / jqInsole / hand / humanBody`。从 0.4.0 起，`glove` 与 `connectGlove()` 默认分包；0.3.0 只有整包手套。整包设备必须显式用 `handGloveFullPacket`，不能沿用默认入口。当前安装命令为 `npm install --save-exact shroom-sdk@0.4.0`；鞋垫/人体最低要求 0.3.0。升级时让 Node 和网页安装同版本并重新构建前端。端口枚举不能识别产品或侧别。
+- **手套连接单位**：一只手一个串口。side 按该串口所接实物决定线序，packetType 仅是首尾包一致性校验字段（0–255），不表示左右手。双手使用两个不同 path 和两个设备对象；不要生成单串口自动路由代码。
 - **鞋垫数据**：明确 `protocol: '12bit' | '8bit'`，默认12bit；默认921600波特率。`pressure`保留256通道原始ADC，12bit使用Uint16Array、范围0..4095，`raw`是512个原始ADC字节，不能先压到Uint8；8bit为256字节ADC。`sensors`是A版112个真实点，不是插值后的224点。IMU含原始四元数，12bit另含gyro/accel，未确定单位，不生成欧拉角或标定压力。详见[鞋垫协议](INSOLE.md)。
 - **人体数据**：`raw / pressure`保留1024原扫描ADC，`regions`按十块物理矩阵映射400唯一通道，`sourceIndices`为0基索引；模型显示的14槽/翻转/插值不是采集数据。详见[人体线序](HUMAN-BODY.md)。新增产品没有内置 `createProductView`，由客户处理 `onData` 展示。
 - **运行位置**：以下示例放在客户项目，统一从 `shroom-sdk/quick-flow` 导入；Node 使用 ESM，网页使用 Vite 等构建工具解析包名，并通过本机 `http://localhost` 访问。普通 HTML 无法直接解析包名：使用源码 ZIP，将导入改为 SDK 根目录的 `./quick-flow.js`，保留其依赖目录并以模块方式加载；不要双击 HTML。
@@ -213,7 +214,7 @@ SDK 会隔离同步数据回调的异常并报告 `CALLBACK_FAILED`；异步业�
 
 | 产品 | 业务读取字段 | 注意 |
 | --- | --- | --- |
-| 整包手套 `glove` | `fingers.*.raw`、`fingers.*.pulp.raw`、`palm.matrix`、`imu.raw` | 原始压力 256 通道；手掌 72 点，实际行长 `[12, 15, 15, 15, 15]`，不能把整只手套当规则矩阵；IMU 是 16 字节原始数据 |
+| 分包手套 `glove` / `handGloveSegmented` | `fingers.*.raw`、`fingers.*.pulp.raw`、`palm.matrix`、`imu.raw` | 一只手一个串口，side 按实物决定线序，packetType 仅作首尾配对类型；原始压力 256 通道、手掌 72 点，行长 `[12, 15, 15, 15, 15]`；IMU 原始 16 字节；130+146 两包配对后交付一帧，无 sequence |
 | 检测垫 `pad` | `pressureMatrix`、`values`，以及 `rows / cols` | 1024 点、32 × 32；产品入口已完成点位映射 |
 
 ADC 与归一化相对值不是 kPa、牛顿、公斤或弯曲角度。手套以命名分区取数，不能编造整手的 `pressureMatrix / values` 展示映射；产品帧不要再次 `decodeFrame()` 或重复应用 layout。
@@ -227,8 +228,8 @@ ADC 与归一化相对值不是 kPa、牛顿、公斤或弯曲角度。手套以
 | 浏览器直接连接 USB 串口 | [Web Serial](FRONTEND-COMMUNICATION.md#web-serial)：基础 `connectGlove / connectHandPad`，已激活后在用户点击中申请端口，要求受支持浏览器与安全上下文；与本文 WS 路线分开 |
 | 二维产品显示或热力图 | [前端通讯与产品数据](FRONTEND-COMMUNICATION.md#product-data)、[渲染 API](RENDERING.md)：显示不控制采集起停 |
 | 自定义协议与矩阵 | [基础与自定义](CUSTOM.md)、[串口](SERIAL.md)；不要覆盖产品接口的 `baudRate / delimiter / rows / cols / layout` |
-| 无硬件开发 | [Mock](FRONTEND-COMMUNICATION.md#mock)：只验证基础矩阵与显示，不模拟整包手套、IMU 或实际按压，不代表实机验收完成 |
+| 无硬件开发 | [Mock](FRONTEND-COMMUNICATION.md#mock)：只验证基础矩阵与显示，不模拟手套分包/整包、IMU 或实际按压，不代表实机验收完成 |
 | 已有主项目后端 | [BackendSdkClient](BACKEND.md)：连接已有服务，不启动服务；其 WS 协议与快速 WS 服务不同，不能混接 |
-| Python | 独立下载 Python 包，读 [Python AI 上下文](../python/AI-CONTEXT.md)与 [Python SDK](../python/README.md)。目前只有通用串口、矩阵、模拟与显示，没有本文的产品五函数、整包手套或 WS 录制服务；不要生成不存在的 Python 对应函数 |
+| Python | 独立下载 Python 包，读 [Python AI 上下文](../python/AI-CONTEXT.md)与 [Python SDK](../python/README.md)。目前只有通用串口、矩阵、模拟与显示，没有本文的产品五函数、手套分包/整包或 WS 录制服务；不要生成不存在的 Python 对应函数 |
 
 本地采集 SQLite 已内置，SDK 数据库与上位机数据库不直接兼容，也不依赖 Electron。业务数据库、曲线、回放、算法、标定与云端上传由应用实现。不要因用户需要这些功能就绕过现有录制接口重新实现一套采集。接入验证以实机持续取数、明确起停、记录状态和实际下载内容为准。

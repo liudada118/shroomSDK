@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shroom-sdk"
-version = "0.3.0"
+version = "0.4.0"
 description = "Shroom pressure sensor SDK: serial frames, layouts and mock devices"
 readme = "README.md"
 requires-python = ">=3.10"

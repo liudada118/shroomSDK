@@ -2,7 +2,7 @@
 
 同一台电脑上，Node.js 连接设备、创建 WS 并保存记录；浏览器连接一次，后面三步复用同一个 `stream`。下面只列 API 调用，放进自己的 Node.js 程序和网页，不需要复制完整 HTML。
 
-**运行前提**：设备驱动可用，业务项目已执行 `npm install shroom-sdk`，Node.js 已按 [SDK 授权](LICENSE.md)激活有效 SDK 产品密钥，功能包括 `serial / stream / recording`。安装和授权要点见文末[接入准备](#product-guide)。
+**运行前提**：设备驱动可用，业务项目已执行 `npm install --save-exact shroom-sdk@0.4.0`，Node.js 已按 [SDK 授权](LICENSE.md)激活有效 SDK 产品密钥，功能包括 `serial / stream / recording`。安装和授权要点见文末[接入准备](#product-guide)。
 
 **业务流程仍是五个函数**：`readProduct`、`createWS`、`startRecording`、`stopRecording`、`downloadRecording`，统一从 `shroom-sdk/quick-flow` 导入。连接前用 Node 基础 API 搜索串口并让用户选择，不增加第六个快速函数。
 
@@ -14,12 +14,12 @@
 
 | 产品 | product | 必要配置 | 主要数据 |
 | --- | --- | --- | --- |
-| 整包手套 | `glove` | `side: 'left' / 'right'` | `fingers / palm / imu.raw` |
+| 分包手套（0.4.0 起） | `glove` | `side: 'left' / 'right'` | `fingers / palm / imu.raw` |
 | 手部检测垫 | `pad` | 无侧别 | `pressureMatrix / values` |
 | 人体全身（0.3.0） | `body` | 无侧别 | `regions` 十块物理矩阵、400个唯一通道；`raw` 保留1024扫描值 |
 | A版鞋垫（0.3.0） | `insole` | `side` 必填；`protocol: '12bit' / '8bit'` | `pressure` 保留256通道ADC，`sensors` 为112真实点，`imu` 保留线上数值 |
 
-新产品要求0.3.0或更高版本；旧项目运行 `npm install --save-exact shroom-sdk@0.3.0` 升级 Node 和网页依赖，并重新构建前端。下面两个取数片段与原流程任选其一，后续四步继续复用 `device` 和 `stream`：
+人体和鞋垫要求 0.3.0 或更高版本；分包手套要求 **0.4.0 或更高版本**，0.3.0 不支持。Node 和网页依赖需使用相同版本，并重新构建前端；整包设备需显式使用 `handGloveFullPacket`，手套格式及迁移见[手套协议](GLOVE.md)。下面两个取数片段与原流程任选其一，后续四步继续复用 `device` 和 `stream`：
 
 ```js
 // 人体：SDK按上位机物理点位表输出分区，不用应用再次映射。
@@ -177,7 +177,9 @@ downloadRecording(stream, { format: 'csv' });
 
 ### 确认产品与串口 {#guide-config}
 
-整包手套使用 `product: 'glove'`，明确 `side: 'left' | 'right'`；手部检测垫使用 `product: 'pad'`，不传 `side`。也接受正式产品 ID `handGloveFullPacket / hand`。先按[搜索并选择串口](#flow-ports)查询实际 `path`；多端口不猜测产品。产品适配器内置波特率、拆帧和映射。
+分包手套使用 `product: 'glove'`（规范 ID `handGloveSegmented`），明确 `side: 'left' | 'right'`；手部检测垫使用 `product: 'pad'`（`hand`），不传 `side`。整包设备改用显式 `product: 'handGloveFullPacket'`，不要使用默认分包入口。先按[搜索并选择串口](#flow-ports)查询实际 `path`；多端口不猜测产品。产品适配器内置波特率、拆帧和映射。
+
+手套是一只手一个串口；`side` 按实物决定该连接的左右手线序，`packetType` 不决定手侧。两只手各选自己的 `path`、各调用一次 `readProduct()`，后续服务与采集也使用各自的设备对象，不在单串口自动拆分双手。
 
 ### 安装 SDK {#guide-run}
 

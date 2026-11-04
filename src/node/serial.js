@@ -37,8 +37,8 @@ export async function connectProduct(options = {}) {
   return connectSerialDevice(session.serialOptions, session);
 }
 
-/** 连接整包手套；side 必须为 left/right，不通过端口猜测实物手侧。 */
-export async function connectGlove(options = {}) { return connectProduct(productOptionsFor(options, 'handGloveFullPacket')); }
+/** 连接分包手套；side 必须为 left/right，SDK 完成首尾包配对后才交付产品数据。 */
+export async function connectGlove(options = {}) { return connectProduct(productOptionsFor(options, 'handGloveSegmented')); }
 
 /** 连接手部检测垫；无需 side，onData 返回映射后的 32×32 矩阵。 */
 export async function connectHandPad(options = {}) { return connectProduct(productOptionsFor(options, 'hand')); }

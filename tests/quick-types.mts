@@ -1,11 +1,11 @@
-import { Shroom, type GloveFrame, type RecordingSession } from 'shroom-sdk';
+import { Shroom, type SegmentedGloveFrame, type RecordingSession } from 'shroom-sdk';
 import { Shroom as NodeShroom } from 'shroom-sdk/node';
 
 /** Check the documented product-to-browser quick path without running hardware. */
 async function quickPath() {
   const glove = await NodeShroom.connectGlove({ path: 'COM3', side: 'left' });
   const server = await NodeShroom.serveDevice(glove, { port: 19999, recordingsDir: './recordings' });
-  const stream = await Shroom.connectStream<GloveFrame>({ port: server.port });
+  const stream = await Shroom.connectStream<SegmentedGloveFrame>({ port: server.port });
   stream.onData((frame) => console.log(frame.fingers.index.pulp.raw[0]));
   const view = Shroom.createProductView('#view', { source: stream });
   const recording: RecordingSession = await stream.startRecording({ label: '握拳' });

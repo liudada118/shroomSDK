@@ -5,14 +5,14 @@
  *   node examples/node/quick-demo.js --product hand --path COM4 --port 19999
  * 另开终端运行 node scripts/start.mjs，再按终端显示的端口访问 examples/web/quick-start.html。
  */
-import { connectGlove, connectHandPad } from '../../src/node/serial.js';
+import { connectProduct } from '../../src/node/serial.js';
 import { serveDevice } from '../../src/node/quick-server.js';
 import { createProductMockDevice } from '../../src/core/mock.js';
 import { activateLicenseFromEnv } from './license-env.js';
 
 /** 严格解析有限的命令行参数，防止拼写错误悄悄选中错误的设备或产品。 */
 function parseArguments(args) {
-  const options = { product: 'handGloveFullPacket', side: 'left', port: 19999, mock: false };
+  const options = { product: 'handGloveSegmented', side: 'left', port: 19999, mock: false };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === '--mock') { options.mock = true; continue; }
@@ -22,8 +22,8 @@ function parseArguments(args) {
     options[arg.slice(2)] = args[++i];
   }
   options.port = Number(options.port);
-  if (!['handGloveFullPacket', 'hand'].includes(options.product) || !['left', 'right'].includes(options.side)) {
-    throw new Error('product 只支持 handGloveFullPacket 或 hand；side 只支持 left 或 right。');
+  if (!['handGloveSegmented', 'handGloveFullPacket', 'hand'].includes(options.product) || !['left', 'right'].includes(options.side)) {
+    throw new Error('product 支持 handGloveSegmented（分包）、handGloveFullPacket（旧整包）或 hand；side 只支持 left 或 right。');
   }
   if (!options.mock && !options.path) throw new Error('真实设备请明确指定 --path COM3；无硬件请使用 --mock。');
   if (!Number.isInteger(options.port) || options.port < 1 || options.port > 65535) throw new Error('--port 必须为 1–65535。');
@@ -35,8 +35,7 @@ async function main() {
   const options = parseArguments(process.argv.slice(2));
   if (!options.mock) await activateLicenseFromEnv();
   const device = options.mock ? createProductMockDevice({ product: options.product, ...(options.product === 'hand' ? {} : { side: options.side }) })
-    : options.product === 'hand' ? await connectHandPad({ path: options.path })
-      : await connectGlove({ path: options.path, side: options.side });
+    : await connectProduct({ product: options.product, path: options.path, ...(options.product === 'hand' ? {} : { side: options.side }) });
   let relay;
   try { relay = await serveDevice(device, { port: options.port }); }
   catch (error) { await device.close(); throw error; }

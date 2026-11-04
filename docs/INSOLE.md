@@ -1,6 +1,6 @@
 # 鞋垫 A 版接入
 
-要求 SDK **0.3.0 或更高版本**。旧项目运行 `npm install --save-exact shroom-sdk@0.3.0` 升级。请让 Node 服务端与浏览器项目安装相同版本，并重新构建前端，避免旧 WS 客户端不认识新增字段。
+要求 SDK **0.3.0 或更高版本**。安装当前版本运行 `npm install --save-exact shroom-sdk@0.4.0`。请让 Node 服务端与浏览器项目安装相同版本，并重新构建前端，避免旧 WS 客户端不认识新增字段。
 
 鞋垫使用同一套五步函数：`readProduct → createWS → startRecording → stopRecording → downloadRecording`。产品名为 `jqInsole`，连接时也接受 `insole`；返回帧始终使用 `jqInsole`。本页只说明鞋垫新增参数与数据结构，授权、WS、SQLite 采集沿用[快速接入](QUICK-START.md)。
 

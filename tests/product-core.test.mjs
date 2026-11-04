@@ -23,7 +23,7 @@ test('shared product parser rejects empty boundaries and isolates delimiter conf
 });
 
 test('product metadata and all public entries expose only verified connection profiles', () => {
-  assert.deepEqual(listDeviceProducts().map((item) => item.product), ['handGloveFullPacket', 'hand', 'humanBody', 'jqInsole']);
+  assert.deepEqual(listDeviceProducts().map((item) => item.product), ['handGloveSegmented', 'handGloveFullPacket', 'hand', 'humanBody', 'jqInsole']);
   const profiles = listDeviceProducts();
   profiles[0].baudRate = 1;
   assert.equal(listDeviceProducts()[0].baudRate, 921600);
@@ -101,7 +101,7 @@ test('classic browser bundle exposes the same high-level product entry points', 
   const browser = { console };
   runInNewContext(source, browser);
   for (const name of ['connectProduct', 'connectGlove', 'connectHandPad', 'listDeviceProducts']) assert.equal(typeof browser.Shroom[name], 'function');
-  assert.equal(browser.Shroom.listDeviceProducts().length, 4);
+  assert.equal(browser.Shroom.listDeviceProducts().length, 5);
   await assert.rejects(browser.Shroom.connectGlove({ side: 'auto' }), { code: 'INVALID_CONFIG' });
 });
 
@@ -125,7 +125,7 @@ test('classic browser product callback also delivers anatomical regions', async 
   runInNewContext(source, browser);
   await activateTestLicense({}, browser.Shroom);
   const frames = [];
-  const device = await browser.Shroom.connectGlove({ side: 'right', onData: (frame) => frames.push(frame) });
+  const device = await browser.Shroom.connectProduct({ product: 'handGloveFullPacket', side: 'right', onData: (frame) => frames.push(frame) });
   try {
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(frames.length, 1);

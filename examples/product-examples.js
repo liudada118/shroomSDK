@@ -17,7 +17,7 @@ function normalize(options = {}) {
   if (!['complete', 'snippet'].includes(kind)) throw new TypeError('请选择完整示例或接入片段。');
   if (!['archive', 'repository'].includes(layout)) throw new TypeError('请选择归档或仓库示例布局。');
   return {
-    product: product === 'glove' ? 'handGloveFullPacket' : 'hand',
+    product: product === 'glove' ? 'handGloveSegmented' : 'hand',
     ...(product === 'glove' ? { side } : {}), env, platform, kind,
     label: product === 'glove' ? (side === 'left' ? '左手' : '右手') + '触觉手套' : '手部检测垫',
     filename: (product === 'glove' ? 'glove-' + side : 'hand-pad') + '-example.' + (env === 'node' ? 'mjs' : 'html'),
@@ -240,7 +240,7 @@ const webRuntimeSource = String.raw`function webRuntime(Shroom, configuration) {
       // 在点击中直接调用 connectProduct，前面不能先 await 远程激活或其他异步工作。
       // 浏览器由用户选择实际串口，不传 Node 的 path；串口列表也不会识别产品型号。
       session.device = await Shroom.connectProduct({
-        // product 必须与实物协议一致：handGloveFullPacket 为整包手套，hand 为手部检测垫。
+        // handGloveSegmented 为分包手套；SDK 配对首尾包后才回调，hand 为手部检测垫。
         product: configuration.product,
         // side 仅手套需要，来自实物左右手选择，SDK 不会从串口或包类型猜测。
         ...(configuration.side ? { side: configuration.side } : {}),
@@ -383,7 +383,7 @@ const nodeRuntimeSource = String.raw`async function nodeRuntime(Shroom, activate
     console.log('连接中：' + path);
     // 四、connectProduct：SDK 已内置产品的波特率、分帧和映射，不要再次传入协议参数。
     device = await Shroom.connectProduct({
-      // handGloveFullPacket 使用整包手套协议；hand 使用手部检测垫协议，不能用显示名代替。
+      // handGloveSegmented 使用分包手套协议；hand 使用手部检测垫协议，不能用显示名代替。
       product: configuration.product,
       // side 只给手套使用，必须与实物左右手对应；path 使用上面传入的实际系统串口路径。
       ...(configuration.side ? { side: configuration.side } : {}), path,
@@ -530,7 +530,7 @@ function completeWeb(configuration) {
 <p><strong>CH34x 设备未安装驱动时，系统可能无法识别串口。</strong>先安装对应驱动，重新插拔设备，再核对系统中的端口。</p>
 <p><a href="${drivers.windows}">Windows 驱动（EXE）</a> · <a href="${drivers.macos}">macOS 驱动（ZIP）</a></p>
 <p class="note">${configuration.platform === 'windows' ? 'Windows：在设备管理器的“端口（COM 和 LPT）”中确认设备。' : configuration.platform === 'macos' ? 'macOS：在终端运行 ls /dev/cu.*，比较插拔前后的设备端口。' : 'Linux：确认 /dev/ttyUSB* 或对应串口设备存在，且当前用户具有访问权限。Windows/macOS 驱动不适用于 Linux。'} 关闭占用端口的上位机或其他采集程序。</p>
-<p class="note">当前示例配置：<strong>${configuration.label}</strong>。这来自你选择的配置，尚未识别实物；${configuration.side ? '请核对左右手，手侧错误仍可能收到数据。' : '请确认实物使用手部检测垫协议。'}</p>
+<p class="note">当前示例配置：<strong>${configuration.label}</strong>。这来自你选择的配置，尚未识别实物；${configuration.side ? '一只手使用一个串口，请按实物指定左右手；包类型不用于猜测手侧。' : '请确认实物使用手部检测垫协议。'}</p>
 </section>
 <!-- 授权区：独立点击激活，不把远程激活和串口选择塞进同一次点击流程。 -->
 <section aria-labelledby="license-title">

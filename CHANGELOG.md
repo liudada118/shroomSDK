@@ -1,5 +1,12 @@
 # Shroom SDK 更新日志
 
+## [0.4.0] - 2026-11-04
+
+- 增加 `handGloveSegmented`：921600 波特率、130 字节首包与 146 字节尾包按同连接/同包类型合并，输出 256 通道压力、五指/指腹/手掌与 16 字节原始 IMU。
+- `glove` 别名及 Node/Web `connectGlove()` 默认改为分包。整包设备继续使用显式 `product: 'handGloveFullPacket'`；五个快速函数不变。
+- 分包帧用 `protocol: 'segmented'` 与原始包类型 `packetType` 标识，不伪造 `sequence`。一只手一个串口，显式 side 决定线序，不由 packetType 推断。增加首尾包校验、孤立/重复尾包丢弃、1 秒配对时限与重连缓存清理。
+- Node/Web 类型、WS、SQLite、导出和手套产品视图支持分包帧；Python 未新增手套协议。协议仍无 CRC 和帧序号，无法检测所有同类型丢包错配；合成帧验证不代替对应固件与实物验收。
+
 ## [0.3.0] - 2026-11-04
 
 - 增加 `body / humanBody` 产品：1024通道原始数据、十块物理矩阵的400点线序与0基源索引。

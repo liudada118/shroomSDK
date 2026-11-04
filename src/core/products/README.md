@@ -7,7 +7,8 @@
 | 文件 | 职责 |
 | --- | --- |
 | `registry.js` | 静态登记适配器，解析正式产品 ID 与连接别名 |
-| `glove.js` | 整包手套参数、解析器、五指/手掌/IMU 的 WS 校验 |
+| `glove-segmented.js` | 默认手套 130+146 分包配对、包类型/超时校验及无 sequence 的 WS 帧 |
+| `glove.js` | 兼容整包手套参数、解析器与共用的五指/手掌/IMU 字段校验 |
 | `pad.js` | 检测垫参数、mat32 解码与矩阵 WS 校验 |
 | `body.js / body-layout.js` | 人体1024通道、十块物理矩阵400点线序与WS校验 |
 | `insole.js / insole-layout.js` | 鞋垫12bit/8bit协议、112真实点、IMU与WS精度校验 |
@@ -29,7 +30,7 @@
 | `createParser(options)` | 为每个连接创建独立、有界的流解析器 |
 | `readStreamFields(input, output, typed)` | 校验并复制产品字段到已验证的通用帧 `output`，返回该结果 |
 
-目前 `glove → handGloveFullPacket`、`pad → hand`、`body → humanBody`、`insole → jqInsole`。别名只用于连接；输出的 `frame.product` 和网络传输必须使用正式 ID。`listDeviceProducts()` 返回默认 profile 的副本，不增加 aliases 字段，也不探测硬件。sensorPoints表示扫描通道数，mappedSensorPoints在有物理点位表时表示真实映射点数。
+目前 `glove → handGloveSegmented`（分包）、`pad → hand`、`body → humanBody`、`insole → jqInsole`；`handGloveFullPacket` 是需显式选择的兼容整包入口。别名只用于连接；输出的 `frame.product` 和网络传输必须使用正式 ID。`listDeviceProducts()` 返回默认 profile 的副本，不增加 aliases 字段，也不探测硬件。sensorPoints表示扫描通道数，mappedSensorPoints在有物理点位表时表示真实映射点数。
 
 ## 1. 实现协议与参数
 
@@ -46,7 +47,7 @@
 | `droppedCount` | 累计丢弃包/错误片段数，供设备诊断使用 |
 | `frameLength` | 最近成功解析的载荷长度，尚无有效帧时为 0 |
 
-缓存必须有界；覆盖跨 chunk、粘包、坏长度、无效校验和及重新同步。若新协议需要主动握手、启动命令或改变串口生命周期，需另外扩展并测试传输层；当前解析器契约本身不提供发送命令能力。
+缓存必须有界；覆盖跨 chunk、粘包、坏长度、无效校验和及重新同步。分包手套还需在同连接、同包类型下配对 130/146 字节包，过期/reset/非法包清首包，不把 1/2 包标志当帧序号。一只手一个串口，显式 side 决定线序，不能从包类型字节推断。其 `payloadLength / frameLength` 为两包载荷合计 276，不包含各自帧尾。若新协议需要主动握手、启动命令或改变串口生命周期，需另外扩展并测试传输层；当前解析器契约本身不提供发送命令能力。
 
 ## 2. 实现 WS 字段校验
 

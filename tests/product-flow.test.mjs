@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { createProductFlow } from '../examples/product-flow.js';
 import { readProduct, createWS, startRecording, stopRecording, downloadRecording } from '../src/quick-flow.js';
 import { createFrameHub } from '../src/core/device.js';
-import { decodeGlovePacket } from '../src/core/glove.js';
+import { createProductParser } from '../src/core/product.js';
 import { activateTestLicense } from './license-fixture.mjs';
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
@@ -53,7 +53,7 @@ test('displayed flow snippets share a real WS connection and download the record
   await activateTestLicense();
   const directory = await mkdtemp(join(tmpdir(), 'shroom-doc-flow-'));
   const hub = createFrameHub(), logs = [], errors = [], clicks = [];
-  const source = { info: { source: 'mock', product: 'handGloveFullPacket', side: 'right' },
+  const source = { info: { source: 'mock', product: 'handGloveSegmented', side: 'right' },
     onData: hub.onFrame, onError: hub.onError, close: async () => hub.clear() };
   const steps = createProductFlow({ product: 'glove', side: 'right', platform: 'windows' });
   const nodeCode = steps.flatMap(step => step.blocks.filter(block => block.runtime === 'node').map(block => body(block.code))).join('\n');
@@ -85,7 +85,12 @@ test('displayed flow snippets share a real WS connection and download the record
     const timer = setTimeout(() => reject(new Error('flow frame timeout')), 3000);
     const unsubscribe = client.onData(frame => { clearTimeout(timer); unsubscribe(); resolve(frame); });
   });
-  hub.emit(decodeGlovePacket(Uint8Array.from({ length: 274 }, (_, index) => index & 255), { side: 'right' }));
+  const pressure = Uint8Array.from({ length: 256 }, (_, index) => index % 251);
+  const tail = [170, 85, 3, 153];
+  const [productFrame] = createProductParser('glove', { side: 'right' }).push(Uint8Array.from([
+    1, 2, ...pressure.slice(0, 128), ...tail, 2, 2, ...pressure.slice(128), ...new Uint8Array(16), ...tail,
+  ]));
+  hub.emit(productFrame);
   const frame = await received;
   const recording = await browser.stop();
   assert.equal(recording.frameCount, 1);

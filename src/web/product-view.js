@@ -33,14 +33,14 @@ function productViewValidateFrame(frame) {
       || !Array.from(frame.values).every((value) => Number.isFinite(value) && value >= 0)) {
       throw productViewError('手部检测垫需要 32×32 的有效数据', 'PARSE_FAILED');
     }
-  } else if (frame?.product === 'handGloveFullPacket') {
+  } else if (['handGloveSegmented', 'handGloveFullPacket'].includes(frame?.product)) {
     if (!['left', 'right'].includes(frame.side)) throw productViewError('手套数据缺少左右手信息', 'PARSE_FAILED');
     for (const [key, name] of Object.entries(productViewFingerNames)) {
       productViewValidateRegion(frame.fingers?.[key], [3, 3, 3, 3], name);
       productViewValidateRegion(frame.fingers[key].pulp, [1], `${name}指腹`);
     }
     productViewValidateRegion(frame.palm, [12, 15, 15, 15, 15], '手掌');
-  } else throw productViewError('产品视图仅支持整包触觉手套和手部检测垫');
+  } else throw productViewError('产品视图仅支持分包/整包触觉手套和手部检测垫');
 }
 
 /**
@@ -59,7 +59,7 @@ export function createProductView(target, options = {}) {
     throw productViewError('source 需要提供 onData 或 onFrame 订阅方法');
   }
   const initialProduct = options.product ?? options.source?.info?.product;
-  if (initialProduct && !['handGloveFullPacket', 'hand'].includes(initialProduct)) throw productViewError('当前产品不支持标准视图');
+  if (initialProduct && !['handGloveSegmented', 'handGloveFullPacket', 'hand'].includes(initialProduct)) throw productViewError('当前产品不支持标准视图');
   const documentRef = container.ownerDocument ?? document;
   const root = documentRef.createElement('section');
   root.setAttribute('aria-label', 'Shroom 产品实时数据');

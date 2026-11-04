@@ -1,6 +1,6 @@
 /** 产品示例的生成选项；这不是连接硬件或激活授权的参数。 */
 export interface ProductExampleOptions {
-  /** glove 使用 handGloveFullPacket 协议；pad 使用 hand 协议。 */
+  /** glove 使用 handGloveSegmented 分包协议；pad 使用 hand 协议。 */
   product: 'glove' | 'pad';
   /** glove 必须明确填写实物手侧，否则生成时抛出 TypeError；pad 不使用此参数。 */
   side?: 'left' | 'right';
