@@ -1,5 +1,14 @@
 # Shroom SDK 更新日志
 
+## [0.3.0] - 2026-11-04
+
+状态：本地开发构建，尚未发布到 npm。
+
+- 增加 `body / humanBody` 产品：1024通道原始数据、十块物理矩阵的400点线序与0基源索引。
+- 增加 `insole / jqInsole` A版鞋垫：12bit整帧与8bit分包协议、显式脚侧/格式、112真实点坐标、原始ADC与IMU；保留12位精度，不移植显示插值或压力标定。
+- 产品参数、帧类型、WS编解码、SQLite采集和CSV/JSONL导出沿用现有五函数；增加半包、坏帧、线序及端到端采集验证。
+- Python和现有二维产品视图未新增这两种产品能力。来源代码/合成帧验证不代替对应固件与实物触点验收。
+
 发行版本统一覆盖 Node.js、浏览器和 Python 下载包；不同语言的功能范围以各自文档为准。版本来源为根目录 `package.json`，运行时可通过 `Shroom.version` 或 `shroom_sdk.__version__` 查询。
 
 本文件记录 `shroom-sdk` 的版本。仓库原有 `shroom-backend-sdk@0.2.0` 属于另一套包与接口；其更新日志和代码保留在 `legacy-backend-sdk-0.2.0` 标签，迁移差异见 [MIGRATION.md](https://github.com/liudada118/shroomSDK/blob/main/MIGRATION.md)。两个包的版本号不构成升级或降级关系。

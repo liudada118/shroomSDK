@@ -11,5 +11,5 @@ export interface ProductFlowStep {
   note: string;
 }
 
-/** Node 取数/创建服务，浏览器连接一次并控制录制与下载；importStyle=package 使用公开 npm 入口。 */
+/** Node 取数/创建服务，浏览器连接一次并控制录制与下载；body/insole 需尚未发布的 SDK 0.3.0。 */
 export function createProductFlow(options: Omit<ProductCallOptions, 'env'>): ProductFlowStep[];

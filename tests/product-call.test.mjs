@@ -40,3 +40,40 @@ test('product call generation rejects unsupported choices instead of inventing a
     assert.throws(() => createProductCall({ ...base, ...override }), TypeError);
   }
 });
+
+test('body and both insole protocols use Node calls and read their own fields without glove assumptions', async () => {
+  const configurations = [
+    { product: 'body' },
+    ...['left', 'right'].flatMap(side => [undefined, '12bit', '8bit'].map(protocol => ({ product: 'insole', side, ...(protocol ? { protocol } : {}) }))),
+  ];
+  const data = { regions: { torso: { raw: [1] } }, raw: new Uint8Array(1024),
+    sensors: { raw: new Uint16Array(112) }, pressure: new Uint16Array(256), imu: { quaternion: [1, 0, 0, 0] } };
+  for (const configuration of configurations) for (const quickFlow of [false, true])
+    for (const importStyle of ['relative', 'package']) {
+      const source = createProductCall({ ...configuration, env: 'node', platform: 'linux', quickFlow, importStyle });
+      const name = quickFlow ? 'readProduct' : 'connectProduct';
+      assert.equal(typeof NodeSdk.connectProduct, 'function');
+      assert.match(source, /0\.3\.0 开发版/);
+      assert.match(source, /npm 0\.2\.0 不包含/);
+      assert.doesNotMatch(source, /fingers|palm|createProductView|<!doctype|baudRate/);
+      const calls = [], output = [], device = { close: async () => {} };
+      const run = new AsyncFunction(name, 'console', source.replace(/^import[^\n]+\n/, '') + '\nreturn device;');
+      assert.equal(await run(async options => { calls.push(options); options.onData(data); return device; },
+        { log: (...args) => output.push(args), error() {} }), device);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].product, configuration.product);
+      assert.equal(calls[0].path, '/dev/ttyUSB0');
+      assert.equal(calls[0].side, configuration.side);
+      assert.equal(calls[0].protocol, configuration.product === 'insole' ? configuration.protocol ?? '12bit' : undefined);
+      assert.deepEqual(output[0], configuration.product === 'body' ? [data.regions, data.raw] : [data.sensors, data.pressure, data.imu]);
+    }
+});
+
+test('new products reject ambiguous protocol and side choices and do not generate direct browser examples', () => {
+  const base = { product: 'insole', side: 'left', env: 'node', platform: 'windows' };
+  for (const override of [{ side: undefined }, { side: 'auto' }, { protocol: 'auto' }, { protocol: null }, { env: 'web' }]) {
+    assert.throws(() => createProductCall({ ...base, ...override }), TypeError);
+  }
+  assert.throws(() => createProductCall({ ...base, product: 'body', protocol: '12bit' }), /不使用/);
+  assert.throws(() => createProductCall({ ...base, product: 'body', env: 'web' }), /Node.js/);
+});

@@ -1,10 +1,12 @@
 # Shroom SDK 架构
 
-最后更新于：2026-11-03
+最后更新于：2026-11-04
 
 ## 1. 项目概述
 
 本仓库维护独立的 `shroom-sdk`：读取传感器数据、按需创建 WebSocket 服务、采集到 SQLite、停止采集并导出 CSV / JSONL。快速入口只导出五个函数，产品协议和点位映射由内部适配器管理。Node.js、浏览器和 Python 共享版本号，但语言能力按各自文档定义。
+
+当前源码版本为 **0.3.0 本地构建，尚未发布**；npm 已发布版本仍为 0.2.0。0.3.0 新增人体全身和鞋垫 A 版的 JavaScript 产品适配器；客户使用新产品须取得本次构建的 TGZ 或对应本地源码，不能把 `npm install shroom-sdk` 视为已经安装新协议。Python 没有随版本号增加这些产品协议或五步服务能力。
 
 官网与文档展示位于独立的 `shroomSDKWEB` 仓库，通过 `sdk/` Git 子模块固定本仓库的具体提交。SDK 的安装、测试、构建和发布均不依赖官网。官网构建使用固定提交中的文档、示例生成函数及下载包，不自动跟随 SDK 主分支。
 
@@ -31,6 +33,7 @@ shroomSDK/
 │  ├─ quick-flow.js      五个函数的统一导出
 │  ├─ flow/              快速调用编排
 │  ├─ core/              协议、产品适配、数据结构与授权
+│  │  └─ products/       registry、glove/pad/body/insole 适配器及独立物理线序
 │  ├─ node/              Node 串口与重连、WS 与 SQLite 采集
 │  ├─ web/               浏览器串口、WS 与二维显示
 │  └─ backend/           已有后端的 HTTP / WS 客户端
@@ -85,6 +88,17 @@ Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产�
 
 产品代码集中在 `src/core/products/`。增加产品通过适配器与注册表扩展协议、映射和 WS 字段校验，不改五个函数签名。产品扩展测试会在临时副本注册测试产品，验证串口、五步调用、录制、导出和浏览器 bundle 的一致性。
 
+0.3.0 注册表包含手套 `handGloveFullPacket`（`glove`）、手垫 `hand`（`pad`）、人体 `humanBody`（`body`）及鞋垫 `jqInsole`（`insole`）。别名只用于连接，帧和 WS 始终使用规范 ID。`prepareProductConnection` 先执行产品专属参数校验，再调用可选的 `adapter.resolveProfile(options)`；未实现该方法的适配器使用静态 profile。鞋垫以此选择显式 `protocol` 和支持的 `baudRate`，公共连接层不按产品添加条件分支，也不自动探测协议或速率。
+
+| 适配器 / 线序文件 | 配置与输出边界 |
+| --- | --- |
+| `body.js` / `body-layout.js` | 无 side；1000000 baud，1024 字节 uint8 载荷与尾分隔。保留 1024 原扫描 ADC，十个 `regions` 映射 400 唯一通道，索引用 Uint16；没有模型 UV、翻转、显示重复行或插值 |
+| `insole.js` / `insole-layout.js` | 必须明确脚侧；默认 12bit、921600 baud，可选 8bit 及限定速率。12bit 的 raw 是 512 个原始 ADC 字节、pressure 是 256 个 Uint16 ADC（0–4095）；8bit 分别为 256 字节与 256 个 Uint8 ADC。`sensors` 是 A 版 112 真实点，不含显示插值点 |
+
+人体的 32×32 与鞋垫的 16×16 顶层矩阵都是扫描存储形状，不能当人体/鞋形平面或物理重心。鞋垫保留 IMU 原始字节和 w/x/y/z 四元数，12bit 另提供陀螺仪/加速度的三个原始分量；不猜测单位、不融合姿态、不换算物理压力。来源和协议细节分别见 [HUMAN-BODY.md](docs/HUMAN-BODY.md)、[INSOLE.md](docs/INSOLE.md)。`profile.sensorPoints` 表示扫描通道数，新增可选 `mappedSensorPoints` 表示物理表覆盖的点数。
+
+`src/index.d.ts` 的 `DeviceProductTypes` 同步登记两种产品，派生 Node/Web 选项与帧类型；鞋垫帧按 `protocol` 区分 12bit/8bit、ADC 类型和可用 IMU 字段。`stream-codec.js` 仍只处理基础帧，扩展字段由各适配器验证并复制；人体核对十块固定线序和 ADC 一致性，鞋垫核对精度、原始字节、真实点位及 IMU，避免 Uint8 截断或丢失负数 IMU。新产品由应用消费 `onData` 展示，不承诺现有 `createProductView` 已提供人体/鞋垫渲染器。
+
 录制使用 SQLite 事务批量写入；停止与关闭等待待写队列落库，导出按页读取。记录目录有独占所有权；异常退出记录可恢复为中断状态。兼容读取旧 JSONL 文件，不兼容原 `shroom-backend-sdk` 的 `captures / frames` 数据库。
 
 设备断线时快速服务保留 WS 服务与设备引用，将当前采集以 `error` 收尾并保存已收到的数据。串口重连只恢复实时数据，不自动续录；应用确认恢复后显式再次调用 `startRecording` 创建新记录。
@@ -112,6 +126,10 @@ Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产�
 构建输出 `dist/shroom-sdk.zip`、`dist/shroom-sdk-node.zip`、`dist/shroom-sdk-python.zip` 和 `dist/shroom-sdk-<版本>.tgz`。正式版本目录有七个文件：三个带版本 ZIP、一个 npm TGZ、`manifest.json`、`SHA256SUMS`、`RELEASE-NOTES.md`。清单记录真实 Git 提交与脏状态；相同版本不允许被不同内容或不同来源覆盖。
 
 源码根包保留 `private: true` 与直接打包保护；受控生成的 npm TGZ 设为 `private: false`，`publishConfig` 指定公开访问与官方注册表。完整门禁通过后，维护者手动将已验证 TGZ 发布到 `https://registry.npmjs.org`，再执行 `npm run test:npm:registry`：从官方注册表安装当前版本，比对安装锁文件 SHA-512 与本地 TGZ，并复验五函数、WS / SQLite / CSV / JSONL、浏览器入口与类型。制品验证器默认兼容历史 `private: true` 安装包，`requirePublishable` 模式严格拒绝此类旧包作为发布制品；本地构建成功不等于远端发布成功。
+
+2026-11-04 完整 SDK 发布门禁已通过：261 项 JavaScript、25 项发布工具、69 项 Python 测试，TypeScript、原生依赖加载、兼容 ZIP 独立安装、64 文件 npm TGZ 安装及 NodeNext/Bundler 类型解析均通过。覆盖人体 8 项与鞋垫 15 项专用测试、新产品经典浏览器脚本三种协议场景，以及 `tests/new-products-flow.test.mjs` 的合成串口字节 → 实际 WS/SQLite/HTTP 五步闭环；人体、左脚 12bit 与右脚 8bit 保留 ADC 精度、区域/点位与 IMU。官网整合门禁仍待更新子模块后执行；没有连接真实硬件，没有发布 npm，SDK 门禁通过不能替代这两项确认。
+
+同日复核修正 `ProductDevice / NodeProductDevice` 默认帧类型为注册产品联合，`ProductFrame` 的 ADC 泛型支持 Uint8/Uint16；常规显式设备注解与协议收窄通过类型检查。增强的安装包验收从独立 `node_modules` 使用公开入口解析人体及鞋垫双协议，再跨 Node/浏览器 WS 编解码，确认 400 个唯一通道、112 个真实点、4095 与负 IMU 不丢失；NodeNext/Bundler 均通过。人体仍沿用来源的尾分隔规则，载荷内同值标记可能使该帧被丢弃，限制已写入 `HUMAN-BODY.md`。
 
 客户使用 `npm install shroom-sdk` 安装到业务项目 `node_modules`，无需解压或登记；真实设备密钥另行申请。下载 `.tgz` 后手动安装及历史官网 URL 仍可用，本地文件依赖需要随项目保存安装包与锁文件。压缩并隐藏内部导入路径用于交付管理，不能作为防篡改或授权不可绕过的保证。
 
@@ -148,6 +166,8 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-11-03 | npm 注册表交付流程 | 精简 TGZ 支持手动公开发布，根源码保持误发布保护；新增官方注册表安装与 SHA-512 比对验证，统一 npm 安装文档并保留历史制品安装 |
 | 2026-11-03 | Node 产品串口重连与搜索准备 | 保留五函数；接入前由 listPorts 查询并选择串口，Node 产品默认同端口有限重试，状态订阅贯通快速流程；断线结束录制，恢复后显式新建记录 |
 | 2026-11-03 | 发布 CLI 测试隔离 | CLI 与依赖在测试临时仓库内运行，避免升级维护仓库版本影响固定版本 fixture；保留版本不一致拒绝校验 |
+| 2026-11-04 | 0.3.0 人体与鞋垫产品适配 | 独立协议/物理线序、动态 profile、类型与 WS 验证接入原五函数；合成数据通过真实 WS/SQLite/HTTP 闭环，保留 12bit 精度与原始 IMU；版本仅本地构建，尚未发布或真机验收 |
+| 2026-11-04 | 0.3.0 完整 SDK 发布门禁 | 261 JS、25 发布工具、69 Python 测试及类型/原生依赖/客户 ZIP/npm TGZ 安装全部通过；经典脚本新增三种协议验证，官网门禁、远端发布与真机验收仍独立 |
 
 ## 9. 更新日志
 
@@ -161,6 +181,8 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-11-03 | 配置变更 | 分离源码与发布包权限，增加发布后注册表消费检查；README、快速接入、基础 API 和 AI 说明采用 npm install shroom-sdk，发布指南补充登录、2FA、预览及制品发布步骤 |
 | 2026-11-03 | 新增功能 | 0.2.0 移植 Node 串口有限重连，新增可配置重试与状态订阅；更新搜索串口、五步接入、基础 API 和 AI 文档，明确首次失败、手动关闭、授权、解析及录制恢复边界 |
 | 2026-11-03 | 修复缺陷 | 发布制品 CLI 测试使用独立临时源码根目录，并验证版本不匹配仍被拒绝；发布校验规则保持不变 |
+| 2026-11-04 | 新增功能 | 增加 humanBody/body 与 jqInsole/insole 适配器和来源文档；人体保留 1024 扫描/400 映射点，鞋垫保留双协议 ADC、112 真实点和 IMU；resolveProfile 与类型扩展不改变五函数，明确 0.3.0 未发布及真机验证边界 |
+| 2026-11-04 | 验证完成 | 0.3.0 完整 SDK 门禁通过，含合成新产品的经典脚本和五步 WS/SQLite/HTTP 链路、客户 ZIP/TGZ 安装与 NodeNext/Bundler 类型解析；未执行远端发布或实机验收 |
 
 ## 10. 原 SDK 历史记录
 

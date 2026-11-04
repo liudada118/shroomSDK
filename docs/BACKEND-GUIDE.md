@@ -51,7 +51,7 @@ JavaScript SDK 优先通过 npm 安装，下载包和历史 URL 安装方式见[
 
 ## 串口 {#serial}
 
-Node.js / 浏览器连接已封装的整包手套与手部检测垫时，优先使用产品入口，SDK 内置协议、波特率与映射，应用直接处理 `onData`。通用 `connect()` 保留为进阶入口；Python 仍使用通用串口与矩阵 API，不提供本节中的 JS 产品入口或整包手套协议。
+Node.js / 浏览器连接已封装的手套、手部检测垫、人体全身和鞋垫时，优先使用产品入口，SDK 内置协议与映射，应用直接处理 `onData`。鞋垫和人体产品封装要求0.3.0构建；Python 仍使用通用串口与矩阵 API，不提供本节中的 JS 产品入口。通用 `connect()` 保留为进阶入口。
 
 通用接入路线是 **查询端口 → 配置连接 → 自动解析 → 错误诊断**。端口查询只枚举系统可见端口，不识别硬件型号；查询、参数校验、打开、运行与关闭都有错误处理入口。
 
@@ -120,13 +120,13 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 
 **用途**：按明确的产品标识连接，统一实现产品选择菜单。
 
-**参数**：必填 `product`，支持手套 `'glove' / 'handGloveFullPacket'`、检测垫 `'pad' / 'hand'`；其余选项与对应产品方法一致。手套必须提供 `side: 'left' | 'right'`，检测垫不传 side。
+**参数**：必填 `product`，支持手套 `'glove' / 'handGloveFullPacket'`、检测垫 `'pad' / 'hand'`、人体 `'body' / 'humanBody'`、鞋垫 `'insole' / 'jqInsole'`。手套与鞋垫必须提供 `side: 'left' | 'right'`，检测垫和人体不传 side。鞋垫增加 `protocol?: '12bit' | '8bit'`（默认12bit）、`baudRate?`（默认921600，限来源列举值）；其他产品不接受协议覆盖。所有产品支持 path/onData/onError，Node另支持reconnect/onStateChange。新增两类要求0.3.0，格式详见[鞋垫](INSOLE.md)、[人体](HUMAN-BODY.md)。
 
-**返回值**：对应产品设备的 Promise，与相应 `connectGlove()` / `connectHandPad()` 相同；具名 `connectProduct()` 是相同入口。
+**返回值**：对应产品设备的 Promise，设备提供 `onData / onFrame / onError / close` 与诊断方法；回调数据类型由产品决定。具名 `connectProduct()` 是相同入口。
 
 **示例**：`await Shroom.connectProduct({ product: 'handGloveFullPacket', path: 'COM3', side: 'right', onData: console.log })`。
 
-**注意事项**：快速 `readProduct()` 在 Node 直接调用本接口，复用相同校验、解析与返回设备。别名只用于连接，`device.info.product` 和 `frame.product` 仍为正式 ID `handGloveFullPacket / hand`。product 是调用方的选择，不是硬件自动识别结果；通用协议继续使用 `Shroom.connect()`。Python 未提供这些产品方法。
+**注意事项**：快速 `readProduct()` 在 Node 直接调用本接口，复用相同校验、解析与返回设备。别名只用于连接，`device.info.product` 和 `frame.product` 使用正式 ID。product、鞋垫protocol和实物side均由调用方选择，不是硬件自动识别结果；通用协议继续使用 `Shroom.connect()`。Python 未提供这些产品方法。
 
 ### Shroom.listDeviceProducts() {#node-device-products}
 
@@ -137,6 +137,8 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 | product | label / family | 波特率 / payload 字节数 | 采样点数 / 产品数据 |
 | --- | --- | --- | --- |
 | `handGloveFullPacket` | 触觉手套（整包）/ glove | 921600 / 274 | 256 / 五指、独立指腹与手掌分区 |
+| `humanBody` | 人体全身 / body | 1000000 / 1024 | 1024扫描通道 / 10区400真实映射点 |
+| `jqInsole` | 鞋垫A版 / insole | 默认921600 / 默认552（8bit为272） | 256扫描通道 / 112真实点；payload不包含魔术头和分包type/index |
 | `hand` | 手部检测垫 / mat | 1000000 / 1024 | 1024 / 32×32 |
 
 **示例**：`console.log(Shroom.listDeviceProducts())`。
@@ -154,6 +156,8 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 **注意事项**：需要从首帧开始接收时，优先在连接选项中提供 `onData`，它在打开端口前注册。首帧可能早于连接 Promise 完成，回调应直接使用传入的 data，不要假定外层 `const device` 已初始化；需要访问设备时可先声明 `let device` 并判空，或连接后调用 `device.onData()`。`onData` 和 `onFrame` 订阅相同数据，不要重复订阅后再把同一帧计算两次；回调错误为 `CALLBACK_FAILED`，不自动停止采集。
 
 ### 产品帧与整包手套数据 {#node-product-data}
+
+0.3.0新增两类产品：人体使用 `HumanBodyFrame.regions`，鞋垫使用 `InsoleFrame.sensors / imu`。人体 `sourceIndices` 最大可到1023，用Uint16Array保存。鞋垫12bit的 `pressure / pressureMatrix / sensors.raw` 是Uint16Array，绝不可转成Uint8Array；`raw`始终表示ADC原始字节(12bit512/8bit256)。下面原有手套与手垫的Uint8/IMU字节说明仅适用于这两类产品；完整新字段见[人体线序](HUMAN-BODY.md)和[鞋垫协议](INSOLE.md)。
 
 | 产品 | 原始压力字段 | 推荐业务字段 | 其他字段 |
 | --- | --- | --- | --- |

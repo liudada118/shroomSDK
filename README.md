@@ -13,7 +13,7 @@ import { readProduct, createWS, startRecording, stopRecording, downloadRecording
 
 SDK 从 npm 注册表安装到 `node_modules/shroom-sdk`，免登记下载，真实设备密钥单独申请。[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)继续提供 `.tgz` 下载；历史安装包 URL 仍可使用。安装包只含压缩运行代码、类型与说明；保存项目依赖和锁文件，以便重复安装。入口、升级和本地包安装见[npm 安装说明](docs/NPM.md)。压缩不等于加密，也不能防止有意修改代码。
 
-当前包为 `shroom-sdk`，`0.2.0` 在五函数基础上增加 Node.js 产品串口自动重连。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)，这不是原包的兼容升级。
+当前源码为 `shroom-sdk@0.3.0`，新增鞋垫双协议和人体全身物理线序，五个函数保持不变。0.3.0 尚未发布到 npm；普通 `npm install shroom-sdk` 目前安装的 0.2.0 不包含这两类新产品，试用新能力请安装本次构建的 `shroom-sdk-0.3.0.tgz`。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)。
 
 **取数 → 创建 WS → 开始采集 → 停止采集 → 下载**：五个函数保持不变。Node.js 连接设备并创建服务，网页连接一次后复用同一 `stream`。直接查看[五步 API 调用](docs/QUICK-START.md#quick-call)，使用上面的包名导入，接入自己的程序与按钮；源码 ZIP 的相对路径示例作为另一种交付方式保留。
 
@@ -25,11 +25,11 @@ SDK 从 npm 注册表安装到 `node_modules/shroom-sdk`，免登记下载，真
 
 驱动、SDK 依赖和 Node.js 授权是运行前提，简要配置见[接入准备](docs/QUICK-START.md#product-guide)。本流程使用 `serial / stream / recording` 功能；只需要产品数据时，可在取数后结束。新设备使用基础串口与自定义协议，已有主项目后端可使用 `BackendSdkClient` 客户端。
 
-Node.js 通过 `readProduct({ product: 'glove' | 'pad', path, side, onData })` 读取产品数据；手套必须指定左右手，检测垫不传 `side`。SDK 内置波特率、协议解析与点位映射。浏览器用 `readProduct({ url, onData })` 读取 WS 数据；浏览器直接访问串口时，继续使用下方 `Shroom.connectGlove()` / `Shroom.connectHandPad()`。通用协议见[串口接入](docs/SERIAL.md)。
+Node.js 通过 `readProduct({ product, path, onData })` 读取已注册产品。手套 `glove`、鞋垫 `insole` 需要按实物填写 `side`；检测垫 `pad`、人体全身 `body` 不传 side。鞋垫显式选择 `protocol: '12bit' | '8bit'`，默认12bit，保留原始ADC精度。浏览器使用 `readProduct({ url, onData })` 读取 WS；Web Serial 直接连接使用基础 `connectProduct()`。参见[鞋垫协议与数据](docs/INSOLE.md)、[人体全身协议与线序](docs/HUMAN-BODY.md)。
 
 Node.js 产品连接默认在意外断线后重连原串口，每 3 秒尝试一次、最多 3 次。设备对象和数据订阅继续复用，可用 `onStateChange` 显示状态，或设置 `reconnect: false` 关闭。首次连接失败仍由调用方处理；手动关闭、授权失效和解析错误不触发重连。断线会结束当前录制，恢复数据后需重新开始采集。Web Serial、浏览器 WS 和 Python 没有新增自动重连，详见[重连参数与边界](docs/BACKEND-GUIDE.md#node-reconnect)。
 
-提供 **浏览器 / Node.js / Python** 三种入口。以上产品封装仅在 Node.js / 浏览器提供；Python 仍使用通用串口与矩阵接口，不支持整包手套。Python 3.10+ 可独立安装，不需要 Node；详见 [Python SDK](python/README.md)。
+提供 **浏览器 / Node.js / Python** 三种入口。以上产品封装仅在 Node.js / 浏览器提供；Python 仍使用通用串口与矩阵接口，不包含整包手套、鞋垫或人体区域解析。Python 3.10+ 可独立安装，不需要 Node；详见 [Python SDK](python/README.md)。
 
 官网下载时可选择 **Python** 或 **Node.js（含浏览器）**，下载文件名包含 SDK 版本。`shroom-sdk-python.zip` / `shroom-sdk-node.zip` 的兼容 URL 仍指向当前构建；需要固定版本时保留对应版本包或使用 GitHub Release 附件。Node.js 包不含 Python 源码；Python 包内的 `python/README.md` 和 `python/AI-CONTEXT.md` 提供专用说明。旧链接 `shroom-sdk.zip` 仍保留完整包，兼容已有使用方式。
 

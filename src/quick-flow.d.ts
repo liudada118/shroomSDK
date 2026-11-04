@@ -5,7 +5,7 @@ import type { DeviceServer, DeviceServerOptions } from './node/index.js';
 
 /** 网页通过 WS 接收产品帧；不能同时传入 Node 串口参数。 */
 export type ReadStreamOptions<T extends Frame = Frame> = StreamOptions<T> & {
-  url: string; product?: never; path?: never; side?: never; reconnect?: never; onStateChange?: never;
+  url: string; product?: never; path?: never; side?: never; protocol?: never; baudRate?: never; reconnect?: never; onStateChange?: never;
 };
 /** 服务关闭会等待录制完成并释放 createWS 接管的设备。 */
 export interface QuickServer extends DeviceServer {

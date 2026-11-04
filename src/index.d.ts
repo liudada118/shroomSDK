@@ -110,7 +110,7 @@ export interface SerialDiagnostics {
 
 /** 基础矩阵帧；产品层在此之上增加产品标识、分区和原始协议字段。 */
 export interface Frame {
-  /** 原始 ADC 值，0~255，一个点一个字节 */
+  /** 原始 ADC 字节；通用/8位产品每点一字节，12位鞋垫每点两个小端字节，数值见 pressure。 */
   raw: Uint8Array;
   /** 按 fullScale 归一化，长度 = rows * cols；默认满量程 255 时为 0~1，不自动裁剪。 */
   values: Float32Array;
@@ -238,6 +238,8 @@ export interface NodeSerialDevice extends Device {
 export interface DeviceProductTypes {
   handGloveFullPacket: { names: 'handGloveFullPacket' | 'glove'; frame: GloveFrame; node: NodeGloveOptions; web: WebGloveOptions };
   hand: { names: 'hand' | 'pad'; frame: HandPadFrame; node: NodeHandPadOptions; web: WebHandPadOptions };
+  humanBody: { names: 'humanBody' | 'body'; frame: HumanBodyFrame; node: NodeHumanBodyOptions; web: WebHumanBodyOptions };
+  jqInsole: { names: 'jqInsole' | 'insole'; frame: InsoleFrame; node: NodeInsoleOptions; web: WebInsoleOptions };
 }
 export type DeviceProductId = keyof DeviceProductTypes;
 export type DeviceProductName = DeviceProductTypes[DeviceProductId]['names'];
@@ -255,16 +257,20 @@ export interface DeviceProductInfo {
   family: string;
   baudRate: number;
   payloadLength: number;
+  /** 协议扫描通道数；不等于物理布局中已定义的传感器数量。 */
   sensorPoints: number;
+  /** 有明确物理点位表时，给出不含显示插值/重复格的点数。 */
+  mappedSensorPoints?: number;
   rows: number;
   cols: number;
 }
-export interface ProductFrame extends Frame {
+/** 产品共有字段；按 product/协议收窄时使用 RegisteredProductFrame。 */
+export interface ProductFrame<TAdc extends Uint8Array | Uint16Array = Uint8Array | Uint16Array> extends Frame {
   product: DeviceProductId;
-  /** 原始扫描顺序 ADC；不是物理压力单位。与 raw 指向同一份帧内快照。 */
-  pressure: Uint8Array;
+  /** 原始扫描顺序 ADC；不是物理压力单位。12位鞋垫与 raw 字节数组不同。 */
+  pressure: TAdc;
   /** 按产品映射后的 ADC，长度 rows*cols；values 是对应的 0~1 相对值。 */
-  pressureMatrix: Uint8Array;
+  pressureMatrix: TAdc;
 }
 /** 用户点位表定义的区域；手掌首行仅12点，不能假定raw.length=rows*cols。 */
 export interface GloveRegion {
@@ -293,7 +299,7 @@ export interface GloveFingers {
   ring: GloveFingerRegion;
   little: GloveFingerRegion;
 }
-export interface GloveFrame extends ProductFrame {
+export interface GloveFrame extends ProductFrame<Uint8Array> {
   product: 'handGloveFullPacket';
   side: 'left' | 'right';
   /** 设备单字节帧号，可回绕；不是毫秒时间戳。 */
@@ -306,7 +312,81 @@ export interface GloveFrame extends ProductFrame {
   /** 只保留 16 字节 IMU，不承诺四元数分量、轴序或单位。 */
   imu: { raw: Uint8Array };
 }
-export interface HandPadFrame extends ProductFrame { product: 'hand'; }
+export interface HandPadFrame extends ProductFrame<Uint8Array> { product: 'hand'; }
+
+/** 来源物理矩阵标识；不按模型朝向交换左右，也不加入显示翻转或插值。 */
+export type HumanBodyRegionId = 'back' | 'chest' | 'rightArm' | 'rightShoulder'
+  | 'leftArm' | 'leftShoulder' | 'backPantsRight' | 'backPantsLeft' | 'frontPantsLeft' | 'frontPantsRight';
+export interface HumanBodyRegion {
+  name: string;
+  rows: number;
+  cols: number;
+  /** 对应原始1024通道的0基索引，与上位机1基通道号相差1。 */
+  sourceIndices: Uint16Array;
+  raw: Uint8Array;
+  values: Float32Array;
+  matrix: number[][];
+}
+export interface HumanBodyFrame extends ProductFrame<Uint8Array> {
+  product: 'humanBody';
+  /** 十块物理矩阵，共400个唯一通道；顶层32×32仅为原始扫描网格。 */
+  regions: Record<HumanBodyRegionId, HumanBodyRegion>;
+}
+
+export type InsoleProtocol = '12bit' | '8bit';
+export type InsoleBaudRate = 921600 | 1500000 | 3000000 | 460800 | 256000 | 115200 | 9600;
+export interface InsoleSensorPosition {
+  /** A版物理点顺序，row=0..13，col=0..7。 */
+  row: number;
+  col: number;
+  /** 来源坐标，单位毫米；未施加模型镜像、平移或缩放。 */
+  xMm: number;
+  yMm: number;
+}
+export interface InsoleSensors<T extends Uint8Array | Uint16Array = Uint8Array | Uint16Array> {
+  rows: 14;
+  cols: 8;
+  sourceIndices: Uint16Array;
+  /** A版112个真实点，未增加显示插值点。 */
+  raw: T;
+  values: Float32Array;
+  positions: InsoleSensorPosition[];
+}
+export interface InsoleImu {
+  /** 线上原字节，12bit格式40字节，8bit格式16字节。 */
+  raw: Uint8Array;
+  /** float32LE，顺序w/x/y/z；未归一化或换算为欧拉角。 */
+  quaternion: Float32Array;
+}
+interface InsoleFrameBase extends ProductFrame {
+  product: 'jqInsole';
+  /** 客户按实物指定，协议没有脚侧字段。 */
+  side: 'left' | 'right';
+}
+export interface Insole12BitFrame extends InsoleFrameBase {
+  protocol: '12bit'; bitDepth: 12; fullScale: 4095;
+  /** 256个小端12位ADC，保留0..4095精度；原始ADC字节位于raw。 */
+  pressure: Uint16Array;
+  /** 16×16扫描顺序，非鞋形；物理鞋垫点位请使用sensors。 */
+  pressureMatrix: Uint16Array;
+  sensors: InsoleSensors<Uint16Array>;
+  imu: InsoleImu & {
+    /** 来源未注明物理单位/坐标系，保留线上xyz float32数值。 */
+    gyroscope: Float32Array;
+    acceleration: Float32Array;
+  };
+  sequence?: never;
+}
+export interface Insole8BitFrame extends InsoleFrameBase {
+  protocol: '8bit'; bitDepth: 8; fullScale: 255;
+  pressure: Uint8Array;
+  pressureMatrix: Uint8Array;
+  sensors: InsoleSensors<Uint8Array>;
+  imu: InsoleImu;
+  /** 用于两个分包配对的8位index，不是设备采样时间。 */
+  sequence: number;
+}
+export type InsoleFrame = Insole12BitFrame | Insole8BitFrame;
 
 /** 服务端持久化的一次标签录制；一个会话对应一个不可变标签。 */
 export interface RecordingSession {
@@ -378,7 +458,7 @@ export interface ProductViewOptions<T extends Frame = Frame> extends HeatmapOpti
   /** 提供时自动订阅 onData/onFrame；不提供时手动调用视图 render。 */
   source?: FrameSource<T>;
   /** 可提前约束产品类型，收到其他产品帧时报错。 */
-  product?: DeviceProductId;
+  product?: 'handGloveFullPacket' | 'hand';
 }
 export interface ProductView {
   /** 提交一帧产品数据，相邻刷新周期内只绘制最新帧。 */
@@ -396,13 +476,13 @@ export const STREAM_SCHEMA: 'shroom.frame.v1';
 /** 将产品帧转成可 JSON 序列化的结构；TypedArray 转为普通数组。 */
 export function encodeStreamFrame(frame: Frame): StreamFrame;
 /** 校验跨 WS 传输的帧并恢复 TypedArray；无效形状抛出结构化错误。 */
-export function decodeStreamFrame(frame: unknown): Frame | GloveFrame | HandPadFrame;
+export function decodeStreamFrame(frame: unknown): Frame | RegisteredProductFrame;
 /** 建立 WS 连接并等待协议握手；真实串口与录制文件由 Node 服务管理。 */
 export function connectStream<T extends Frame = Frame>(options?: StreamOptions<T>): Promise<StreamDevice<T>>;
 /** source 存在时自动订阅；手套为二维分区视图，不包含三维模型。 */
 export function createProductView<T extends Frame = Frame>(target: HTMLElement | string, options?: ProductViewOptions<T>): ProductView;
-export interface ProductDevice<T extends Frame & { product: DeviceProductId } = ProductFrame> extends Omit<Device, 'info' | 'onFrame'> {
-  info: DeviceInfo & { product: T['product']; label: string; side?: 'left' | 'right' };
+export interface ProductDevice<T extends Frame & { product: DeviceProductId } = RegisteredProductFrame> extends Omit<Device, 'info' | 'onFrame'> {
+  info: DeviceInfo & { product: T['product']; label: string; side?: 'left' | 'right'; protocol?: InsoleProtocol };
   onFrame(handler: (frame: T) => void): () => void;
   /** onFrame 的产品入口别名。 */
   onData(handler: (frame: T) => void): () => void;
@@ -432,6 +512,29 @@ export interface NodeHandPadOptions extends ProductCallbacks<HandPadFrame>, Node
   side?: never;
   path?: string;
 }
+export interface WebHumanBodyOptions extends ProductCallbacks<HumanBodyFrame> {
+  side?: never;
+  port?: unknown;
+  filters?: WebConnectOptions['filters'];
+}
+export interface NodeHumanBodyOptions extends ProductCallbacks<HumanBodyFrame>, NodeSerialLifecycleOptions {
+  side?: never;
+  path?: string;
+}
+export interface InsoleConnectionOptions {
+  side: 'left' | 'right';
+  /** 显式协议，不通过ADC内容猜测；默认12bit。 */
+  protocol?: InsoleProtocol;
+  /** 默认921600，仅支持来源程序明确列出的波特率，不自动扫描。 */
+  baudRate?: InsoleBaudRate;
+}
+export interface WebInsoleOptions extends ProductCallbacks<InsoleFrame>, InsoleConnectionOptions {
+  port?: unknown;
+  filters?: WebConnectOptions['filters'];
+}
+export interface NodeInsoleOptions extends ProductCallbacks<InsoleFrame>, InsoleConnectionOptions, NodeSerialLifecycleOptions {
+  path?: string;
+}
 export type WebProductOptions = {
   [Id in DeviceProductId]: DeviceProductTypes[Id]['web'] & { product: DeviceProductTypes[Id]['names'] };
 }[DeviceProductId];
@@ -439,7 +542,7 @@ export type NodeProductOptions = {
   [Id in DeviceProductId]: DeviceProductTypes[Id]['node'] & { product: DeviceProductTypes[Id]['names'] };
 }[DeviceProductId];
 /** Node 产品设备：五步入口与基础产品连接返回相同的稳定设备句柄。 */
-export type NodeProductDevice<T extends Frame & { product: DeviceProductId } = ProductFrame> =
+export type NodeProductDevice<T extends Frame & { product: DeviceProductId } = RegisteredProductFrame> =
   ProductDevice<T> & Pick<NodeSerialDevice, 'onStateChange'>;
 /** 列出已有产品协议封装；不会枚举串口或扫描实物。 */
 export function listDeviceProducts(): DeviceProductInfo[];

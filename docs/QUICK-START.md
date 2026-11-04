@@ -10,6 +10,37 @@
 
 ## 5 步调用 {#quick-call}
 
+### 按产品替换取数参数 {#product-options}
+
+| 产品 | product | 必要配置 | 主要数据 |
+| --- | --- | --- | --- |
+| 整包手套 | `glove` | `side: 'left' / 'right'` | `fingers / palm / imu.raw` |
+| 手部检测垫 | `pad` | 无侧别 | `pressureMatrix / values` |
+| 人体全身（0.3.0） | `body` | 无侧别 | `regions` 十块物理矩阵、400个唯一通道；`raw` 保留1024扫描值 |
+| A版鞋垫（0.3.0） | `insole` | `side` 必填；`protocol: '12bit' / '8bit'` | `pressure` 保留256通道ADC，`sensors` 为112真实点，`imu` 保留线上数值 |
+
+新产品使用0.3.0构建包；该版尚未发布到npm，已发布0.2.0没有新协议。下面两个取数片段与原流程任选其一，后续四步继续复用 `device` 和 `stream`：
+
+```js
+// 人体：SDK按上位机物理点位表输出分区，不用应用再次映射。
+const device = await readProduct({
+  product: 'body', path: 'COM3',
+  onData: data => console.log(data.regions.back.matrix, data.raw),
+  onError: error => console.error(error.code, error.message),
+});
+```
+
+```js
+// 鞋垫：按实物确认脚侧和固件格式；12位ADC保留0..4095，不缩成8位。
+const device = await readProduct({
+  product: 'insole', path: 'COM3', side: 'left', protocol: '12bit',
+  onData: data => console.log(data.sensors.raw, data.imu.quaternion),
+  onError: error => console.error(error.code, error.message),
+});
+```
+
+两脚分别建立各自的连接；不猜测脚侧或自动合并设备。所有首次调用仍需捕获异常。完整格式、线序来源与限制见[鞋垫](INSOLE.md)和[人体全身](HUMAN-BODY.md)。
+
 示例放在自己的项目中，统一导入 `shroom-sdk/quick-flow`。`COM3` 替换为实际端口，手套 `side` 按实物选择。网页需使用 Vite 等构建工具；普通 HTML 使用源码 ZIP 并将导入改为 SDK 根目录的 `./quick-flow.js`，见[安装方式](NPM.md)。
 
 ### 接入前：搜索并选择串口 {#flow-ports}

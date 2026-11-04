@@ -93,12 +93,13 @@ test('one adapter plus one registry entry extends the unchanged five-function fl
   await cp(join(workspace, 'scripts', 'build-sdk-bundle.mjs'), join(root, 'scripts', 'build-sdk-bundle.mjs'));
   const registryPath = join(sdk, 'core', 'products', 'registry.js');
   const originalRegistry = await readFile(registryPath, 'utf8');
-  assert.match(originalRegistry, /Object\.freeze\(\[gloveProductAdapter, padProductAdapter\]\)/);
+  const registryList = /export const deviceProductAdapters = Object\.freeze\(\[([^\]]+)\]\)/;
+  assert.match(originalRegistry, registryList);
   await writeFile(join(sdk, 'core', 'products', 'fixture-strip.js'), stripAdapterSource);
   await writeFile(registryPath,
     `import { fixtureStripAdapter } from './fixture-strip.js';\n` +
-    originalRegistry.replace('Object.freeze([gloveProductAdapter, padProductAdapter])',
-      'Object.freeze([gloveProductAdapter, padProductAdapter, fixtureStripAdapter])'));
+    originalRegistry.replace(registryList,
+      'export const deviceProductAdapters = Object.freeze([$1, fixtureStripAdapter])'));
 
   const stubKey = Symbol.for('shroom.extension.test.serialport');
   globalThis[stubKey] = ExtensionPort;

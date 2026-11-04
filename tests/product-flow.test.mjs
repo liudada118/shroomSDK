@@ -27,6 +27,28 @@ test('npm flow keeps the five public calls and resolves imports through the pack
   assert.equal(packaged.flatMap(step => step.blocks).filter(block => block.code.includes("from 'shroom-sdk/quick-flow'")).length, 3);
 });
 
+test('new product flows retain five steps and browser callbacks consume the selected product shape', async () => {
+  for (const options of [{ product: 'body' }, { product: 'insole', side: 'left', protocol: '12bit' }, { product: 'insole', side: 'right', protocol: '8bit' }]) {
+    const steps = createProductFlow({ ...options, platform: 'windows', importStyle: 'package' });
+    assert.deepEqual(steps.map(step => step.id), ['flow-read', 'flow-ws', 'flow-start', 'flow-stop', 'flow-download']);
+    assert.equal(steps.flatMap(step => step.blocks).length, 6);
+    assert.ok(steps[0].blocks[0].code.includes(`product: '${options.product}'`));
+    if (options.protocol) assert.ok(steps[0].blocks[0].code.includes(`protocol: '${options.protocol}'`));
+    const source = steps.map(step => step.blocks.map(block => block.code).join('\n')).join('\n');
+    assert.doesNotMatch(source, /fingers|palm|createProductView|<!doctype/);
+    const data = { regions: {}, raw: [1], sensors: {}, pressure: [2], imu: {} };
+    const output = [], stream = {};
+    const setup = new AsyncFunction('readProduct', 'console', body(steps[1].blocks[1].code) + '\nreturn stream;');
+    assert.equal(await setup(async config => {
+      assert.equal(config.url, 'ws://127.0.0.1:19999');
+      assert.equal(config.protocol, undefined);
+      assert.equal(config.side, undefined);
+      config.onData(data); return stream;
+    }, { log: (...args) => output.push(args), error() {} }), stream);
+    assert.deepEqual(output[0], options.product === 'body' ? [data.regions, data.raw] : [data.sensors, data.pressure, data.imu]);
+  }
+});
+
 test('displayed flow snippets share a real WS connection and download the recording stopped by this client', async t => {
   await activateTestLicense();
   const directory = await mkdtemp(join(tmpdir(), 'shroom-doc-flow-'));

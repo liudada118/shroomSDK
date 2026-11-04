@@ -9,6 +9,8 @@
 | `registry.js` | 静态登记适配器，解析正式产品 ID 与连接别名 |
 | `glove.js` | 整包手套参数、解析器、五指/手掌/IMU 的 WS 校验 |
 | `pad.js` | 检测垫参数、mat32 解码与矩阵 WS 校验 |
+| `body.js / body-layout.js` | 人体1024通道、十块物理矩阵400点线序与WS校验 |
+| `insole.js / insole-layout.js` | 鞋垫12bit/8bit协议、112真实点、IMU与WS精度校验 |
 | `tail-parser.js` | 固定载荷长度 + 尾分隔符的共用拆帧器 |
 | `stream-utils.js` | 数值、数组、形状与独立快照的校验工具 |
 
@@ -23,10 +25,11 @@
 | `optionFields` | 此产品额外接受的连接字段，如 `side`；公共字段由上层处理 |
 | `validateOptions(options, invalid)` | 校验专用参数，错误调用 `invalid(field, message)`；不得猜测手侧或型号 |
 | `connectionInfo(options)` | 返回设备 `info` 中的专用元数据，例如手侧 |
+| `resolveProfile(options)`（可选） | 参数校验后解析本产品支持的传输配置；例如鞋垫显式格式和可选波特率。静态profile仍表示默认值 |
 | `createParser(options)` | 为每个连接创建独立、有界的流解析器 |
 | `readStreamFields(input, output, typed)` | 校验并复制产品字段到已验证的通用帧 `output`，返回该结果 |
 
-目前 `glove` 对应 `handGloveFullPacket`，`pad` 对应 `hand`。别名只用于连接；输出的 `frame.product` 和网络传输必须使用正式 ID。`listDeviceProducts()` 返回 profile 的副本，不增加 aliases 字段，也不探测硬件。
+目前 `glove → handGloveFullPacket`、`pad → hand`、`body → humanBody`、`insole → jqInsole`。别名只用于连接；输出的 `frame.product` 和网络传输必须使用正式 ID。`listDeviceProducts()` 返回默认 profile 的副本，不增加 aliases 字段，也不探测硬件。sensorPoints表示扫描通道数，mappedSensorPoints在有物理点位表时表示真实映射点数。
 
 ## 1. 实现协议与参数
 

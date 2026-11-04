@@ -4,8 +4,10 @@
  */
 import { gloveProductAdapter } from './glove.js';
 import { padProductAdapter } from './pad.js';
+import { bodyProductAdapter } from './body.js';
+import { insoleProductAdapter } from './insole.js';
 
-export const deviceProductAdapters = Object.freeze([gloveProductAdapter, padProductAdapter]);
+export const deviceProductAdapters = Object.freeze([gloveProductAdapter, padProductAdapter, bodyProductAdapter, insoleProductAdapter]);
 const deviceProductCanonicalRegistry = new Map();
 const deviceProductConnectionRegistry = new Map();
 

@@ -1,5 +1,7 @@
 # Node.js 接入
 
+0.3.0 新增鞋垫和人体全身，仍使用 `readProduct()` 或基础 `connectProduct()`。鞋垫传 `product:'insole', side:'left'/'right', protocol:'12bit'/'8bit'`；人体传 `product:'body'`。详见[鞋垫字段](INSOLE.md)、[人体线序](HUMAN-BODY.md)。当前0.3.0构建尚未发布到npm，安装版本需与文档一致。
+
 连接实机前先[安装串口驱动](DRIVERS.md)并确认端口，再[激活 SDK 产品密钥](LICENSE.md)。SDK 授权不限制设备型号，产品接口和通用串口均可使用；驱动缺失与授权失败需要分别排查。
 
 适合 Node.js 服务、命令行采集和 Electron 应用。通过串口直接读取设备，或通过 HTTP / WebSocket 连接已经运行的后端。
@@ -67,7 +69,7 @@ try {
 
 手部检测垫换为 `Shroom.connectHandPad({ path: 'COM3', onData: console.log, onError: console.error })`。`connectGlove()` 固定整包协议 `handGloveFullPacket`，side 必填；`connectHandPad()` 固定 `hand`。也可使用 `Shroom.connectProduct({ product, ...options })`，清单来自 `Shroom.listDeviceProducts()`。这些方法同样具名导出。
 
-产品入口省略 path 时，只在恰好一个端口时自动选择；零个为 `PORT_NOT_FOUND`、多个为 `PORT_AMBIGUOUS`。`onData / onError` 在打开前注册，避免漏首帧；连接前失败仍拒绝 Promise。产品入口不接受 baudRate、delimiter、layout 等底层覆盖。
+产品入口省略 path 时，只在恰好一个端口时自动选择；零个为 `PORT_NOT_FOUND`、多个为 `PORT_AMBIGUOUS`。`onData / onError` 在打开前注册，避免漏首帧；连接前失败仍拒绝 Promise。产品入口不接受 delimiter、layout 等底层覆盖；只有鞋垫明确支持 protocol 和来源列出的 baudRate，其他产品固定波特率。
 
 从 0.2.0 起，Node 产品入口和快速 `readProduct()` 默认开启自动重连：意外断开后按原 `path` 每 3 秒尝试一次、最多 3 次。`reconnect: false` 可关闭，`reconnect: { intervalMs, maxAttempts }` 可调整。使用 `onStateChange: status => console.log(status.state, status.attempt)` 或返回设备的 `onStateChange(handler)` 显示状态；恢复后同一 `device` 和 `onData` 继续交付数据，不需要重新创建 WS。
 

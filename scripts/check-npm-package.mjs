@@ -16,6 +16,15 @@ import { verifyNpmArchive } from './npm-archive.mjs';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const runFile = promisify(execFile);
 
+/** 0.2.x 注册表消费检查仍走原契约；未发布的新产品只要求 0.3.0 及以后版本具备。 */
+function supportsNewProducts(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([\w.-]+))?(?:\+[\w.-]+)?$/.exec(version);
+  if (!match) throw new Error('无法判断 npm 验收版本：' + version);
+  const [, major, minor, patch, prerelease] = match;
+  return Number(major) > 0 || Number(minor) > 3
+    || (Number(minor) === 3 && (Number(patch) > 0 || !prerelease));
+}
+
 /** 不经过 shell，Windows 上同样以参数数组启动 npm。 */
 async function npmCli() {
   const binary = dirname(process.execPath);
@@ -95,6 +104,8 @@ import * as backend from 'shroom-sdk/backend';
 import * as core from 'shroom-sdk/core';
 
 const [recordingsDir, expectedVersion, browserBundle] = process.argv.slice(2);
+${supportsNewProducts.toString()}
+const checkExpandedProducts = supportsNewProducts(expectedVersion);
 const names = ['createWS', 'downloadRecording', 'readProduct', 'startRecording', 'stopRecording'];
 assert.deepEqual(Object.keys(flow).sort(), names);
 for (const name of names) assert.equal(typeof flow[name], 'function');
@@ -154,6 +165,130 @@ await assert.rejects(consumer.flow.readProduct({ product: 'pad' }), { code: 'UNS
 let closedUnsupported = false;
 await assert.rejects(consumer.flow.createWS({ async close() { closedUnsupported = true; } }), { code: 'UNSUPPORTED_ENVIRONMENT' });
 assert.equal(closedUnsupported, true);
+
+// 安装包的真实公开基础入口解析合成串口字节，随后跨 Node/浏览器 WS 编解码。
+// 不导入 runtime 内部适配器、不访问硬件或授权后台；同时覆盖 browser 条件产物。
+if (checkExpandedProducts) {
+  const products = ['hand', 'handGloveFullPacket', 'humanBody', 'jqInsole'].sort();
+  for (const entry of [root, web, node, consumer.root, consumer.web]) {
+    assert.deepEqual(Array.from(entry.listDeviceProducts(), profile => profile.product).sort(), products);
+    assert.deepEqual(Array.from(entry.Shroom.listDeviceProducts(), profile => profile.product).sort(), products);
+  }
+  const bodyAdc = Uint8Array.from({ length: 1024 }, (_, i) => (i * 19 + 7) % 256);
+  const header = [0xaa, 0x55, 0x03, 0x99];
+  function insoleSample(protocol) {
+    const is12 = protocol === '12bit';
+    const bytes = new Uint8Array(is12 ? 552 : 272);
+    const view = new DataView(bytes.buffer);
+    const adc = Array.from({ length: 256 }, (_, i) => is12 ? i * 16 + 15 : i);
+    for (let i = 0; i < adc.length; i++) {
+      if (is12) view.setUint16(i * 2, adc[i], true);
+      else bytes[i] = adc[i];
+    }
+    const imu = is12 ? [1, -0.25, 0.5, 0, -2, 3, -4, 5, -6, 7] : [1, -0.25, 0.5, 0];
+    imu.forEach((value, i) => view.setFloat32((is12 ? 512 : 256) + i * 4, value, true));
+    return { adc, wire: Uint8Array.from(is12 ? [...header, ...bytes]
+      : [...header, 1, 31, ...bytes.subarray(0, 128), ...header, 2, 31, ...bytes.subarray(128)]) };
+  }
+  const browserBytes = runInNewContext('Uint8Array', browser);
+  const typed = (value, name) => assert.equal(Object.prototype.toString.call(value), '[object ' + name + ']');
+  browser.navigator = { serial: { async requestPort() { throw new Error('验收必须使用显式模拟端口'); } } };
+  await consumer.web.activateLicense(key, { mode: 'offline', publicKey });
+  try {
+    for (const config of [
+      { product: 'body' },
+      { product: 'insole', side: 'left', protocol: '12bit', baudRate: 1500000 },
+      { product: 'jqInsole', side: 'right', protocol: '8bit' },
+    ]) {
+      const isBody = config.product === 'body';
+      const sample = isBody ? { adc: Array.from(bodyAdc), wire: Uint8Array.from([...bodyAdc, ...header]) } : insoleSample(config.protocol);
+      const chunks = [];
+      for (let i = 0; i < sample.wire.length; i += 13) chunks.push(new browserBytes(sample.wire.subarray(i, i + 13)));
+      let chunkIndex = 0, finishRead, closed = 0, baudRate;
+      const reader = {
+        read() {
+          if (chunkIndex < chunks.length) return Promise.resolve({ value: chunks[chunkIndex++], done: false });
+          return new Promise(resolveRead => { finishRead = resolveRead; });
+        },
+        async cancel() { finishRead?.({ done: true }); },
+        releaseLock() {},
+      };
+      const port = {
+        readable: { getReader: () => reader },
+        async open(options) { baudRate = options.baudRate; },
+        async close() { closed++; },
+      };
+      let resolveFrame, rejectFrame, timer, productDevice;
+      const errors = [];
+      const received = new Promise((resolve, reject) => { resolveFrame = resolve; rejectFrame = reject; });
+      try {
+        productDevice = await consumer.web.connectProduct({ ...config, port,
+          onData: resolveFrame, onError(error) { errors.push(error); rejectFrame(error); } });
+        timer = setTimeout(() => rejectFrame(new Error('安装包新产品合成帧超时')), 5000);
+        const frame = await received;
+        assert.equal(baudRate, config.baudRate ?? (isBody ? 1000000 : 921600));
+        const encodedBrowser = consumer.web.encodeStreamFrame(frame);
+        const restoredNode = node.decodeStreamFrame(JSON.parse(JSON.stringify(encodedBrowser)));
+        const encodedNode = node.encodeStreamFrame(restoredNode);
+        const restoredBrowser = consumer.web.decodeStreamFrame(JSON.parse(JSON.stringify(encodedNode)));
+        assert.deepEqual(JSON.parse(JSON.stringify(consumer.web.encodeStreamFrame(restoredBrowser))),
+          JSON.parse(JSON.stringify(encodedBrowser)), '安装包 Node/浏览器必须保留同一产品帧');
+        for (const copy of [frame, restoredNode, restoredBrowser]) {
+          assert.deepEqual(Array.from(copy.pressure), sample.adc);
+          typed(copy.raw, 'Uint8Array'); typed(copy.values, 'Float32Array');
+          if (isBody) {
+            assert.equal(copy.product, 'humanBody');
+            typed(copy.pressure, 'Uint8Array'); typed(copy.pressureMatrix, 'Uint8Array');
+            assert.equal(copy.raw.length, 1024);
+            assert.equal(Object.keys(copy.regions).length, 10);
+            const indices = [];
+            for (const region of Object.values(copy.regions)) {
+              typed(region.sourceIndices, 'Uint16Array'); typed(region.raw, 'Uint8Array'); typed(region.values, 'Float32Array');
+              assert.equal(region.raw.length, region.rows * region.cols);
+              assert.deepEqual(Array.from(region.raw), Array.from(region.sourceIndices, index => bodyAdc[index]));
+              indices.push(...region.sourceIndices);
+            }
+            assert.equal(indices.length, 400); assert.equal(new Set(indices).size, 400);
+            assert.equal(copy.regions.back.sourceIndices[0], 618);
+          } else {
+            const is12 = config.protocol === '12bit';
+            assert.equal(copy.product, 'jqInsole'); assert.equal(copy.side, config.side); assert.equal(copy.protocol, config.protocol);
+            typed(copy.pressure, is12 ? 'Uint16Array' : 'Uint8Array');
+            typed(copy.pressureMatrix, is12 ? 'Uint16Array' : 'Uint8Array');
+            typed(copy.sensors.raw, is12 ? 'Uint16Array' : 'Uint8Array');
+            typed(copy.sensors.sourceIndices, 'Uint16Array'); typed(copy.sensors.values, 'Float32Array');
+            typed(copy.imu.raw, 'Uint8Array'); typed(copy.imu.quaternion, 'Float32Array');
+            assert.equal(copy.raw.length, is12 ? 512 : 256);
+            assert.equal(copy.pressure[255], is12 ? 4095 : 255);
+            assert.equal(copy.sensors.raw.length, 112); assert.equal(copy.sensors.positions.length, 112);
+            assert.equal(copy.sensors.sourceIndices[0], config.side === 'left' ? 141 : 114);
+            assert.deepEqual(Array.from(copy.sensors.raw), Array.from(copy.sensors.sourceIndices, index => sample.adc[index]));
+            assert.equal(copy.imu.raw.length, is12 ? 40 : 16);
+            assert.deepEqual(Array.from(copy.imu.quaternion), [1, -0.25, 0.5, 0]);
+            if (is12) {
+              typed(copy.imu.gyroscope, 'Float32Array'); typed(copy.imu.acceleration, 'Float32Array');
+              assert.deepEqual(Array.from(copy.imu.gyroscope), [-2, 3, -4]);
+              assert.deepEqual(Array.from(copy.imu.acceleration), [5, -6, 7]);
+              assert.equal(copy.sequence, undefined);
+            } else {
+              assert.equal(copy.sequence, 31);
+              assert.equal(copy.imu.gyroscope, undefined); assert.equal(copy.imu.acceleration, undefined);
+            }
+          }
+        }
+        assert.deepEqual(errors, []);
+      } finally {
+        clearTimeout(timer);
+        await productDevice?.close();
+      }
+      assert.equal(closed, 1, '每个合成串口都必须完整释放');
+    }
+    console.log('npm 四产品注册、人体400通道、鞋垫双协议精度与 Node/浏览器 WS 编解码通过。');
+  } finally {
+    consumer.web.clearLicense();
+    delete browser.navigator;
+  }
+}
 
 function waitFrames(stream) {
   return new Promise((done, reject) => {
@@ -248,6 +383,59 @@ await readProduct({ url: 'ws://127.0.0.1:19999', product: 'pad' });
 await readProduct({ url: 'ws://127.0.0.1:19999', reconnect: true });
 `;
 
+// 与运行验收共用版本门槛，不要求已发布的 0.2.x 包导出未来版本类型。
+const NEW_PRODUCT_TYPES_CONSUMER = `
+import type { HumanBodyFrame, InsoleFrame, Insole12BitFrame, Insole8BitFrame } from 'shroom-sdk';
+const body = await readProduct({ product: 'body', path: 'COM_TEST', onData(frame) {
+  const typedFrame: HumanBodyFrame = frame;
+  const indices: Uint16Array = typedFrame.regions.back.sourceIndices;
+  const raw: Uint8Array = typedFrame.regions.back.raw;
+  console.log(indices, raw);
+} });
+await body.close();
+const insole = await readProduct({ product: 'insole', path: 'COM_TEST', side: 'left', protocol: '12bit', baudRate: 1500000,
+  onData(frame) {
+    const typedFrame: InsoleFrame = frame;
+    const rawBytes: Uint8Array = typedFrame.raw;
+    const quaternion: Float32Array = typedFrame.imu.quaternion;
+    if (typedFrame.protocol === '12bit') {
+      const precise: Insole12BitFrame = typedFrame;
+      const adc: Uint16Array = precise.pressure;
+      const sensors: Uint16Array = precise.sensors.raw;
+      const gyro: Float32Array = precise.imu.gyroscope;
+      const scale: 4095 = precise.fullScale;
+      console.log(adc, sensors, gyro, scale);
+    } else {
+      const byteFrame: Insole8BitFrame = typedFrame;
+      const adc: Uint8Array = byteFrame.pressure;
+      const sequence: number = byteFrame.sequence;
+      console.log(adc, sequence);
+      // @ts-expect-error 8-bit 帧没有陀螺仪测量值，不能凭空补零。
+      console.log(byteFrame.imu.gyroscope);
+    }
+    console.log(rawBytes, quaternion);
+  } });
+await insole.close();
+const browserInsole = await WebShroom.connectProduct({ product: 'jqInsole', side: 'right', protocol: '8bit',
+  onData(frame) { const values: Float32Array = frame.sensors.values; console.log(values); } });
+await browserInsole.close();
+const productStream = await readProduct<HumanBodyFrame | InsoleFrame>({ url: 'ws://127.0.0.1:19999', onData(frame) {
+  if (frame.product === 'humanBody') console.log(frame.regions.back.raw);
+  else console.log(frame.sensors.raw, frame.imu.quaternion);
+} });
+await productStream.close();
+// @ts-expect-error 鞋垫必须明确脚侧。
+await readProduct({ product: 'insole', path: 'COM_TEST' });
+// @ts-expect-error 鞋垫只支持已确认的协议。
+await readProduct({ product: 'insole', side: 'left', protocol: 'auto', path: 'COM_TEST' });
+// @ts-expect-error 鞋垫不支持任意波特率。
+await readProduct({ product: 'insole', side: 'left', baudRate: 1000000, path: 'COM_TEST' });
+// @ts-expect-error 人体协议不接受脚侧。
+await readProduct({ product: 'body', side: 'left', path: 'COM_TEST' });
+// @ts-expect-error 人体不能覆盖固定协议。
+await readProduct({ product: 'body', protocol: '12bit', path: 'COM_TEST' });
+`;
+
 export async function checkNpmPackage({ projectRoot = ROOT, packagePath, fromRegistry = false } = {}) {
   const { version } = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8'));
   const archive = resolve(packagePath ?? join(projectRoot, 'dist', `shroom-sdk-${version}.tgz`));
@@ -294,7 +482,7 @@ export async function checkNpmPackage({ projectRoot = ROOT, packagePath, fromReg
     await execute(['smoke.mjs', join(temporary, 'recordings'), version, browserBundle],
       { cwd: consumer, env, label: 'npm 消费者五步流程', timeout: 30000 });
 
-    await writeFile(join(consumer, 'types.mts'), TYPES_CONSUMER);
+    await writeFile(join(consumer, 'types.mts'), TYPES_CONSUMER + (supportsNewProducts(version) ? NEW_PRODUCT_TYPES_CONSUMER : ''));
     for (const [module, moduleResolution, types] of [['NodeNext', 'NodeNext', ['node']], ['ESNext', 'Bundler', []]]) {
       const config = { compilerOptions: { target: 'ES2022', lib: ['ES2022', 'DOM', 'DOM.Iterable'],
         module, moduleResolution, strict: true, noEmit: true, skipLibCheck: false, types,

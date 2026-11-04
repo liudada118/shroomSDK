@@ -1,5 +1,15 @@
 [
   {
+    "slug": "insole", "file": "docs/INSOLE.md", "label": "鞋垫协议与数据", "navLabel": "鞋垫协议",
+    "summary": "A版鞋垫12bit/8bit协议、112真实点映射、原始ADC与IMU，以及解析边界。",
+    "forAi": false, "area": "guides", "group": "guides"
+  },
+  {
+    "slug": "human-body", "file": "docs/HUMAN-BODY.md", "label": "人体全身协议与线序", "navLabel": "人体全身线序",
+    "summary": "人体1024通道协议、十块物理矩阵400唯一通道、0基索引与模型显示的区别。",
+    "forAi": false, "area": "guides", "group": "guides"
+  },
+  {
     "slug": "npm", "file": "docs/NPM.md", "label": "安装 JavaScript SDK", "navLabel": "安装 SDK",
     "summary": "从官网下载区复制一条安装命令，直接将 JavaScript SDK 安装到自己的项目；也可下载 TGZ。",
     "forAi": false, "area": "guides", "group": "guides"

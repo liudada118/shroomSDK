@@ -1,6 +1,6 @@
 import { readProduct, createWS, startRecording, stopRecording, downloadRecording } from 'shroom-sdk/quick-flow';
 import { connectProduct as connectNodeProduct, listPorts, type SerialConnectionStatus } from 'shroom-sdk/node';
-import { connectProduct as connectWebProduct, type GloveFrame, type HandPadFrame } from 'shroom-sdk';
+import { connectProduct as connectWebProduct, type GloveFrame, type HandPadFrame, type HumanBodyFrame, type InsoleFrame, type ProductFrame, type ProductDevice, type NodeProductDevice } from 'shroom-sdk';
 
 async function fiveFunctions() {
   const ports = await listPorts();
@@ -24,6 +24,50 @@ async function fiveFunctions() {
   await stream.close(); await server.close(); await glove.close();
 }
 void fiveFunctions;
+
+async function newProducts() {
+  const body = await readProduct({ product: 'body', path: 'COM4', onData(frame) {
+    const data: HumanBodyFrame = frame;
+    const indices: Uint16Array = data.regions.back.sourceIndices;
+    void indices;
+  } });
+  const insole = await connectNodeProduct({ product: 'jqInsole', side: 'right', protocol: '8bit', baudRate: 1500000,
+    onData(frame) {
+      const data: InsoleFrame = frame;
+      if (data.protocol === '12bit') {
+        const pressure: Uint16Array = data.pressure;
+        void [pressure, data.imu.gyroscope];
+      } else {
+        const pressure: Uint8Array = data.pressure;
+        void [pressure, data.sequence];
+      }
+    } });
+  const webInsole = await connectWebProduct({ product: 'insole', side: 'left', protocol: '12bit' });
+  // 常规的公开设备注解也必须接受12位产品，且能够按product/协议收窄。
+  const annotated: NodeProductDevice = insole;
+  const annotatedWeb: ProductDevice = webInsole;
+  annotated.onData(frame => {
+    const common: ProductFrame = frame;
+    if (frame.product === 'jqInsole' && frame.protocol === '12bit') {
+      const pressure: Uint16Array = frame.pressure;
+      void [pressure, frame.sensors, common];
+    }
+  });
+  void annotatedWeb;
+  await body.close(); await insole.close(); await webInsole.close();
+}
+void newProducts;
+
+// @ts-expect-error 鞋垫没有可靠脚侧协议字段，不能省略side。
+void readProduct({ product: 'insole' });
+// @ts-expect-error 人体全身无需side。
+void readProduct({ product: 'humanBody', side: 'left' });
+// @ts-expect-error 不猜测鞋垫协议。
+void readProduct({ product: 'insole', side: 'left', protocol: 'auto' });
+// @ts-expect-error 仅接受来源列举的波特率。
+void readProduct({ product: 'insole', side: 'left', baudRate: 123 });
+// @ts-expect-error WS不能混入设备协议配置。
+void readProduct({ url: 'ws://localhost:19999', protocol: '8bit' });
 
 // @ts-expect-error 手套必须明确左右手。
 void readProduct({ product: 'glove' });

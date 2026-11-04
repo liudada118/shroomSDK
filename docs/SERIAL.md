@@ -1,5 +1,7 @@
 # 串口接入
 
+0.3.0 增加鞋垫 `insole` 和人体 `body`：使用 `connectProduct` / 快速 `readProduct`，解析规则分别见[鞋垫](INSOLE.md)、[人体全身](HUMAN-BODY.md)。鞋垫的 `AA 55 03 99` 是包头，不能套用通用尾分隔器；12位ADC也不能按单字节解码。
+
 串口接入的工作是把设备字节转换成统一 `Frame`。Python 与 Node.js 可直接访问系统串口；网页直连方式见[前端通讯](FRONTEND-COMMUNICATION.md)。
 
 Node.js / 浏览器接入整包手套或手部检测垫时，优先用 `Shroom.connectGlove({ side, onData, onError })` / `connectHandPad({ onData, onError })`；Node 可传 path，浏览器在用户手势中选择端口。SDK 内置产品波特率、帧解析和映射，应用直接读取数据。Python 本次没有这些产品入口或整包手套协议，仍使用通用串口。

@@ -183,7 +183,7 @@
     -->
     <script>
     /**
-     * Shroom SDK 0.2.0 —— 单文件版（自动生成，别手改）
+     * Shroom SDK 0.3.0 —— 单文件版（自动生成，别手改）
      *
      * 由 scripts/build-sdk-bundle.mjs 从 src/core/ + src/web/ 拼出来，内容和模块版完全一致。
      * 它是「经典脚本」而不是模块，所以用普通的 script 标签引进去就行，file:// 下也能加载，
@@ -1684,13 +1684,511 @@
         readStreamFields: readPadStreamFields,
       });
 
+      // ---------- core/products/body-layout.js ----------
+      /**
+       * 人体全身的十块物理采集矩阵；不包含模型 UV、屏幕左右翻转或重复显示行。
+       * 来源表使用 1 基通道号，这里只在定义时转换一次，帧内 sourceIndices 统一为 0 基。
+       * 来源与显示层差异见 docs/HUMAN-BODY.md；名称保留来源 key，不推断穿戴者左右。
+       */
+
+      /** 冻结内部线序，避免外部帧的可写类型数组污染后续映射。 */
+      function createHumanBodyRegionLayout(name, channels) {
+        return Object.freeze({
+          name,
+          rows: channels.length,
+          cols: channels[0].length,
+          sourceIndices: Object.freeze(channels.flat().map((channel) => channel - 1)),
+        });
+      }
+
+      const humanBodyRegionLayouts = Object.freeze({
+        back: createHumanBodyRegionLayout('back', [
+          [619, 620, 621, 622, 623, 609, 610, 611, 612, 613],
+          [651, 652, 653, 654, 655, 641, 642, 643, 644, 645],
+          [683, 684, 685, 686, 687, 673, 674, 675, 676, 677],
+          [75, 76, 77, 78, 79, 65, 66, 67, 68, 69],
+          [43, 44, 45, 46, 47, 33, 34, 35, 36, 37],
+          [11, 12, 13, 14, 15, 1, 2, 3, 4, 5],
+        ]),
+        chest: createHumanBodyRegionLayout('chest', [
+          [692, 691, 690, 689, 688, 682, 681, 680, 679, 678],
+          [660, 659, 658, 657, 656, 650, 649, 648, 647, 646],
+          [628, 627, 626, 625, 624, 618, 617, 616, 615, 614],
+          [20, 19, 18, 17, 16, 10, 9, 8, 7, 6],
+          [52, 51, 50, 49, 48, 42, 41, 40, 39, 38],
+          [84, 83, 82, 81, 80, 74, 73, 72, 71, 70],
+        ]),
+        rightArm: createHumanBodyRegionLayout('rightArm', [
+          [736, 768, 800, 832, 864, 1024, 992],
+          [735, 767, 799, 831, 863, 1023, 991],
+          [734, 766, 798, 830, 862, 1022, 990],
+          [733, 765, 797, 829, 861, 1021, 989],
+          [732, 764, 796, 828, 860, 1020, 988],
+          [731, 763, 795, 827, 859, 1019, 987],
+        ]),
+        rightShoulder: createHumanBodyRegionLayout('rightShoulder', [
+          [960, 928, 896],
+          [959, 927, 895],
+          [958, 926, 894],
+          [957, 925, 893],
+          [956, 924, 892],
+          [955, 923, 891],
+        ]),
+        leftArm: createHumanBodyRegionLayout('leftArm', [
+          [1013, 981, 853, 821, 789, 757, 725],
+          [1014, 982, 854, 822, 790, 758, 726],
+          [1015, 983, 855, 823, 791, 759, 727],
+          [1016, 984, 856, 824, 792, 760, 728],
+          [1017, 985, 857, 825, 793, 761, 729],
+          [1018, 986, 858, 826, 794, 762, 730],
+        ]),
+        leftShoulder: createHumanBodyRegionLayout('leftShoulder', [
+          [885, 917, 949],
+          [886, 918, 950],
+          [887, 919, 951],
+          [888, 920, 952],
+          [889, 921, 953],
+          [890, 922, 954],
+        ]),
+        backPantsRight: createHumanBodyRegionLayout('backPantsRight', [
+          [197, 196, 195, 194, 193],
+          [165, 164, 163, 162, 161],
+          [133, 132, 131, 130, 129],
+          [101, 100, 99, 98, 97],
+          [229, 228, 227, 226, 225],
+          [261, 260, 259, 258, 257],
+          [293, 292, 291, 290, 289],
+          [325, 324, 323, 322, 321],
+        ]),
+        backPantsLeft: createHumanBodyRegionLayout('backPantsLeft', [
+          [495, 494, 493, 492, 491],
+          [527, 526, 525, 524, 523],
+          [559, 558, 557, 556, 555],
+          [591, 590, 589, 588, 587],
+          [463, 462, 461, 460, 459],
+          [431, 430, 429, 428, 427],
+          [399, 398, 397, 396, 395],
+          [367, 366, 365, 364, 363],
+        ]),
+        frontPantsLeft: createHumanBodyRegionLayout('frontPantsLeft', [
+          [500, 499, 498, 497, 496],
+          [532, 531, 530, 529, 528],
+          [564, 563, 562, 561, 560],
+          [596, 595, 594, 593, 592],
+          [468, 467, 466, 465, 464],
+          [436, 435, 434, 433, 432],
+          [404, 403, 402, 401, 400],
+          [372, 371, 370, 369, 368],
+        ]),
+        frontPantsRight: createHumanBodyRegionLayout('frontPantsRight', [
+          [202, 201, 200, 199, 198],
+          [170, 169, 168, 167, 166],
+          [138, 137, 136, 135, 134],
+          [106, 105, 104, 103, 102],
+          [234, 233, 232, 231, 230],
+          [266, 265, 264, 263, 262],
+          [298, 297, 296, 295, 294],
+          [330, 329, 328, 327, 326],
+        ]),
+      });
+
+      // ---------- core/products/body.js ----------
+      /** 人体全身适配器：保留全部扫描字节，并按十块物理源矩阵提取 400 点。 */
+
+      const bodyProductProfile = Object.freeze({
+        product: 'humanBody', label: '人体全身', family: 'body',
+        baudRate: 1000000, payloadLength: 1024, sensorPoints: 1024,
+        mappedSensorPoints: 400, rows: 32, cols: 32,
+      });
+
+      /** 人体没有手侧选择；左右区域随整帧一起输出，不据此猜测安装朝向。 */
+      function validateBodyProductOptions(options, invalid) {
+        if (!options || typeof options !== 'object' || Array.isArray(options)) invalid('options', '人体产品解析参数必须是对象。');
+        if ('side' in options) invalid('side', '人体全身不接受 side 参数，十个源矩阵随整帧一起返回。');
+      }
+
+      /** 每帧新建区域快照，矩阵和 raw 均保留 ADC 原值，values 只做除以 255 的归一化。 */
+      function buildHumanBodyRegions(payload) {
+        const regions = {};
+        for (const [key, layout] of Object.entries(humanBodyRegionLayouts)) {
+          const sourceIndices = Uint16Array.from(layout.sourceIndices);
+          const raw = Uint8Array.from(sourceIndices, (index) => payload[index]);
+          const values = Float32Array.from(raw, (value) => value / 255);
+          const matrix = Array.from({ length: layout.rows }, (_, row) => Array.from(raw.subarray(row * layout.cols, (row + 1) * layout.cols)));
+          regions[key] = { name: layout.name, rows: layout.rows, cols: layout.cols, sourceIndices, raw, values, matrix };
+        }
+        return regions;
+      }
+
+      /** 固定 1024 字节 + AA 55 03 99 帧尾；32×32 仅表示扫描存储形状，不是人体展开图。 */
+      function createBodyProductParser(options = {}) {
+        validateBodyProductOptions(options, (field, message) => {
+          throw new ShroomError('INVALID_CONFIG', message, { stage: 'configure', details: { field } });
+        });
+        return createTailProductParser({
+          payloadLength: bodyProductProfile.payloadLength,
+          delimiter: [0xaa, 0x55, 0x03, 0x99],
+          decodePayload(payload) {
+            const frame = decodeFrame(payload, { rows: 32, cols: 32, layout: 'raw' });
+            frame.product = bodyProductProfile.product;
+            frame.pressure = frame.raw;
+            frame.pressureMatrix = frame.raw.slice();
+            frame.regions = buildHumanBodyRegions(frame.raw);
+            return frame;
+          },
+        });
+      }
+
+      /** WS 中的线序必须与内置物理表完全相同，并逐点核对原始值、矩阵和归一化值。 */
+      function readHumanBodyStreamRegion(value, key, frameRaw, typed) {
+        const field = `regions.${key}`;
+        const layout = humanBodyRegionLayouts[key];
+        const size = layout.sourceIndices.length;
+        streamObject(value, field);
+        if (value.name !== layout.name || value.rows !== layout.rows || value.cols !== layout.cols) streamInvalid(`${field}.shape`);
+        const sourceIndices = streamArray(value.sourceIndices, `${field}.sourceIndices`, { max: size });
+        const raw = streamArray(value.raw, `${field}.raw`, { max: size, byte: true });
+        const values = streamArray(value.values, `${field}.values`, { max: size });
+        if ([sourceIndices, raw, values].some((array) => array.length !== size)) streamInvalid(`${field}.length`);
+        for (let i = 0; i < size; i += 1) {
+          // 身体通道可到 1023，不能使用通用 index:true 的 0–255 限制或先转 Uint16 截断。
+          const index = streamNumber(sourceIndices[i], `${field}.sourceIndices[${i}]`, 0, 1023, true);
+          if (index !== layout.sourceIndices[i]) streamInvalid(`${field}.sourceIndices[${i}]`);
+          if (raw[i] !== frameRaw[index]) streamInvalid(`${field}.raw[${i}]`);
+          if (Math.fround(values[i]) !== Math.fround(raw[i] / 255)) streamInvalid(`${field}.values[${i}]`);
+        }
+        if (!Array.isArray(value.matrix) || value.matrix.length !== layout.rows) streamInvalid(`${field}.matrix`);
+        const matrix = value.matrix.map((row, rowIndex) => {
+          const result = streamArray(row, `${field}.matrix[${rowIndex}]`, { max: layout.cols, byte: true });
+          if (result.length !== layout.cols || result.some((entry, col) => entry !== raw[rowIndex * layout.cols + col])) streamInvalid(`${field}.matrix[${rowIndex}]`);
+          return result;
+        });
+        return {
+          name: layout.name, rows: layout.rows, cols: layout.cols, matrix,
+          sourceIndices: streamOutput(sourceIndices, typed, Uint16Array),
+          raw: streamOutput(raw, typed, Uint8Array),
+          values: streamOutput(values, typed, Float32Array),
+        };
+      }
+
+      /** 白名单复制人体字段；完整扫描矩阵不得混入屏幕显示映射或裁剪后的数值。 */
+      function readBodyStreamFields(input, output, typed) {
+        streamPressureFields(input, output, typed);
+        if (input.product !== bodyProductProfile.product || output.rows !== 32 || output.cols !== 32
+          || output.raw.length !== 1024 || output.values.length !== 1024) streamInvalid('humanBody.shape');
+        if (output.pressureMatrix.some((value, i) => value !== output.raw[i])
+          || output.values.some((value, i) => Math.fround(value) !== Math.fround(output.raw[i] / 255))) streamInvalid('humanBody.scanOrder');
+        const regions = streamObject(input.regions, 'regions');
+        const keys = Object.keys(humanBodyRegionLayouts);
+        if (Object.keys(regions).length !== keys.length || keys.some((key) => !Object.hasOwn(regions, key))) streamInvalid('regions.keys');
+        output.regions = {};
+        for (const key of keys) output.regions[key] = readHumanBodyStreamRegion(regions[key], key, output.raw, typed);
+        return output;
+      }
+
+      /** 连接接受 body 别名，输出只使用 humanBody；串口配置及所有身体线序均由适配器固定。 */
+      const bodyProductAdapter = Object.freeze({
+        profile: bodyProductProfile,
+        aliases: Object.freeze(['body']),
+        optionFields: Object.freeze([]),
+        validateOptions: validateBodyProductOptions,
+        connectionInfo: () => ({}),
+        createParser: createBodyProductParser,
+        readStreamFields: readBodyStreamFields,
+      });
+
+      // ---------- core/products/insole-layout.js ----------
+      /**
+       * 鞋垫 A 版原始传感器坐标与扫描线序；不包含显示插值、左右脚镜像或标定。
+       * 来源 JQInsoleStudio_v2.3_dev_3.html:1366–1399、1818–1842。
+       * 只取源坐标表第 1、3、…、27 行；每项为 [data_col, x_mm, y_mm]。
+       */
+      const INSOLE_SOURCE_ROWS = Object.freeze([
+        Object.freeze([[1,-14.2,-1.6],[2,-10.2,-0.2],[3,-6.3,0.2],[4,-1.9,0.7],[5,1.9,0.9],[6,5.8,0.5],[7,10.3,0.1],[8,15.6,-0.7]].map(Object.freeze)),
+        Object.freeze([[1,-20,-18.3],[2,-14.6,-16.9],[3,-9.1,-16],[4,-2.7,-15.4],[5,3.2,-15],[6,9.9,-15],[7,16.5,-15.3],[8,23.9,-16.4]].map(Object.freeze)),
+        Object.freeze([[1,-24,-36.3],[2,-17,-34],[3,-10,-32.2],[4,-2.8,-31.1],[5,5.3,-31.1],[6,13,-31],[7,21.6,-31.7],[8,30.2,-32.2]].map(Object.freeze)),
+        Object.freeze([[1,-25.8,-52.6],[2,-17.9,-50.3],[3,-9.5,-48.1],[4,-1.6,-47.3],[5,7.2,-46.1],[6,16.5,-46.1],[7,25.3,-46.7],[8,33.6,-47.5]].map(Object.freeze)),
+        Object.freeze([[1,-24,-68.5],[2,-16.5,-65.9],[3,-8.6,-64.5],[4,0.6,-62.8],[5,9.5,-62.4],[6,18.4,-61.9],[7,27.2,-62.8],[8,34.8,-63.5]].map(Object.freeze)),
+        Object.freeze([[1,-20.8,-83.3],[2,-14,-80.9],[3,-6.3,-79.3],[4,2.1,-77.7],[5,10.4,-77.5],[6,18.7,-77.6],[7,27.2,-78.5],[8,35.3,-79.6]].map(Object.freeze)),
+        Object.freeze([[1,-16.825,-97.7],[2,-11.7,-96.3],[3,-4.2,-94.7],[4,3,-93.8],[5,9.9,-93.3],[6,17.4,-93.2],[7,25.3,-93.9],[8,32.8,-94.9]].map(Object.freeze)),
+        Object.freeze([[1,-15.5,-112.1],[2,-10,-111],[3,-4,-109.7],[4,2.5,-108.9],[5,8.6,-108.9],[6,15.5,-109.3],[7,22.5,-109.5],[8,29.4,-110.4]].map(Object.freeze)),
+        Object.freeze([[1,-13.9,-126.7],[2,-9.1,-125.5],[3,-3.6,-125],[4,1.8,-124.6],[5,7.6,-124.3],[6,13.2,-124.6],[7,19,-124.6],[8,25.3,-125.3]].map(Object.freeze)),
+        Object.freeze([[1,-13.2,-141.2],[2,-8.8,-140.4],[3,-3.6,-140],[4,1.2,-140],[5,6.3,-140],[6,11.3,-140.3],[7,16.5,-140.6],[8,21.9,-141.3]].map(Object.freeze)),
+        Object.freeze([[1,-13.2,-156.1],[2,-8.8,-155.7],[3,-4.3,-155.4],[4,0.9,-155.7],[5,6.2,-155.4],[6,11.3,-155.8],[7,16.4,-156.1],[8,22.1,-156.9]].map(Object.freeze)),
+        Object.freeze([[1,-13.9,-170.9],[2,-9.4,-171.4],[3,-4.3,-171.7],[4,1,-172],[5,6.3,-172.3],[6,11.8,-172.6],[7,17.4,-172.3],[8,23.5,-172.3]].map(Object.freeze)),
+        Object.freeze([[1,-14,-184.2],[2,-9.4,-185.4],[3,-4.4,-186.3],[4,0.7,-186.6],[5,5.8,-187.3],[6,11.8,-187.2],[7,17.8,-186.8],[8,23,-186.6]].map(Object.freeze)),
+        Object.freeze([[1,-13.7,-197.5],[2,-9.1,-199.3],[3,-4.2,-200.7],[4,0.7,-201.9],[5,5.8,-202.6],[6,11.4,-202.6],[7,16.7,-202.1],[8,21.6,-201.4]].map(Object.freeze)),
+      ]);
+
+      /** 每次返回独立快照；row/col 是 14×8 原始点表的零基索引，并非扫描矩阵坐标。 */
+      function createInsoleLayout(side) {
+        const sourceIndices = new Uint16Array(112);
+        const positions = [];
+        INSOLE_SOURCE_ROWS.forEach((row, b) => row.forEach(([dc, xMm, yMm], col) => {
+          const scanRow = side === 'right' ? 8 - dc : dc + 7;
+          const scanCol = side === 'right' ? 2 + b : 13 - b;
+          sourceIndices[b * 8 + col] = scanRow * 16 + scanCol;
+          positions.push({ row: b, col, xMm, yMm });
+        }));
+        return { rows: 14, cols: 8, sourceIndices, positions };
+      }
+
+      // ---------- core/products/insole.js ----------
+      /** 鞋垫 A 版：显式协议与脚侧、原始 ADC/IMU、112 个真实点位及 WS 校验。 */
+
+      const INSOLE_MAGIC = [0xaa, 0x55, 0x03, 0x99];
+      const INSOLE_BAUD_RATES = [921600, 1500000, 3000000, 460800, 256000, 115200, 9600];
+      const INSOLE_SEGMENT_MAX_AGE_MS = 1000;
+      const INSOLE_PROTOCOLS = Object.freeze({
+        '12bit': Object.freeze({ bitDepth: 12, fullScale: 4095, adcBytes: 512, imuBytes: 40, payloadLength: 552, Adc: Uint16Array }),
+        '8bit': Object.freeze({ bitDepth: 8, fullScale: 255, adcBytes: 256, imuBytes: 16, payloadLength: 272, Adc: Uint8Array }),
+      });
+      const insoleProductProfile = Object.freeze({
+        product: 'jqInsole', label: '鞋垫（A 版）', family: 'insole',
+        baudRate: 921600, payloadLength: 552, sensorPoints: 256, mappedSensorPoints: 112, rows: 16, cols: 16,
+      });
+
+      function validateInsoleOptions(options, invalid) {
+        if (!options || typeof options !== 'object' || Array.isArray(options)) invalid('options', '鞋垫参数必须为对象。');
+        if (!['left', 'right'].includes(options.side)) invalid('side', '鞋垫必须明确指定 side: left 或 right；协议没有可靠的脚侧标识。');
+        if (options.protocol !== undefined && (typeof options.protocol !== 'string' || !Object.hasOwn(INSOLE_PROTOCOLS, options.protocol))) invalid('protocol', '鞋垫 protocol 必须为 12bit 或 8bit。');
+        if (options.baudRate !== undefined && !INSOLE_BAUD_RATES.includes(options.baudRate)) invalid('baudRate', '请选择鞋垫支持的波特率：921600、1500000、3000000、460800、256000、115200 或 9600。');
+      }
+
+      function insoleConfigurationError(field, message) {
+        throw new ShroomError('INVALID_CONFIG', message, { stage: 'configure', details: { field } });
+      }
+
+      /** 不归一化四元数、不融合姿态、不猜测单位；非有限浮点数使整个候选帧无效。 */
+      function decodeInsoleImu(raw, spec) {
+        const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+        const components = new Float32Array(spec.imuBytes / 4);
+        for (let i = 0; i < components.length; i++) {
+          const value = dv.getFloat32(i * 4, true);
+          if (!Number.isFinite(value)) return null;
+          components[i] = value;
+        }
+        return {
+          raw,
+          quaternion: components.slice(0, 4),
+          ...(spec.imuBytes === 40 ? { gyroscope: components.slice(4, 7), acceleration: components.slice(7, 10) } : {}),
+        };
+      }
+
+      /** 基础 Frame 的矩阵统计作用于 16×16 扫描顺序，不代表鞋形或物理足底重心。 */
+      function createInsoleScanFrame(raw, pressure, fullScale) {
+        const values = new Float32Array(256);
+        let min = Infinity, max = 0, sum = 0, area = 0, weight = 0, cx = 0, cy = 0;
+        for (let i = 0; i < 256; i++) {
+          const v = pressure[i] / fullScale;
+          values[i] = v;
+          min = Math.min(min, v); max = Math.max(max, v); sum += v;
+          if (v > 0.02) {
+            area++; weight += v; cx += (i % 16) * v; cy += Math.floor(i / 16) * v;
+          }
+        }
+        return {
+          raw, values, rows: 16, cols: 16, min, max, avg: sum / 256, area,
+          center: weight ? { x: cx / weight / 15, y: cy / weight / 15 } : { x: 0.5, y: 0.5 },
+          timestamp: Date.now(),
+        };
+      }
+
+      function decodeInsolePayload(payload, side, protocol, sequence) {
+        const spec = INSOLE_PROTOCOLS[protocol];
+        const raw = payload.slice(0, spec.adcBytes);
+        const pressure = new spec.Adc(256);
+        const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+        for (let i = 0; i < 256; i++) {
+          const value = spec.bitDepth === 12 ? dv.getUint16(i * 2, true) : raw[i];
+          if (value > spec.fullScale) return null;
+          pressure[i] = value;
+        }
+        const imu = decodeInsoleImu(payload.slice(spec.adcBytes), spec);
+        if (!imu) return null;
+        const layout = createInsoleLayout(side);
+        const sensorRaw = spec.Adc.from(layout.sourceIndices, index => pressure[index]);
+        return {
+          ...createInsoleScanFrame(raw, pressure, spec.fullScale),
+          product: 'jqInsole', side, protocol, bitDepth: spec.bitDepth, fullScale: spec.fullScale,
+          ...(protocol === '8bit' ? { sequence } : {}),
+          pressure, pressureMatrix: pressure.slice(), imu,
+          sensors: { ...layout, raw: sensorRaw, values: Float32Array.from(sensorRaw, value => value / spec.fullScale) },
+        };
+      }
+
+      /**
+       * 固定 556 字节工作缓冲；每次只保留一个 128 字节首段。
+       * 8-bit 仅接受 1 秒内相邻、同 index 的 type1→type2，不跨噪声/错序拼接历史缓存。
+       */
+      function createInsoleParser(options = {}) {
+        validateInsoleOptions(options, insoleConfigurationError);
+        const { side, protocol = '12bit' } = options;
+        const spec = INSOLE_PROTOCOLS[protocol];
+        const buffer = new Uint8Array(556);
+        let used = 0, firstSegment = null, dropped = 0, frameLength = 0;
+        const clearSegment = () => {
+          if (firstSegment) { dropped++; firstSegment = null; }
+        };
+        const discardPrefix = count => { buffer.copyWithin(0, count, used); used -= count; };
+        const hasMagic = () => INSOLE_MAGIC.every((value, i) => buffer[i] === value);
+
+        return {
+          push(chunk) {
+            if (!(chunk instanceof Uint8Array)) throw new ShroomError('PARSE_FAILED', '鞋垫输入必须为 Uint8Array 字节。', { stage: 'parse' });
+            const frames = [];
+            const now = Date.now();
+            if (firstSegment && (now - firstSegment.time > INSOLE_SEGMENT_MAX_AGE_MS || now < firstSegment.time)) clearSegment();
+            for (const byte of chunk) {
+              buffer[used++] = byte;
+              // 逐字节重新对齐，最多留下 3 个可能属于下一同步头的字节。
+              while (used >= 4 && !hasMagic()) { clearSegment(); discardPrefix(1); }
+              if (used < 4) continue;
+              if (protocol === '12bit') {
+                if (used < 556) continue;
+                const frame = decodeInsolePayload(buffer.slice(4, 556), side, protocol);
+                if (frame) { frames.push(frame); frameLength = spec.payloadLength; used = 0; }
+                else {
+                  dropped++;
+                  // 候选帧错误只前移一字节，保留其中可能存在的真正下一帧。
+                  discardPrefix(1);
+                  while (used >= 4 && !hasMagic()) discardPrefix(1);
+                }
+                continue;
+              }
+              if (used < 5) continue;
+              const type = buffer[4];
+              if (type !== 1 && type !== 2) { dropped++; clearSegment(); discardPrefix(1); continue; }
+              const packetLength = type === 1 ? 134 : 150;
+              if (used < packetLength) continue;
+              const index = buffer[5];
+              if (type === 1) {
+                clearSegment();
+                firstSegment = { index, payload: buffer.slice(6, 134), time: now };
+              } else {
+                const first = firstSegment;
+                firstSegment = null; // 即使 index 不匹配，也不能让旧首段留待下次回绕。
+                if (first && first.index === index && now - first.time <= INSOLE_SEGMENT_MAX_AGE_MS && now >= first.time) {
+                  const payload = new Uint8Array(272);
+                  payload.set(first.payload); payload.set(buffer.subarray(6, 150), 128);
+                  const frame = decodeInsolePayload(payload, side, protocol, index);
+                  if (frame) { frames.push(frame); frameLength = spec.payloadLength; }
+                  else dropped++;
+                } else dropped++;
+              }
+              used = 0;
+            }
+            return frames;
+          },
+          reset() { used = 0; firstSegment = null; dropped = 0; frameLength = 0; },
+          get droppedCount() { return dropped; },
+          get frameLength() { return frameLength; },
+        };
+      }
+
+      /** 独立数值校验：ADC 允许到 4095，IMU/坐标允许负数，绝不按 byte 截断。 */
+      function insoleNumbers(value, field, length, min, max, integer = false) {
+        if ((!Array.isArray(value) && !ArrayBuffer.isView(value)) || value.length !== length) streamInvalid(field);
+        return Array.from(value, item => {
+          streamNumber(item, field, min, max, integer);
+          if (!integer && !Number.isFinite(Math.fround(item))) streamInvalid(field);
+          return item;
+        });
+      }
+
+      function insoleEqualValues(actual, expected, field) {
+        if (actual.length !== expected.length || actual.some((value, i) => value !== expected[i])) streamInvalid(field);
+      }
+
+      /** 发送/接收都逐字段校验，并核对原始字节、扫描 ADC、点位映射与 IMU 解码的一致性。 */
+      function readInsoleStreamFields(input, output, typed) {
+        if (input.product !== 'jqInsole' || !['left', 'right'].includes(input.side)
+          || typeof input.protocol !== 'string' || !Object.hasOwn(INSOLE_PROTOCOLS, input.protocol)) streamInvalid('insole.product/side/protocol');
+        const spec = INSOLE_PROTOCOLS[input.protocol];
+        if (input.bitDepth !== spec.bitDepth || input.fullScale !== spec.fullScale
+          || output.rows !== 16 || output.cols !== 16 || output.raw.length !== spec.adcBytes) streamInvalid('insole.shape');
+        const pressure = insoleNumbers(input.pressure, 'pressure', 256, 0, spec.fullScale, true);
+        const matrix = insoleNumbers(input.pressureMatrix, 'pressureMatrix', 256, 0, spec.fullScale, true);
+        const bytes = Uint8Array.from(output.raw);
+        const dv = new DataView(bytes.buffer);
+        const decoded = Array.from({ length: 256 }, (_, i) => spec.bitDepth === 12 ? dv.getUint16(i * 2, true) : bytes[i]);
+        insoleEqualValues(pressure, decoded, 'pressure/raw');
+        insoleEqualValues(matrix, pressure, 'pressureMatrix/pressure');
+        insoleEqualValues(output.values, pressure.map(value => Math.fround(value / spec.fullScale)), 'values/pressure');
+        for (const field of ['min', 'max', 'avg']) streamNumber(output[field], field, 0, 1);
+
+        output.product = 'jqInsole'; output.side = input.side; output.protocol = input.protocol;
+        output.bitDepth = spec.bitDepth; output.fullScale = spec.fullScale;
+        if (input.protocol === '8bit') output.sequence = streamNumber(input.sequence, 'sequence', 0, 255, true);
+        else if (input.sequence !== undefined) streamInvalid('sequence');
+        output.pressure = streamOutput(pressure, typed, spec.Adc);
+        output.pressureMatrix = streamOutput(matrix, typed, spec.Adc);
+
+        const sensors = streamObject(input.sensors, 'sensors');
+        const layout = createInsoleLayout(input.side);
+        if (sensors.rows !== 14 || sensors.cols !== 8) streamInvalid('sensors.shape');
+        const indices = insoleNumbers(sensors.sourceIndices, 'sensors.sourceIndices', 112, 0, 255, true);
+        const sensorRaw = insoleNumbers(sensors.raw, 'sensors.raw', 112, 0, spec.fullScale, true);
+        const sensorValues = insoleNumbers(sensors.values, 'sensors.values', 112, 0, 1);
+        insoleEqualValues(indices, layout.sourceIndices, 'sensors.sourceIndices/layout');
+        insoleEqualValues(sensorRaw, indices.map(index => pressure[index]), 'sensors.raw/pressure');
+        insoleEqualValues(sensorValues, sensorRaw.map(value => Math.fround(value / spec.fullScale)), 'sensors.values/raw');
+        if (!Array.isArray(sensors.positions) || sensors.positions.length !== 112) streamInvalid('sensors.positions');
+        const positions = sensors.positions.map((position, i) => {
+          streamObject(position, `sensors.positions[${i}]`);
+          const expected = layout.positions[i];
+          for (const field of ['row', 'col', 'xMm', 'yMm']) {
+            if (position[field] !== expected[field]) streamInvalid(`sensors.positions[${i}].${field}`);
+          }
+          return { ...expected };
+        });
+        output.sensors = {
+          rows: 14, cols: 8, positions,
+          sourceIndices: streamOutput(indices, typed, Uint16Array),
+          raw: streamOutput(sensorRaw, typed, spec.Adc), values: streamOutput(sensorValues, typed, Float32Array),
+        };
+
+        streamObject(input.imu, 'imu');
+        const imuRaw = insoleNumbers(input.imu.raw, 'imu.raw', spec.imuBytes, 0, 255, true);
+        const decodedImu = decodeInsoleImu(Uint8Array.from(imuRaw), spec);
+        if (!decodedImu) streamInvalid('imu.raw');
+        output.imu = { raw: streamOutput(imuRaw, typed, Uint8Array) };
+        for (const field of ['quaternion', 'gyroscope', 'acceleration']) {
+          const expected = decodedImu[field];
+          if (!expected) { if (input.imu[field] !== undefined) streamInvalid(`imu.${field}`); continue; }
+          const array = insoleNumbers(input.imu[field], `imu.${field}`, expected.length, -Number.MAX_VALUE, Number.MAX_VALUE);
+          insoleEqualValues(array, expected, `imu.${field}/raw`);
+          // JSON 会把 -0 写成 0；验证后按原始字节重建，保留 IEEE-754 的符号位。
+          output.imu[field] = streamOutput(Array.from(expected), typed, Float32Array);
+        }
+        return output;
+      }
+
+      const insoleProductAdapter = Object.freeze({
+        profile: insoleProductProfile,
+        aliases: Object.freeze(['insole']),
+        optionFields: Object.freeze(['side', 'protocol', 'baudRate']),
+        validateOptions: validateInsoleOptions,
+        resolveProfile(options) {
+          validateInsoleOptions(options, insoleConfigurationError);
+          return { ...insoleProductProfile, baudRate: options.baudRate ?? 921600, payloadLength: INSOLE_PROTOCOLS[options.protocol ?? '12bit'].payloadLength };
+        },
+        connectionInfo(options) {
+          const protocol = options.protocol ?? '12bit';
+          const { bitDepth, fullScale } = INSOLE_PROTOCOLS[protocol];
+          return { side: options.side, protocol, bitDepth, fullScale };
+        },
+        createParser: createInsoleParser,
+        readStreamFields: readInsoleStreamFields,
+      });
+
       // ---------- core/products/registry.js ----------
       /**
        * 已支持产品的唯一静态注册表：登记规范 ID、连接别名及适配器。
        * 新产品实现独立适配器后在此登记；不会根据参数、数据长度或设备名猜测产品。
        */
 
-      const deviceProductAdapters = Object.freeze([gloveProductAdapter, padProductAdapter]);
+      const deviceProductAdapters = Object.freeze([gloveProductAdapter, padProductAdapter, bodyProductAdapter, insoleProductAdapter]);
       const deviceProductCanonicalRegistry = new Map();
       const deviceProductConnectionRegistry = new Map();
 
@@ -1713,8 +2211,8 @@
 
       // ---------- core/product.js ----------
       /**
-       * 产品连接适配层：将产品名转换成固定串口配置，再把字节流解析成产品帧。
-       * Node / Web 串口入口共用此层；本模块不打开端口，也不自动识别设备或手侧。
+       * 产品连接适配层：按产品规则生成串口配置，再把字节流解析成产品帧。
+       * Node / Web 串口入口共用此层；本模块不打开端口，也不自动识别设备或侧别。
        */
 
       /** 列出已封装连接协议的产品；不等于通用线序/展示产品清单。 */
@@ -1723,8 +2221,8 @@
       }
 
       /**
-       * 在打开端口前验证产品与回调，不允许调用方覆盖产品固有协议。
-       * @param {object} options 产品名、串口路径/浏览器端口、手侧和 onData / onError 回调。
+       * 在打开端口前验证产品与回调，仅允许产品适配器明确支持的配置。
+       * @param {object} options 产品名、串口路径/浏览器端口、产品选项和 onData / onError 回调。
        * @returns {object} 串口入口使用的配置、独立解析器、产品信息与原回调；不会连接设备。
        */
       function prepareProductConnection(options = {}, runtime = 'web') {
@@ -1737,16 +2235,17 @@
           const supported = deviceProductAdapters.map(({ profile }) => `${profile.product}（${profile.label}）`).join(' 或 ');
           invalid('product', `请选择已支持的产品：${supported}。`);
         }
-        const profile = adapter.profile;
         const allowed = new Set(['product', 'path', 'port', 'filters', 'onData', 'onError', ...adapter.optionFields]);
         if (runtime === 'node') { allowed.add('reconnect'); allowed.add('onStateChange'); }
         for (const field of Object.keys(options)) {
-          if (!allowed.has(field)) invalid(field, `产品接口不接受 ${field}；波特率、分帧和线序已经内置。自定义协议请使用 connect()。`);
+          if (!allowed.has(field)) invalid(field, `当前产品不支持 ${field} 配置；可用参数由产品协议决定。自定义协议请使用 connect()。`);
         }
         for (const field of ['onData', 'onError', ...(runtime === 'node' ? ['onStateChange'] : [])]) {
           if (options[field] !== undefined && typeof options[field] !== 'function') invalid(field, `${field} 必须是函数。`);
         }
         adapter.validateOptions(options, invalid);
+        // 部分产品明确支持多个传输格式/波特率，交由自身适配器解析，公共入口不判断型号。
+        const profile = adapter.resolveProfile?.(options) ?? adapter.profile;
         const serialOptions = {
           baudRate: profile.baudRate, rows: profile.rows, cols: profile.cols,
           ...(options.path === undefined ? {} : { path: options.path }),
@@ -1768,13 +2267,13 @@
       /**
        * 从注册表创建产品自己的解析器；不靠帧长推测型号或手侧。
        * @param {string} product 已注册的规范产品名或连接别名，未知产品一律拒绝。
-       * @param {object} options 产品解析选项；手套必须明确传入 side: left/right。
+       * @param {object} options 产品解析选项；手套与鞋垫必须明确传入 side: left/right。
        * @returns {object} 带 push / reset 和累计诊断计数的解析器；每个连接应各建一个。
        */
       function createProductParser(product, options = {}) {
         const adapter = getDeviceProductAdapter(product);
         if (!adapter) {
-          throw new ShroomError('INVALID_CONFIG', '请选择有效的产品及手套手侧。', { stage: 'configure' });
+          throw new ShroomError('INVALID_CONFIG', '请选择已支持的产品，并按产品说明配置侧别与协议。', { stage: 'configure' });
         }
         return adapter.createParser(options);
       }
@@ -4208,7 +4707,7 @@
         decodeStreamFrame: decodeStreamFrame,
         STREAM_SCHEMA: STREAM_SCHEMA,
         isSupported: isSerialSupported,
-        version: "0.2.0",
+        version: "0.3.0",
         // 想自己接数据源（WebSocket、蓝牙、录制回放）就用这几个
         createFramer: createFramer,
         decodeFrame: decodeFrame,

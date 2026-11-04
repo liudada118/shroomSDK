@@ -1,9 +1,9 @@
-import { createProductCall } from './product-call.js';
+import { createProductCall, productCallDataFields } from './product-call.js';
 
 /** 同一条调用链：Node 负责设备与 WS，浏览器复用 stream 控制录制并下载。 */
 export function createProductFlow(options) {
   const readCode = createProductCall({ ...options, env: 'node', quickFlow: true });
-  const glove = options.product === 'glove';
+  const dataFields = productCallDataFields(options.product).map(field => `data.${field}`).join(', ');
   const entry = options.importStyle === 'package' ? 'shroom-sdk/quick-flow' : './quick-flow.js';
   return [
     {
@@ -25,7 +25,7 @@ export function createProductFlow(options) {
           '// 浏览器连接一次，后面三步复用同一个 stream。',
           'const stream = await readProduct({',
           "  url: 'ws://127.0.0.1:19999',",
-          glove ? '  onData: data => console.log(data.fingers, data.palm, data.imu),' : '  onData: data => console.log(data.pressureMatrix, data.values),',
+          `  onData: data => console.log(${dataFields}),`,
           '  onError: error => console.error(error.code, error.message),',
           '});',
           '// SDK 内部保存本次停止的记录 ID，下载时无需手动管理。',
