@@ -13,7 +13,7 @@ import { readProduct, createWS, startRecording, stopRecording, downloadRecording
 
 SDK 从 npm 注册表安装到 `node_modules/shroom-sdk`，免登记下载，真实设备密钥单独申请。[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)继续提供 `.tgz` 下载；历史安装包 URL 仍可使用。安装包只含压缩运行代码、类型与说明；保存项目依赖和锁文件，以便重复安装。入口、升级和本地包安装见[npm 安装说明](docs/NPM.md)。压缩不等于加密，也不能防止有意修改代码。
 
-当前源码为 `shroom-sdk@0.3.0`，新增鞋垫双协议和人体全身物理线序，五个函数保持不变。0.3.0 尚未发布到 npm；普通 `npm install shroom-sdk` 目前安装的 0.2.0 不包含这两类新产品，试用新能力请安装本次构建的 `shroom-sdk-0.3.0.tgz`。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)。
+当前版本为 `shroom-sdk@0.3.0`，新增鞋垫双协议和人体全身物理线序，五个函数保持不变。新产品要求0.3.0或更高版本；旧项目运行 `npm install --save-exact shroom-sdk@0.3.0` 升级，让 Node 服务端与网页使用相同版本并重新构建前端。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)。
 
 **取数 → 创建 WS → 开始采集 → 停止采集 → 下载**：五个函数保持不变。Node.js 连接设备并创建服务，网页连接一次后复用同一 `stream`。直接查看[五步 API 调用](docs/QUICK-START.md#quick-call)，使用上面的包名导入，接入自己的程序与按钮；源码 ZIP 的相对路径示例作为另一种交付方式保留。
 

@@ -53,8 +53,9 @@ test('body and both insole protocols use Node calls and read their own fields wi
       const source = createProductCall({ ...configuration, env: 'node', platform: 'linux', quickFlow, importStyle });
       const name = quickFlow ? 'readProduct' : 'connectProduct';
       assert.equal(typeof NodeSdk.connectProduct, 'function');
-      assert.match(source, /0\.3\.0 开发版/);
-      assert.match(source, /npm 0\.2\.0 不包含/);
+      assert.match(source, /0\.3\.0 或更高版本/);
+      assert.match(source, /Node 服务端与网页请安装相同版本/);
+      assert.doesNotMatch(source, /开发版|未发布/);
       assert.doesNotMatch(source, /fingers|palm|createProductView|<!doctype|baudRate/);
       const calls = [], output = [], device = { close: async () => {} };
       const run = new AsyncFunction(name, 'console', source.replace(/^import[^\n]+\n/, '') + '\nreturn device;');

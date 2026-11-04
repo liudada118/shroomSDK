@@ -2,8 +2,8 @@
 const callProducts = {
   glove: { connect: 'connectGlove', side: '手', fields: ['fingers', 'palm', 'imu'] },
   pad: { connect: 'connectHandPad', fields: ['pressureMatrix', 'values'] },
-  body: { connect: 'connectProduct', development: true, fields: ['regions', 'raw'] },
-  insole: { connect: 'connectProduct', side: '脚', development: true, fields: ['sensors', 'pressure', 'imu'] },
+  body: { connect: 'connectProduct', nodeExampleOnly: true, minSdkVersion: '0.3.0', fields: ['regions', 'raw'] },
+  insole: { connect: 'connectProduct', side: '脚', nodeExampleOnly: true, minSdkVersion: '0.3.0', fields: ['sensors', 'pressure', 'imu'] },
 };
 
 /** 供同一五步流程的 Node / WS 回调共用；仅返回字段名，不解码或绘制数据。 */
@@ -21,7 +21,7 @@ export function createProductCall(options) {
   if (product === 'insole' && protocol !== undefined && !['12bit', '8bit'].includes(protocol)) throw new TypeError('鞋垫协议请选择 12bit 或 8bit。');
   if (product !== 'insole' && protocol !== undefined) throw new TypeError('当前产品不使用鞋垫 protocol 参数。');
   if (!['web', 'node'].includes(env)) throw new TypeError('请选择浏览器或 Node.js。');
-  if (profile.development && env !== 'node') throw new TypeError('新增产品示例使用 Node.js 取数，浏览器通过 WS 接收。');
+  if (profile.nodeExampleOnly && env !== 'node') throw new TypeError('新增产品示例使用 Node.js 取数，浏览器通过 WS 接收。');
   if (!['windows', 'macos', 'linux'].includes(platform)) throw new TypeError('请选择采集电脑系统。');
   if (!['relative', 'package'].includes(importStyle)) throw new TypeError('请选择源码相对路径或 npm 包入口。');
   if (quickFlow && env !== 'node') throw new TypeError('产品串口快速调用在 Node.js 中运行。');
@@ -33,7 +33,7 @@ export function createProductCall(options) {
     : quickFlow ? './quick-flow.js' : `./${env}/index.js`;
   return [
     `import { ${name} } from '${entry}';`, '',
-    ...(profile.development ? ['// 需要 SDK 0.3.0 开发版；尚未发布到 npm，npm 0.2.0 不包含此产品协议。'] : []),
+    ...(profile.minSdkVersion ? [`// 需要 SDK ${profile.minSdkVersion} 或更高版本；Node 服务端与网页请安装相同版本。`] : []),
     env === 'web' ? '// SDK 授权完成后，在“连接”按钮的点击事件中调用。' : '// SDK 授权完成后调用；path 替换为系统中的实际串口。',
     `const device = await ${name}({`,
     ...(quickFlow || name === 'connectProduct' ? [`  product: '${product}', // 由 SDK 注册表选择对应产品协议`] : []),
