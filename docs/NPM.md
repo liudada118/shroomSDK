@@ -7,17 +7,17 @@
 在自己的项目终端执行：
 
 ```bash
-npm install --save-exact shroom-sdk@0.4.0
+npm install --save-exact shroom-sdk@0.5.0
 ```
 
 npm 从注册表下载 SDK 并安装到 `node_modules/shroom-sdk`，不用先查找仓库、下载或解压源码。
 
 SDK 下载与安装不要求登记联系方式。真实设备使用的 **Shroom SDK 产品密钥另行申请**，下载完成不代表已经激活。
 
-以上命令固定安装 **0.4.0**。手套分包从 0.4.0 起提供，`glove` 与 `connectGlove()` 默认使用分包协议；整包设备需显式使用 `handGloveFullPacket`，迁移见[手套协议](https://github.com/liudada118/shroomSDK/blob/sdk-v0.4.0/docs/GLOVE.md)。鞋垫双协议与人体区域线序要求 0.3.0 或更高版本。Node 服务端与网页依赖保持相同版本，升级后重新构建前端。也可以在[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **下载安装包**，在保存 `.tgz` 的目录运行以下命令；文件名以实际下载版本为准：
+以上命令固定安装 **0.5.0**。Node 分包手套可自动扫描串口并识别左右手，也保留手动 path+side 方式。手套分包从 0.4.0 起提供，`glove` 与 `connectGlove()` 默认使用分包协议；整包设备需显式使用 `handGloveFullPacket`，迁移见[手套协议](https://github.com/liudada118/shroomSDK/blob/sdk-v0.5.0/docs/GLOVE.md)。鞋垫双协议与人体区域线序要求 0.3.0 或更高版本。Node 服务端与网页依赖保持相同版本，升级后重新构建前端。也可以在[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)点击 **下载安装包**，在保存 `.tgz` 的目录运行以下命令；文件名以实际下载版本为准：
 
 ```bash
-npm install --save-exact ./shroom-sdk-0.4.0.tgz
+npm install --save-exact ./shroom-sdk-0.5.0.tgz
 ```
 
 历史官网安装包 URL 仍可作为 npm 的安装来源，已有项目无需立即改写依赖。安装后保存项目的 `package.json` 和锁文件，其他电脑或 CI 使用 `npm ci`；使用本地 `.tgz` 安装时，应将包放在 `vendor/` 并随项目保存，否则其他电脑找不到该文件。升级时选择已发布的目标版本，执行 `npm install --save-exact shroom-sdk@<目标版本>` 并提交新的锁文件；使用 URL 或本地包的项目也可以继续安装对应版本制品。首次安装需要能够下载运行依赖，或已有对应 npm 缓存。
@@ -34,9 +34,26 @@ import {
 } from 'shroom-sdk/quick-flow';
 ```
 
-Node.js 取数传入 `product / path` 等设备参数；网页取数传入 WS `url`。后三步共用同一个服务或网页连接。参数和调用位置见[五步调用说明](https://sdk.jq-industries.com/docs/quick-start)。
+Node.js 手套自动取数只需传 `product: 'glove'` 与回调；手动取数传 `path + side`。其他产品仍按文档配置。网页取数传入 WS `url`。后三步共用同一个服务或网页连接。参数和调用位置见[五步调用说明](https://sdk.jq-industries.com/docs/quick-start)。
 
-连接前先用 Node 基础 API 搜索串口，把返回的 `path` 展示给用户选择，再交给 `readProduct()`；这属于接入准备，五函数入口不变。
+自动取数示例（先激活 SDK serial 授权）：
+
+```js
+try {
+  const device = await readProduct({
+    product: 'glove', // 扫描唯一分包手套；双手都在时可加 side: 'left' 筛选。
+    onData: data => console.log(data.side, data.fingers, data.palm),
+    onError: error => console.error(error.code, error.message),
+  });
+  // 结束使用时 await device.close()。
+} catch (error) {
+  console.error(error.code, error.message); // 无匹配 / 多匹配 / 授权或端口错误。
+}
+```
+
+只识别 921600 波特率的分包手套：类型 1=左手、2=右手，至少 3 个同侧完整配对才确认；默认每口读取 1200 ms，不发送设备指令，扫描样本不进入业务回调。需要设备列表时可从 `shroom-sdk/node` 调用 `scanProductPorts()`。Web Serial、整包手套和其他产品不支持此扫描。
+
+手动接入时，用 Node 基础 API 搜索串口，把返回的 `path` 展示给用户选择，再交给 `readProduct()`；这属于接入准备，五函数入口不变。
 
 ```js
 import { listPorts } from 'shroom-sdk/node';

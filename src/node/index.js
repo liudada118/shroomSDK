@@ -9,7 +9,7 @@
  *
  * 无硬件时 Shroom.mock() 提供通用矩阵帧；它共用 onFrame/close，不模拟手套专用字段。
  */
-export { connectSerial, listPorts, connectProduct, connectGlove, connectHandPad } from './serial.js';
+export { connectSerial, listPorts, scanProductPorts, connectProduct, connectGlove, connectHandPad } from './serial.js';
 export { listDeviceProducts } from '../core/product.js';
 export { renderAscii } from './ascii.js';
 export { serveDevice } from './quick-server.js';
@@ -23,7 +23,7 @@ export { BackendSdkClient } from './backend.js';
 export { ShroomError, ERROR_CODES, asShroomError } from '../core/errors.js';
 export { activateLicense, getLicenseStatus, clearLicense, SDK_PRODUCT_TYPE } from '../core/license.js';
 
-import { connectSerial, listPorts, connectProduct, connectGlove, connectHandPad } from './serial.js';
+import { connectSerial, listPorts, scanProductPorts, connectProduct, connectGlove, connectHandPad } from './serial.js';
 import { listDeviceProducts } from '../core/product.js';
 import { renderAscii } from './ascii.js';
 import { serveDevice } from './quick-server.js';
@@ -55,6 +55,8 @@ export const Shroom = {
   connect: connectSerial,
   /** 列出可用串口 */
   listPorts,
+  /** 只读打开候选串口，按完整产品帧识别左右手；结果返回前释放端口。 */
+  scanProductPorts,
   /** 模拟矩阵设备，共用通用 Frame 订阅与关闭接口。 */
   mock: createMockDevice,
   /** 把一帧画成终端里的字符热力图 */

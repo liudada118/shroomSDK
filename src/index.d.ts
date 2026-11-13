@@ -322,7 +322,7 @@ export interface HandPadFrame extends ProductFrame<Uint8Array> { product: 'hand'
 export interface SegmentedGloveFrame extends Omit<GloveFrame, 'product' | 'sequence' | 'packetType'> {
   product: 'handGloveSegmented';
   protocol: 'segmented';
-  /** 首尾包配对使用的原始类型字节，不代表实物左右手，也不是采样序号。 */
+  /** 首尾包配对类型；已核实固件中 1=左手、2=右手，不是唯一设备编号或采样序号。 */
   packetType: number;
   sequence?: never;
 }
@@ -495,7 +495,7 @@ export function connectStream<T extends Frame = Frame>(options?: StreamOptions<T
 /** source 存在时自动订阅；手套为二维分区视图，不包含三维模型。 */
 export function createProductView<T extends Frame = Frame>(target: HTMLElement | string, options?: ProductViewOptions<T>): ProductView;
 export interface ProductDevice<T extends Frame & { product: DeviceProductId } = RegisteredProductFrame> extends Omit<Device, 'info' | 'onFrame'> {
-  info: DeviceInfo & { product: T['product']; label: string; side?: 'left' | 'right'; protocol?: InsoleProtocol | 'segmented' };
+  info: DeviceInfo & { product: T['product']; label: string; side?: 'left' | 'right'; protocol?: InsoleProtocol | 'segmented'; packetType?: number };
   onFrame(handler: (frame: T) => void): () => void;
   /** onFrame 的产品入口别名。 */
   onData(handler: (frame: T) => void): () => void;
@@ -506,7 +506,7 @@ export interface ProductCallbacks<T extends Frame & { product: DeviceProductId }
   onError?: (error: ShroomError) => void;
 }
 export interface WebGloveOptions extends ProductCallbacks<SegmentedGloveFrame> {
-  /** 一只手一个串口；显式选择实物手侧用于线序，包类型不能推断左右手。 */
+  /** 浏览器直连仍需按实物明确选择手侧；自动串口发现仅由 Node 提供。 */
   side: 'left' | 'right';
   port?: unknown;
   filters?: WebConnectOptions['filters'];
@@ -516,14 +516,57 @@ export interface WebHandPadOptions extends ProductCallbacks<HandPadFrame> {
   port?: unknown;
   filters?: WebConnectOptions['filters'];
 }
-export interface NodeGloveOptions extends ProductCallbacks<SegmentedGloveFrame>, NodeSerialLifecycleOptions {
+/** Node 探测限制；每个串口只按手套协议的 921600 波特率读取，不扫描速率。 */
+export interface ProductPortScanSettings {
+  /** 仅探测这些端口；省略时枚举本机串口，空数组无效。 */
+  paths?: string[];
+  /** 每个端口的读取窗口，默认 1200 ms，允许 50–10000 ms。 */
+  timeoutMs?: number;
+  /** 取消后清理已打开的探测端口。 */
+  signal?: AbortSignal;
+}
+/** 当前只支持分包手套；side 是筛选条件，省略时接受任一已确认手侧。 */
+export interface ProductPortScanOptions extends ProductPortScanSettings {
+  product?: 'glove' | 'handGloveSegmented';
+  side?: 'left' | 'right';
+}
+/** 至少三个同侧完整首尾配对确认的设备；packetType 不具有唯一 SN 语义。 */
+export interface DetectedProductPort {
+  path: string;
+  product: 'handGloveSegmented';
+  label: string;
+  baudRate: number;
   side: 'left' | 'right';
-  /** 未指定时仅一个端口可自动选择；多端口抛 PORT_AMBIGUOUS。 */
+  packetType: number;
+  /** 操作系统/USB 驱动提供的可选序列号，不来自手套包内的类型字节。 */
+  serialNumber?: string;
+}
+/** 每个尝试端口的独立结果；无匹配不等于端口打开失败。 */
+export interface ProductPortScanEntry {
+  path: string;
+  status: 'matched' | 'unrecognized' | 'error';
+  device?: DetectedProductPort;
+  error?: ShroomError;
+}
+export interface ProductPortScanResult {
+  devices: DetectedProductPort[];
+  ports: ProductPortScanEntry[];
+}
+export interface NodeGloveOptions extends ProductCallbacks<SegmentedGloveFrame>, NodeSerialLifecycleOptions {
+  /** 省略或 auto 时从有效分包识别左右手；显式侧别用于扫描筛选或手动映射。 */
+  side?: 'left' | 'right' | 'auto';
+  /** 无 path 时自动扫描；显式 path + left/right 且无 scan 时保持手动直连。 */
   path?: string;
+  /** 显式要求验证串口数据，并可限制候选端口、窗口和取消信号。 */
+  scan?: ProductPortScanSettings;
 }
 /** 兼容整包设备：通过显式 product: handGloveFullPacket 使用。 */
 export interface WebFullPacketGloveOptions extends Omit<WebGloveOptions, 'onData'>, ProductCallbacks<GloveFrame> {}
-export interface NodeFullPacketGloveOptions extends Omit<NodeGloveOptions, 'onData'>, ProductCallbacks<GloveFrame> {}
+export interface NodeFullPacketGloveOptions extends ProductCallbacks<GloveFrame>, NodeSerialLifecycleOptions {
+  side: 'left' | 'right';
+  path?: string;
+  scan?: never;
+}
 export interface NodeHandPadOptions extends ProductCallbacks<HandPadFrame>, NodeSerialLifecycleOptions {
   side?: never;
   path?: string;

@@ -537,6 +537,9 @@ test('Node serial lifecycle with a fake optional dependency', {
       assert.equal(device.state, 'error');
       assert.equal(errors.length, 1);
       assert.equal(FakeNodePort.instances[0].closeCalls, 1);
+      // 关闭失败用例仍持有假串口；最后模拟物理拔线，下一轮才能复用相同路径。
+      const port = FakeNodePort.instances[0];
+      if (port.isOpen) { port.isOpen = false; port.emit('close'); }
     }
   });
 

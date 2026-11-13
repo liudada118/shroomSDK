@@ -3,6 +3,7 @@ import { createFrameHub } from '../core/device.js';
 import { ShroomError, asShroomError } from '../core/errors.js';
 import { serialDiagnostics } from '../core/serial-diagnostics.js';
 import { assertLicense, watchLicense, markLicensedDevice } from '../core/license.js';
+import { reserveSerialPath } from './serial-path.js';
 
 /** 检查重连策略；配置错误必须在查询或打开硬件之前返回。 */
 export function reconnectOptions(options, defaultEnabled = false) {
@@ -39,6 +40,15 @@ export async function connectManagedSerial({ SerialPort, path, baudRate, info, m
   let bytesReceived = 0;
   let frameCount = 0;
   let archivedDropped = 0;
+  let releasePath;
+  const heldAttempts = new Set();
+
+  /** 设备终止后也等所有物理句柄释放；正常重连关闭旧句柄时继续保留整台设备的预约。 */
+  function releasePathIfIdle() {
+    if (!terminal || heldAttempts.size) return;
+    releasePath?.();
+    releasePath = undefined;
+  }
 
   /** 状态对象只描述当前连接，不能把尝试打开当成已收到数据。 */
   function connectionStatus() { return Object.freeze({ state, path, attempt: retryAttempt, maxAttempts: policy.maxAttempts }); }
@@ -58,15 +68,19 @@ export async function connectManagedSerial({ SerialPort, path, baudRate, info, m
   function detach(attempt) {
     clearTimeout(attempt.openTimer);
     attempt.port?.removeListener('data', attempt.onData);
-    if (!attempt.openPending && attempt.port?.isOpen !== true) {
+    if (!attempt.openPending && attempt.port?.isOpen !== true && attempt.port?.opening !== true
+      && (attempt.closed || (!attempt.closePending && attempt.port?.closing !== true))) {
       attempt.port?.removeListener('error', attempt.onError);
       attempt.port?.removeListener('close', attempt.onClose);
+      heldAttempts.delete(attempt);
+      releasePathIfIdle();
     }
   }
   /** 关闭迟到打开的旧端口；首次关闭失败也保留错误监听。 */
   function closePort(attempt) {
     if (attempt.openPending || attempt.closePending) return;
     if (!attempt.port?.isOpen) { attempt.finishRelease?.(); detach(attempt); return; }
+    attempt.closed = false;
     attempt.closePending = true;
     try {
       attempt.port.close((cause) => {
@@ -87,7 +101,7 @@ export async function connectManagedSerial({ SerialPort, path, baudRate, info, m
   }
   /** 释放单次物理连接；打开仍在进行时等待其回调，超时后禁止再次打开。 */
   function release(attempt) {
-    if (!attempt) return Promise.resolve();
+    if (!attempt) { releasePathIfIdle(); return Promise.resolve(); }
     if (attempt.releasePromise) return attempt.releasePromise;
     attempt.active = false;
     clearTimeout(attempt.openTimer);
@@ -114,6 +128,7 @@ export async function connectManagedSerial({ SerialPort, path, baudRate, info, m
   function terminate(error) {
     if (terminal) return;
     terminal = true;
+    releasePathIfIdle();
     clearTimeout(retryTimer);
     unsubscribeLicense?.();
     if (current?.openPending) current.rejectOpen(error);
@@ -200,6 +215,7 @@ export async function connectManagedSerial({ SerialPort, path, baudRate, info, m
         }
       };
       attempt.onClose = () => {
+        attempt.closed = true;
         if (!attempt.active) {
           if (!attempt.closePending) attempt.finishRelease?.(attempt.closeError);
           detach(attempt);
@@ -211,6 +227,7 @@ export async function connectManagedSerial({ SerialPort, path, baudRate, info, m
       };
       try {
         attempt.port = new SerialPort({ path, baudRate, autoOpen: false });
+        heldAttempts.add(attempt);
         attempt.port.on('data', attempt.onData);
         attempt.port.on('error', attempt.onError);
         attempt.port.on('close', attempt.onClose);
@@ -244,6 +261,7 @@ export async function connectManagedSerial({ SerialPort, path, baudRate, info, m
       throw error;
     }).finally(() => { hub.clear(); stateListeners.clear(); });
     terminal = true;
+    releasePathIfIdle();
     clearTimeout(retryTimer);
     unsubscribeLicense?.();
     if (current?.openPending) current.rejectOpen(new ShroomError('CONNECTION_FAILED', '串口连接已取消。', { stage: 'connect' }));
@@ -277,6 +295,7 @@ export async function connectManagedSerial({ SerialPort, path, baudRate, info, m
   };
   try {
     assertLicense(licenseRequirement);
+    releasePath = reserveSerialPath(path);
     unsubscribeLicense = watchLicense(licenseRequirement, terminate);
     await openAttempt();
     assertLicense(licenseRequirement);
@@ -284,6 +303,7 @@ export async function connectManagedSerial({ SerialPort, path, baudRate, info, m
     return markLicensedDevice(device, licenseRequirement);
   } catch (error) {
     terminal = true;
+    releasePathIfIdle();
     state = 'error';
     clearTimeout(retryTimer);
     unsubscribeLicense?.();

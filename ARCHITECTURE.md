@@ -1,12 +1,14 @@
 # Shroom SDK 架构
 
-最后更新于：2026-11-04
+最后更新于：2026-11-13
 
 ## 1. 项目概述
 
 本仓库维护独立的 `shroom-sdk`：读取传感器数据、按需创建 WebSocket 服务、采集到 SQLite、停止采集并导出 CSV / JSONL。快速入口只导出五个函数，产品协议和点位映射由内部适配器管理。Node.js、浏览器和 Python 共享版本号，但语言能力按各自文档定义。
 
-当前版本 **0.4.0 已发布至 npm，latest 指向 0.4.0**，补充 130+146 字节手套分包，将 `glove` 别名与 `connectGlove()` 默认切换到分包；整包入口继续显式使用 `handGloveFullPacket`。客户安装命令为 `npm install --save-exact shroom-sdk@0.4.0`，Node 服务端与网页使用相同版本并重新构建前端。0.3.0 具有人体全身和鞋垫 A 版适配器，但不具有手套分包。Python 没有随版本号增加这些产品协议或五步服务能力。公开注册表的独立安装、SHA-512 完整性比对、五步调用和类型检查均通过；分包协议尚未完成实物验收。
+当前发布目标为 **0.5.0**：Node 分包手套新增自动扫描与左右手识别，同时保留手动 path+side 和五个快速函数。客户安装目标为 `npm install --save-exact shroom-sdk@0.5.0`，Node 与网页使用同一版本。0.4.0 首次提供 130+146 字节分包协议；整包仍显式使用 handGloveFullPacket。Python 仅同步版本元数据，不新增这些产品能力；合成帧测试不代替实物验收。发布与注册表验收结果另行追加。
+
+0.5.0 扫描逐口读取固定 921600 波特率分包数据，按类型 1/2 确认左/右手；明确 path+side 且无 scan 保持手动直连。只读探测样本与正式取数隔离，全部探测连接释放后才正式连接；重连保持原路径，不跨口迁移。
 
 官网与文档展示位于独立的 `shroomSDKWEB` 仓库，通过 `sdk/` Git 子模块固定本仓库的具体提交。SDK 的安装、测试、构建和发布均不依赖官网。官网构建使用固定提交中的文档、示例生成函数及下载包，不自动跟随 SDK 主分支。
 
@@ -34,7 +36,9 @@ shroomSDK/
 │  ├─ flow/              快速调用编排
 │  ├─ core/              协议、产品适配、数据结构与授权
 │  │  └─ products/       registry、glove-segmented/glove/pad/body/insole 适配器及物理线序
-│  ├─ node/              Node 串口与重连、WS 与 SQLite 采集
+│  ├─ node/              Node 串口、自动发现与重连、WS 与 SQLite 采集
+│  │  ├─ serial-scan.js  有界逐口采样、取消与资源释放；协议身份由产品适配器提供
+│  │  └─ serial-path.js  扫描与托管连接共用的路径预约，覆盖重连与迟到清理
 │  ├─ web/               浏览器串口、WS 与二维显示
 │  └─ backend/           已有后端的 HTTP / WS 客户端
 ├─ examples/
@@ -82,17 +86,23 @@ flowchart LR
 
 五函数复用基础 API：`readProduct` 调用 Node `connectProduct` 或浏览器 `connectStream`；`createWS` 调用 `serveDevice`；采集和下载委托已有连接或服务方法。返回对象与 `stream` 保存当前会话，成功开始新采集时清除旧下载 ID。
 
-串口查询属于五步前的准备：应用从 `shroom-sdk/node` 调用 `listPorts()` 展示列表，由用户选择实际 `path`；快速入口仍只导出五个函数。枚举不打开串口，不识别产品型号或左右手，也不自动选择列表第一个设备。
+`listPorts()` 仍只枚举系统串口，不打开设备、不识别型号或左右手，也不要求授权。需要手动选择时将列表交给应用。Node 基础 API 新增 `scanProductPorts()`，由 `src/node/serial-scan.js` 在有效 serial 授权下逐口只读采样，通过 `adapter.discovery.createParser / identify` 识别协议身份；只有注册了 discovery 钩子的产品才支持扫描，目前为分包手套。默认每口读取 1200 ms，允许 50–10000 ms，支持 paths 限定及 AbortSignal 取消，只按产品固定 921600 波特率探测。
+
+扫描至少观察 3 个同侧完整配对，未知/混合侧别不作为有效设备；返回 devices 与逐口 ports 报告，side 只筛选 devices。样本不进入业务 onData 或采集；确认所有临时端口释放后才正式连接。无法确认关闭时停止扫描并保持路径占用保护，防止晚到打开与下一次连接重叠。
+
+`src/node/serial-path.js` 由 serial-scan 与 serial-reconnect 共用，统一预约串口路径；托管连接在重连等待期间仍保留预约。扫描跳过当前 SDK 已有的活跃、重连或清理未完成连接，以逐口 PORT_BUSY 结果报告，不抢占原设备。逻辑连接终止且所有物理连接确认释放后才解锁，迟到的 open/close 仍需完成清理；其他进程的端口互斥由驱动处理。
+
+Node `connectProduct()` 在分包手套缺少 path、side 省略/auto 或显式 scan 时内部调用公开 `scanProductPorts()`；唯一匹配才连接，零/多匹配分别报 PORT_NOT_FOUND/PORT_AMBIGUOUS，details.scan 保留完整报告。显式 path+left/right 且无 scan 保持手动直连。`readProduct()` 继续复用 connectProduct，快速入口仍只导出五函数。Web Serial、WS 客户端、整包手套和其他产品没有本次自动扫描入口。
 
 Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产品连接默认启用，通用 `connectSerial` 默认关闭。意外断线后先清理旧端口，再按原 `path` 每 3 秒尝试、最多 3 次；只有收到有效帧才重置尝试次数。首次打开失败、主动关闭、授权或解析错误、端口清理失败不进入重试。恢复保持设备对象和数据订阅，通过 `onStateChange` 暴露 `open / reconnecting / error / closed`；诊断保留累计计数，同时按本次连接判断是否真正收到数据。Web Serial、浏览器 WS 与 Python 本次未增加自动重连。
 
 产品代码集中在 `src/core/products/`。增加产品通过适配器与注册表扩展协议、映射和 WS 字段校验，不改五个函数签名。产品扩展测试会在临时副本注册测试产品，验证串口、五步调用、录制、导出和浏览器 bundle 的一致性。
 
-0.4.0 注册表包含分包手套 `handGloveSegmented`（`glove`）、兼容整包手套 `handGloveFullPacket`、手垫 `hand`（`pad`）、人体 `humanBody`（`body`）及鞋垫 `jqInsole`（`insole`）。别名只用于连接，帧和 WS 始终使用规范 ID。`prepareProductConnection` 先执行产品专属参数校验，再调用可选的 `adapter.resolveProfile(options)`；未实现该方法的适配器使用静态 profile。鞋垫以此选择显式 `protocol` 和支持的 `baudRate`，公共连接层不按产品添加条件分支，也不自动探测协议或速率。
+0.4.0 注册表包含分包手套 `handGloveSegmented`（`glove`）、兼容整包手套 `handGloveFullPacket`、手垫 `hand`（`pad`）、人体 `humanBody`（`body`）及鞋垫 `jqInsole`（`insole`）。别名只用于连接，帧和 WS 始终使用规范 ID。`prepareProductConnection` 先执行产品专属参数校验，再调用可选的 `adapter.resolveProfile(options)`；未实现该方法的适配器使用静态 profile。鞋垫以此选择显式 protocol 和支持的 baudRate；本次扫描通过可选 discovery 钩子扩展识别，不把各产品字节判断塞进公共连接层，也不自动探测波特率。
 
 | 适配器 / 线序文件 | 配置与输出边界 |
 | --- | --- |
-| `glove-segmented.js` / `glove.js` / `../glove.js` | 默认分包在单连接内按相同原始包类型配对 130/146 字节包，最大间隔 1 秒；重置/非法包清缓存，孤立尾包不交付。一只手一个串口，显式 side 决定五指/手掌线序，不根据 packetType 自动路由手侧，不构造整包假序号；输出无 sequence。整包适配器保留 274 字节与原 sequence |
+| `glove-segmented.js` / `glove.js` / `../glove.js` | 默认分包在单连接内按相同原始包类型配对 130/146 字节包，最大间隔 1 秒；重置/非法包清缓存，孤立尾包不交付。一只手一个串口；手动 side 决定线序，自动模式识别 packetType 1=左/2=右，未知/混合类型不作设备匹配；不路由单串口双手，不构造假序号。整包适配器保留 274 字节与原 sequence |
 | `body.js` / `body-layout.js` | 无 side；1000000 baud，1024 字节 uint8 载荷与尾分隔。保留 1024 原扫描 ADC，十个 `regions` 映射 400 唯一通道，索引用 Uint16；没有模型 UV、翻转、显示重复行或插值 |
 | `insole.js` / `insole-layout.js` | 必须明确脚侧；默认 12bit、921600 baud，可选 8bit 及限定速率。12bit 的 raw 是 512 个原始 ADC 字节、pressure 是 256 个 Uint16 ADC（0–4095）；8bit 分别为 256 字节与 256 个 Uint8 ADC。`sensors` 是 A 版 112 真实点，不含显示插值点 |
 
@@ -100,7 +110,9 @@ Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产�
 
 `src/index.d.ts` 的 `DeviceProductTypes` 登记所有产品，派生 Node/Web 选项与帧类型；分包与整包手套由 product 区分，只有整包帧有 sequence；鞋垫帧按 `protocol` 区分 12bit/8bit、ADC 类型和可用 IMU 字段。`stream-codec.js` 仍只处理基础帧，扩展字段由各适配器验证并复制；人体核对十块固定线序和 ADC 一致性，鞋垫核对精度、原始字节、真实点位及 IMU，避免 Uint8 截断或丢失负数 IMU。`createProductView` 支持分包/整包手套和手垫；人体/鞋垫仍由应用消费 `onData` 展示。
 
-手套分包的 profile.payloadLength 与解析器 frameLength 都表示两包载荷合计 276 字节，不含各自 `AA 55 03 99` 帧尾。包标志 1/2 和包类型字节不是帧序号；packetType 仅校验首尾一致，不决定实物手侧。协议没有 CRC、连续帧标识和转义，配对与超时保护不能保证检测所有同类型丢包错配；载荷出现完整尾标记可能丢帧。说明与迁移入口见 [GLOVE.md](docs/GLOVE.md)。
+手套分包的 profile.payloadLength 与解析器 frameLength 都表示两包载荷合计 276 字节，不含各自 `AA 55 03 99` 帧尾；包含帧尾的首包/尾包为 134/150 字节。byte[0] 的 1/2 是首包/尾包，byte[1] 的 packetType 在当前固件中 1=左、2=右，两者都不是采样序号；packetType 也不是唯一设备 SN，同侧多设备仍靠 path 区分。自动连接会固定已发现类型，正式读取或重连后出现另一侧有效帧时以 PARSE_FAILED 停止；手动明确 path+side 时仍保留原映射行为。协议没有 CRC、连续帧标识和转义，配对与超时保护不能保证检测所有同类型丢包错配；载荷出现完整尾标记可能丢帧。说明与迁移入口见 [GLOVE.md](docs/GLOVE.md)。
+
+公开类型新增 ProductPortScanSettings/Options、DetectedProductPort、ProductPortScanEntry/Result；NodeGloveOptions 可省略 side 或传 auto，并接收 scan。整包 Node 选项仍要求 left/right 且禁止 scan，浏览器手侧仍必填，WS 五步参数禁止 scan。连接 info 可提供识别出的 packetType。类型验证由 tests/serial-scan-types.mts 和原五步/产品类型测试覆盖。
 
 录制使用 SQLite 事务批量写入；停止与关闭等待待写队列落库，导出按页读取。记录目录有独占所有权；异常退出记录可恢复为中断状态。兼容读取旧 JSONL 文件，不兼容原 `shroom-backend-sdk` 的 `captures / frames` 数据库。
 
@@ -178,6 +190,7 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-11-04 | 共享版本回归 | Python 0.4.0 元数据与锁定依赖检查通过，69 项 Python 回归测试通过；Python 产品能力范围保持原样 |
 | 2026-11-04 | 0.4.0 发布文档准备 | 客户安装命令固定到 0.4.0，移除当前版本的本地修订提示，保留整包手套显式入口、双端同版本与实物验收边界；最终打包与注册表发布结果另行记录 |
 | 2026-11-04 | 0.4.0 正式发布与消费验证 | 源码提交 `50d0956c192c892f7bd701cbdde8e22bb0ae0b4b` 与 `sdk-v0.4.0` 标签已推送；npm 0.4.0 / latest 可用。完整本地发布门禁通过，公开注册表独立安装及 SHA-512 比对通过；最终 TGZ 为 118542 字节，SHA-256 为 `7adbe50638e965ab86b27263211f7aee752cecd82b44bcdb56bd88461ad8f024` |
+| 2026-11-13 | 分包手套串口自动发现与两种连接方式 | 新增 Node scanProductPorts 基础 API，识别 packetType 1=左/2=右；readProduct 内部复用扫描，保留手动 path+side 和原五函数。补充逐口报告、取消与清理、歧义处理、类型及接入文档；源码新增尚未发布 npm 或完成真机验收 |
 
 ## 9. 更新日志
 
@@ -199,6 +212,7 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-11-04 | 验证完成 | 0.4.0 分包解析、整包兼容、默认入口、模拟源、五步 WS/SQLite/HTTP 链路和独立 npm 安装通过；原五函数导出不变 |
 | 2026-11-04 | 文档更新 | 准备 0.4.0 客户交付说明，统一 npm 固定版本与 TGZ 安装示例，保留协议迁移提示，并修正点位表元数据与分包适配器的关系；未改变运行代码或五函数 |
 | 2026-11-04 | 版本发布 | 推送 SDK 0.4.0 源码与标签，发布已验证的精简 TGZ；从官方注册表重新安装并核对完整性，确认分包手套、五步流程、WS/SQLite/导出与 NodeNext/Bundler 类型可用 |
+| 2026-11-13 | 新增功能 | 补充分包手套左右手类型语义和 Node 串口自动发现，以产品 discovery 钩子扩展；公开扫描与五步取数共用，保持手动直连、原路径有限重连和整包兼容边界。更新架构、协议、串口、五步与 AI 文档，不覆盖已发布 0.4.0 制品 |
 
 ## 10. 原 SDK 历史记录
 
@@ -276,3 +290,13 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-08-27 | 稳定采集链路 | `CaptureController` 统一管理采集频率、批次和统计，SQLite/内存 Store 对齐 `insertFrames`，会话关闭不再遗留未落库帧 |
 | 2026-08-27 | 串口管理闭环 | 同时支持手动与一键连接，聚合所有串口的最新数据、在线/断流状态，并打通写入、重连、重扫和错误处理 |
 | 2026-08-28 | 后端六项能力 | 串口、采集、存储、回放、CSV 和简单算法通道均提供根入口、统一数据流、测试与本地网页文档 |
+
+### 0.5.0 发布准备
+
+| 日期 | 变更类型 | 说明 |
+| --- | --- | --- |
+| 2026-11-13 | 配置变更 | 升版至 0.5.0，同步运行时、包元数据和安装/AI 文档；保留历史版本及手动兼容，准备执行完整发布门禁。 |
+
+| 完成日期 | 完成的功能/工作 | 简要说明 |
+| --- | --- | --- |
+| 2026-11-13 | 0.5.0 发布准备 | 手动/自动串口接入说明与版本已同步，正式发布和消费验证另行记录。 |

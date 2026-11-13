@@ -69,7 +69,7 @@ void readProduct({ product: 'insole', side: 'left', baudRate: 123 });
 // @ts-expect-error WS不能混入设备协议配置。
 void readProduct({ url: 'ws://localhost:19999', protocol: '8bit' });
 
-// @ts-expect-error 手套必须明确左右手。
+// Node 分包手套可自动识别手侧和串口。
 void readProduct({ product: 'glove' });
 // @ts-expect-error 手垫不接收手侧。
 void readProduct({ product: 'pad', side: 'left' });
@@ -85,10 +85,11 @@ void connectNodeProduct({ product: 'glove', side: 'left', baudRate: 9600 });
 void readProduct({ product: 'pad', url: 'ws://localhost:19999' });
 
 declare const unselectedProduct: 'glove' | 'pad';
-// @ts-expect-error 动态产品尚未收窄，不能绕过手套的 side 要求。
+// 两种产品都允许不传 side；分包手套会进入自动识别。
 void readProduct({ product: unselectedProduct });
-// @ts-expect-error 显式联合泛型也必须保持产品与参数的对应关系。
 void readProduct<'glove' | 'pad'>({ product: 'glove' });
+// @ts-expect-error 兼容整包协议仍需明确手侧。
+void readProduct({ product: 'handGloveFullPacket' });
 
 // @ts-expect-error Web 产品连接不接受 Node 重连参数。
 void connectWebProduct({ product: 'pad', reconnect: true });

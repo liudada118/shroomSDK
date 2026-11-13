@@ -4,6 +4,8 @@
 
 快速接入的 `readProduct / createWS` 分别调用本页的 `connectProduct / serveDevice`；采集与下载也复用同一服务方法。查看[五函数与基础 API 对应表](CUSTOM.md#quick-to-base)，或直接查下方参数。
 
+**0.5.0 新增：** Node 分包手套支持手动选口与自动识别。手动传 `path + side`；自动调用 `readProduct({ product: 'glove', onData, onError })`，内部复用基础 `connectProduct()` → `scanProductPorts()`。五个快速函数保持不变；0.4.0 仍需手动配置，自动识别要求升级到 0.5.0。
+
 ## 环境与导入 {#setup}
 
 真实设备先完成[驱动安装](DRIVERS.md)与[SDK 授权](LICENSE.md)。CH34x 驱动缺失时系统不能提供串口；Windows 使用 [CH341SER.EXE](https://shroom.jq-industries.com/drive/CH341SER.EXE)，macOS 使用 [CH34xVCPDriver.zip](https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip)。安装后重插设备、重启采集程序再查询。SDK 许可证不按设备型号限制产品接口或通用串口，但产品协议仍需匹配实际硬件。
@@ -63,17 +65,18 @@ Node.js / 浏览器连接已封装的手套、手部检测垫、人体全身和�
 
 | 参数 | 类型 | 必填 / 默认值 |
 | --- | --- | --- |
-| `side` | `'left' \| 'right'` | 必填，明确选择左右手 |
-| `path` | `string` | Node 可选；省略时仅恰好一个端口才自动选择 |
+| `side` | `'left' \| 'right' \| 'auto'` | Node 0.5.0可省略或 auto 识别；left/right 用于扫描筛选或手动映射。浏览器与 0.4.0 仍必填 left/right |
+| `path` | `string` | Node 可选；源码省略时扫描有效分包，不按端口顺序选设备 |
+| `scan` | `{ paths?: string[], timeoutMs?: number, signal?: AbortSignal }` | 仅Node 0.5.0；显式传入时核实串口数据，参数见[扫描 API](#node-scan-product-ports) |
 | `port / filters` | 浏览器串口对象 / 筛选数组 | 仅浏览器可选；未给 port 时由用户选择端口 |
 | `onData` | `(data) => void` | 可选，在打开前注册的数据回调 |
 | `onError` | `(error: ShroomError) => void` | 可选，在打开前注册的运行错误回调 |
 | `reconnect` | `boolean \| { intervalMs?: number, maxAttempts?: number }` | 仅 Node；默认开启，间隔 3000ms、最多 3 次；`false` 关闭 |
 | `onStateChange` | `(status) => void` | 仅 Node；接收 `state / path / attempt / maxAttempts` |
 
-**返回值**：产品设备的 Promise；产品设备有 `onData / onFrame / onError / state / getDiagnostics() / close()`，Node 还提供 `onStateChange(handler)`。`info` 含 product、label、side，数据字段见[产品帧](#node-product-data)。具名 `connectGlove()` 是相同入口。
+**返回值**：产品设备的 Promise；产品设备有 `onData / onFrame / onError / state / getDiagnostics() / close()`，Node 还提供 `onStateChange(handler)`。info 含 product、label、side，自动识别后还含 packetType；数据字段见[产品帧](#node-product-data)。具名 connectGlove 是相同入口。
 
-**示例**：
+**手动示例**（已发布0.4.0也可用）：
 
 ```js
 import { Shroom } from './node/index.js';
@@ -93,13 +96,23 @@ try {
 }
 ```
 
-**注意事项**：一只手一个串口，`side` 由应用按该串口实物明确选择线序；不从 packetType 或端口名称推断。Node 零端口为 `PORT_NOT_FOUND`、多端口为 `PORT_AMBIGUOUS`，不会随意打开第一个；显式 path 仍需由应用选择。浏览器必须在用户手势中调用，不扫描硬件型号。连接前失败仍拒绝 Promise，不交给 `onError`。不接受 `baudRate / delimiter / rows / cols / layout` 等底层协议覆盖；其他协议使用通用 `connect()`。
+**自动示例**（0.5.0 新增）：
+
+```js
+const device = await Shroom.connectGlove({
+  // 不填 path/side，识别唯一分包手套；双手都在时可增加 side: 'left' 筛选。
+  onData: data => console.log(data.side, data.fingers, data.palm),
+  onError: error => console.error(error.code, error.message),
+});
+```
+
+**注意事项**：一只手一个串口；明确 path+left/right 且无 scan 保持手动映射，省略 path、side 省略/auto 或显式传 scan 时验证真实分包。当前固件 packetType 1=左手、2=右手，不是唯一设备 SN。多个有效匹配报 PORT_AMBIGUOUS、零匹配报 PORT_NOT_FOUND，details.scan 含完整逐口报告；不会随意连接第一个。正式连接与重连固定已发现类型，另一侧有效帧导致 PARSE_FAILED 并停止。浏览器仍需用户手势选口和明确 side，不支持此自动扫描。连接前失败拒绝 Promise，不交给 onError。不接受 baudRate/delimiter/rows/cols/layout 等底层协议覆盖；其他协议使用通用 connect。
 
 ### Shroom.connectHandPad(options) {#node-connect-hand-pad}
 
 **用途**：连接手部检测垫 `hand`，内置 1000000 波特率、1024 点、32×32 与 `mat32` 点位映射。
 
-**参数**：可选对象；Node 使用 `path / onData / onError / reconnect / onStateChange`，浏览器使用 `port / filters / onData / onError`。端口选择、回调注册和错误行为与 `connectGlove()` 相同，不需要 side。
+**参数**：可选对象；Node 使用 `path / onData / onError / reconnect / onStateChange`，浏览器使用 `port / filters / onData / onError`。不需要 side，不接受 scan；Node 省略 path 时仍只在恰好一个串口时自动选择，多个口需明确 path。回调与运行错误处理保持产品接口约定。
 
 **返回值**：Node 为 `Promise<NodeProductDevice<HandPadFrame>>`，浏览器为 `Promise<ProductDevice<HandPadFrame>>`；支持相同的产品数据方法，Node 另有状态订阅。具名 `connectHandPad()` 是相同入口。
 
@@ -120,13 +133,13 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 
 **用途**：按明确的产品标识连接，统一实现产品选择菜单。
 
-**参数**：必填 `product`，支持分包手套 `'glove' / 'handGloveSegmented'`、兼容整包手套 `'handGloveFullPacket'`、检测垫 `'pad' / 'hand'`、人体 `'body' / 'humanBody'`、鞋垫 `'insole' / 'jqInsole'`。手套与鞋垫必须提供 `side: 'left' | 'right'`，检测垫和人体不传 side。鞋垫增加 `protocol?: '12bit' | '8bit'`（默认12bit）、`baudRate?`（默认921600，限来源列举值）；其他产品不接受协议覆盖。所有产品支持 path/onData/onError，Node另支持reconnect/onStateChange。新增两类要求0.3.0，格式详见[鞋垫](INSOLE.md)、[人体](HUMAN-BODY.md)。
+**参数**：必填 product，支持分包手套 glove/handGloveSegmented、兼容整包手套 handGloveFullPacket、检测垫 pad/hand、人体 body/humanBody、鞋垫 insole/jqInsole。0.5.0 仅 Node 分包手套支持可省略 side、side: auto 和 scan，规则与 connectGlove 相同；整包手套、鞋垫仍必须 left/right，检测垫和人体不传 side，其他产品均不接受 scan。鞋垫另有 protocol: '12bit' / '8bit'（默认12bit）、baudRate（默认921600，限来源列举值）。所有产品支持 path/onData/onError，Node另支持reconnect/onStateChange。鞋垫与人体要求0.3.0，格式详见[鞋垫](INSOLE.md)、[人体](HUMAN-BODY.md)。
 
 **返回值**：对应产品设备的 Promise，设备提供 `onData / onFrame / onError / close` 与诊断方法；回调数据类型由产品决定。具名 `connectProduct()` 是相同入口。
 
 **示例**：`await Shroom.connectProduct({ product: 'handGloveSegmented', path: 'COM3', side: 'right', onData: console.log })`。
 
-**注意事项**：快速 `readProduct()` 在 Node 直接调用本接口，复用相同校验、解析与返回设备。别名只用于连接，`device.info.product` 和 `frame.product` 使用正式 ID。product、鞋垫protocol和实物side均由调用方选择，不是硬件自动识别结果；通用协议继续使用 `Shroom.connect()`。Python 未提供这些产品方法。
+**注意事项**：快速 readProduct 在 Node 调用本接口，本接口在自动模式复用公开 scanProductPorts，扫描完成后继续原解析与重连链路。别名只用于连接，device.info.product 与 frame.product 使用正式 ID。product 和鞋垫 protocol 仍由调用方选择；只有支持发现的分包手套可自动确认 side。通用协议继续用 Shroom.connect，Python 未提供这些产品方法。
 
 ### Shroom.listDeviceProducts() {#node-device-products}
 
@@ -166,7 +179,7 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 | `handGloveSegmented` | `raw / pressure`：两包合并的 256 个压力 ADC | `fingers.*.raw / fingers.*.pulp.raw / palm.matrix` | `protocol: segmented / side / packetType / imu.raw`，无 sequence |
 | `handGloveFullPacket` | `raw / pressure`：256 个压力 ADC | `fingers.*.raw`：五指主体；`fingers.*.pulp.raw`：独立指腹；`palm.matrix`：72 点手掌 | `side / sequence / packetType / imu.raw`，IMU 原始字节数为 16 |
 
-默认分包手套由首包 `[1, 包类型, 128 个 ADC]`（130 字节）和尾包 `[2, 同包类型, 128 个 ADC, 16 字节 IMU]`（146 字节）组成，每包尾为 `AA 55 03 99`。每只手套独占一个串口，显式 side 决定实物手侧与线序；packetType 保留原始 0–255 值，只校验首尾一致，不推断左右手。两包配对后才交付一帧，没有 sequence。整包入口保留 274 字节载荷和原序号，不能由其 packetType 推断侧别。具体限制见[手套协议](GLOVE.md)。
+默认分包手套由首包 `[1, 包类型, 128 个 ADC]`（130 字节）和尾包 `[2, 同包类型, 128 个 ADC, 16 字节 IMU]`（146 字节）组成，每包尾为 `AA 55 03 99`；含帧尾共134/150字节。第一字节1/2是首尾段号，第二字节packetType在当前固件中1=左、2=右，首尾必须一致，既不是采样序号也不是唯一设备SN。每只手套独占一个串口，自动模式据此识别手侧，手动连接仍按显式side映射。两包配对后才交付一帧，无sequence。整包入口保留274字节与原序号，仍需显式side。具体限制见[手套协议](GLOVE.md)。
 
 **示例**：手套读取 `data.fingers.thumb.raw`、`data.fingers.index.pulp.raw[0]` 和 `data.palm.matrix`。手部检测垫按行列读取 `data.values[y * data.cols + x]`，已映射 ADC 使用 `data.pressureMatrix`；两个产品的原始扫描数据均使用 `data.pressure`。
 
@@ -212,6 +225,32 @@ console.log(await Shroom.listPorts());
 ```
 
 **注意事项**：需要 `serialport`，无需先激活授权，也不会打开端口。查询失败拒绝为 `ShroomError`；空数组表示没有可见端口。端口路径如 `COM3`、`/dev/ttyUSB0`，查询不会识别产品、协议或线序。将列表展示给用户选择，把选中的 `path` 传给产品入口；插拔后可重新查询，不能默认连接第一项。
+
+### Shroom.scanProductPorts(options?) {#node-scan-product-ports}
+
+**用途**：0.5.0 新增的 Node 基础 API。实际读取串口分包，发现手套及左右手；具名 scanProductPorts 是相同入口。需 serialport 和有效 SDK serial 授权，不代替无需授权的 listPorts。
+
+| 参数 | 类型 | 默认值 / 说明 |
+| --- | --- | --- |
+| product | 'glove' 或 'handGloveSegmented' | 默认glove；当前只支持分包手套 |
+| side | 'left' 或 'right' | 可选筛选；省略时接受任一已确认手侧 |
+| paths | string[] | 可选候选口；省略时枚举，空数组非法 |
+| timeoutMs | number | 每个口的读取窗口，默认1200，范围50–10000ms，不是全部搜索总时长 |
+| signal | AbortSignal | 可选取消信号，取消后清理已打开的探测口 |
+
+**返回值**：Promise<ProductPortScanResult>，包含 devices 和 ports。devices 每项含 path、规范product、label、baudRate、side、packetType 和可选驱动 serialNumber。ports 每项含 path/status：matched附device、unrecognized表示未确认、error附ShroomError。side只筛选devices，ports保留全部逐口报告；空devices可正常返回。
+
+```js
+import { scanProductPorts } from 'shroom-sdk/node';
+
+const result = await scanProductPorts({ product: 'glove', side: 'left' });
+console.table(result.devices); // 仅已确认左手；可交给用户选择 path。
+console.table(result.ports);   // 包含未识别口、另一侧设备及占用等失败原因。
+```
+
+**识别与释放**：固定921600，只读采样至少3个同侧完整配对；未知/混合侧别不匹配，不扫描波特率，不发送设备命令。所有临时口确认释放后返回，样本不触发业务onData或进入录制。同一SDK中的扫描与托管连接共用路径预约，活跃连接、重连等待和清理未完成的口不会被扫描抢占，报告PORT_BUSY；逻辑连接终止并确认物理端口释放后才解除预约。其他进程占用由系统串口驱动报告。
+
+**错误处理**：逐口打开/读取错误保存在ports；参数、授权、取消及无法确认关闭会拒绝整个调用，取消为USER_CANCELLED、关闭失败为CLOSE_FAILED。自动connectProduct/readProduct使用此报告选择唯一设备，零/多匹配分别报PORT_NOT_FOUND/PORT_AMBIGUOUS，details.scan保留报告；不根据同侧packetType猜测唯一硬件。浏览器WS和Web Serial不提供此API，整包手套与其他产品不参与本次识别。
 
 ### Shroom.connect(options) {#node-connect}
 
@@ -270,6 +309,8 @@ const device = await Shroom.connectHandPad({
 首次打开失败拒绝 Promise，不转入后台重试。只有意外断线或读取失败触发恢复；主动 `close()`、授权失效、配置和解析错误不会重连，回调错误不会启动重连。关闭未确认时不能重新抢占端口；重连会清空旧连接的半帧，不混合旧连接的迟到数据。只按原 `path` 重试，不自动匹配换号后的设备；COM 号改变需要重新查询和选择。
 
 每次重连打开最多等待 10 秒，旧连接关闭最多等待 3 秒；这些内部保护时限不作为公开配置。旧端口关闭失败或超时会终止自动重试并保持 `error`，避免仍占用端口时并发打开。重连打开超时按失败次数计入上限。
+
+0.5.0的托管连接在重连等待期间仍保留原path预约，扫描不会抢占它；逻辑连接结束且所有物理连接确认释放后才解锁。自动识别的手套重连仍核对原packetType，另一侧有效帧导致PARSE_FAILED停止，不能静默换设备。
 
 状态回调可能在连接 Promise 完成前触发，不要引用尚未赋值的 `device`。`open` 表示串口已打开，不代表已经有有效产品帧。断线仍通过 `onError` 报告并使当前录制以 `error` 收尾，已接收数据保留；恢复只继续实时取数，新的采集必须由用户重新开始。Web Serial、浏览器 WS 客户端与 Python 不支持这些 Node 重连配置。
 

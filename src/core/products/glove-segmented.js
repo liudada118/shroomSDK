@@ -1,7 +1,7 @@
 /**
  * 手套分包协议：130 字节首包 + 146 字节尾包，各带 AA 55 03 99 帧尾。
- * byte[0] 是段号 1/2，byte[1] 是配对类型（原始 0–255 字节），并非连续帧序号。
- * 与上位机手动连接一致，输出手侧按显式 side 选择，不根据配对类型推断实物。
+ * byte[0] 是段号 1/2；byte[1] 在自动模式下表示 1=左手、2=右手，并非连续帧序号。
+ * side: auto 从包内识别手侧；显式 left/right 保留手动映射及原始 0–255 配对类型兼容。
  * 无 CRC 和真实序号，不能证明完整采样帧从未丢失；仅发布同连接、同类型的有效配对。
  */
 import { ShroomError } from '../errors.js';
@@ -13,6 +13,7 @@ const TAIL = [0xaa, 0x55, 0x03, 0x99];
 const FIRST_SIZE = 130;
 const SECOND_SIZE = 146;
 const PAIR_TIMEOUT_MS = 1000;
+const SIDE_BY_TYPE = Object.freeze({ 1: 'left', 2: 'right' });
 const profile = Object.freeze({
   product: 'handGloveSegmented', label: '触觉手套（分包）', family: 'glove',
   baudRate: 921600, payloadLength: 276, sensorPoints: 256, rows: 13, cols: 15,
@@ -20,8 +21,8 @@ const profile = Object.freeze({
 });
 
 function validateOptions(options, invalid) {
-  if (!options || !['left', 'right'].includes(options.side)) {
-    invalid('side', '分包手套必须明确指定 side: left 或 right；该手侧用于本串口数据的线序映射。');
+  if (!options || !['left', 'right', 'auto'].includes(options.side)) {
+    invalid('side', '分包手套必须指定 side: left、right 或 auto；auto 根据包内手侧识别，left/right 使用指定线序。');
   }
 }
 
@@ -45,6 +46,9 @@ function createParser(options = {}) {
       discardFirst(); dropped += 1; return null;
     }
     const packetType = buffer[1];
+    const outputSide = side === 'auto' ? SIDE_BY_TYPE[packetType] : side;
+    // 自动识别只接受已定义的左右手类型；未知类型不能把前一只手的半包带过去。
+    if (!outputSide) { discardFirst(); dropped += 1; return null; }
     if (length === FIRST_SIZE) {
       discardFirst();
       first = { pressure: buffer.slice(2, FIRST_SIZE), packetType, receivedAt: now };
@@ -58,8 +62,8 @@ function createParser(options = {}) {
     pressure.set(buffer.subarray(2, 130), 128);
     frameLength = FIRST_SIZE + SECOND_SIZE;
     return {
-      ...createGlovePressureFrame(pressure, { side }),
-      product: profile.product, protocol: 'segmented', side, packetType,
+      ...createGlovePressureFrame(pressure, { side: outputSide }),
+      product: profile.product, protocol: 'segmented', side: outputSide, packetType,
       // 保留原始 16 字节，不猜测四元数轴序、单位，也不伪造 sequence。
       imu: { raw: buffer.slice(130, SECOND_SIZE) },
     };
@@ -115,7 +119,13 @@ export const segmentedGloveProductAdapter = Object.freeze({
   aliases: Object.freeze(['glove']),
   optionFields: Object.freeze(['side']),
   validateOptions,
-  connectionInfo: options => ({ side: options.side, protocol: 'segmented' }),
+  connectionInfo: options => options.side === 'auto'
+    ? { protocol: 'segmented' } : { side: options.side, protocol: 'segmented' },
+  // 串口扫描复用正式解析器，只有完整首尾包才提供左右手识别结果。
+  discovery: Object.freeze({
+    createParser: () => createParser({ side: 'auto' }),
+    identify: frame => ({ side: frame.side, packetType: frame.packetType }),
+  }),
   createParser,
   readStreamFields,
 });

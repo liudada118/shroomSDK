@@ -2,9 +2,11 @@
 
 同一台电脑上，Node.js 连接设备、创建 WS 并保存记录；浏览器连接一次，后面三步复用同一个 `stream`。下面只列 API 调用，放进自己的 Node.js 程序和网页，不需要复制完整 HTML。
 
-**运行前提**：设备驱动可用，业务项目已执行 `npm install --save-exact shroom-sdk@0.4.0`，Node.js 已按 [SDK 授权](LICENSE.md)激活有效 SDK 产品密钥，功能包括 `serial / stream / recording`。安装和授权要点见文末[接入准备](#product-guide)。
+**运行前提**：设备驱动可用，业务项目已执行 `npm install --save-exact shroom-sdk@0.5.0`，Node.js 已按 [SDK 授权](LICENSE.md)激活有效 SDK 产品密钥，功能包括 `serial / stream / recording`。安装和授权要点见文末[接入准备](#product-guide)。
 
-**业务流程仍是五个函数**：`readProduct`、`createWS`、`startRecording`、`stopRecording`、`downloadRecording`，统一从 `shroom-sdk/quick-flow` 导入。连接前用 Node 基础 API 搜索串口并让用户选择，不增加第六个快速函数。
+**0.5.0 新增：** Node 分包手套支持手动选口与自动识别。手动传 `path + side`；自动调用 `readProduct({ product: 'glove', onData, onError })`，内部复用基础 `connectProduct()` → `scanProductPorts()`。五个快速函数保持不变；0.4.0 仍需手动配置，自动识别要求升级到 0.5.0。
+
+**业务流程仍是五个函数**：`readProduct`、`createWS`、`startRecording`、`stopRecording`、`downloadRecording`，统一从 `shroom-sdk/quick-flow` 导入。0.5.0的手套取数内部复用基础扫描 API；需要展示设备列表时再单独调用，不增加第六个快速函数。
 
 它们调用的就是[基础文档中的公开 API](CUSTOM.md#quick-to-base)；参数与生命周期的详细说明统一从该对应表进入。
 
@@ -14,7 +16,7 @@
 
 | 产品 | product | 必要配置 | 主要数据 |
 | --- | --- | --- | --- |
-| 分包手套（0.4.0 起） | `glove` | `side: 'left' / 'right'` | `fingers / palm / imu.raw` |
+| 分包手套（0.4.0 起） | `glove` | 0.5.0 可自动识别；手动传 `path + side` | `fingers / palm / imu.raw` |
 | 手部检测垫 | `pad` | 无侧别 | `pressureMatrix / values` |
 | 人体全身（0.3.0） | `body` | 无侧别 | `regions` 十块物理矩阵、400个唯一通道；`raw` 保留1024扫描值 |
 | A版鞋垫（0.3.0） | `insole` | `side` 必填；`protocol: '12bit' / '8bit'` | `pressure` 保留256通道ADC，`sensors` 为112真实点，`imu` 保留线上数值 |
@@ -61,9 +63,39 @@ try {
 
 让用户选择列表中的 `path`，再填入第 1 步。不要默认取 `ports[0]`，串口列表不能识别产品型号或左右手；用户插拔设备后可以重新调用 `listPorts()` 刷新列表。
 
+**需要设备识别列表时**，先完成 SDK `serial` 授权，再调用基础 API：
+
+```js
+import { scanProductPorts } from 'shroom-sdk/node';
+
+const result = await scanProductPorts({ product: 'glove' });
+console.table(result.devices); // 实际读到有效分包的串口，含 path、side、packetType。
+console.table(result.ports);   // 每口的 matched / unrecognized / error，方便提示占用和无数据。
+```
+
+扫描只识别 921600 波特率的分包手套，第二字节 1=左手、2=右手；至少 3 个同侧完整配对才确认，未知或混合手侧不匹配。默认每口读取 1200 ms，可用 paths、timeoutMs、signal 限定；全部探测端口会先关闭。此 API 不把样本送入采集，完整参数见[串口扫描](SERIAL.md#node-scan)。
+
 ## 1. 取数 {#flow-read}
 
 **Node.js**
+
+0.5.0 的一步自动连接：
+
+```js
+import { readProduct } from 'shroom-sdk/quick-flow';
+
+// 无需先列出端口；SDK 授权完成后识别唯一的分包手套。
+const device = await readProduct({
+  product: 'glove',
+  onData: data => console.log(data.side, data.fingers, data.palm),
+  onError: error => console.error(error.code, error.message),
+});
+console.log(device.info.path, device.info.side); // 实际串口及识别出的手侧。
+```
+
+同时连接左右手时，加 `side: 'left'` 或 `'right'` 筛选；省略 side 或填 auto 时接受任一已确认手侧。多个匹配报 `PORT_AMBIGUOUS`、零匹配报 `PORT_NOT_FOUND`，`error.details.scan` 包含逐口报告，首次调用仍需 try/catch。同侧两只手套不能靠 packetType 区分唯一设备，需指定 path。显式传 `scan: { paths: ['COM3'], timeoutMs: 1200 }` 可限定读取范围。
+
+已发布 0.4.0 或已知串口时使用下方手动方式，与上方任选其一；后四步复用同一个 device：
 
 ```js
 import { readProduct } from 'shroom-sdk/quick-flow';
@@ -84,6 +116,8 @@ const device = await readProduct({
 ```
 
 onData 持续返回产品帧；这一步已开始读取设备，还没有保存采集记录。
+
+0.5.0中显式 path+left/right 且不传 scan 时保持手动直连；显式 scan 会先验证端口。浏览器 WS 的 readProduct 只接收 url 和流参数，不传 scan；Web Serial 直接连接仍需用户选口和明确 side。
 
 从 0.2.0 起，Node 产品连接默认自动重连原串口：意外断开后每 3 秒尝试一次，最多 3 次；恢复后继续使用同一个 `device` 和 `onData`。首次打开失败仍由调用的 `catch` 处理，不会后台重试。需要关闭重连时传 `reconnect: false`，需要显示状态时增加 `onStateChange: status => console.log(status.state, status.attempt)`；详细配置见[自动重连](BACKEND-GUIDE.md#node-reconnect)。
 
@@ -177,9 +211,9 @@ downloadRecording(stream, { format: 'csv' });
 
 ### 确认产品与串口 {#guide-config}
 
-分包手套使用 `product: 'glove'`（规范 ID `handGloveSegmented`），明确 `side: 'left' | 'right'`；手部检测垫使用 `product: 'pad'`（`hand`），不传 `side`。整包设备改用显式 `product: 'handGloveFullPacket'`，不要使用默认分包入口。先按[搜索并选择串口](#flow-ports)查询实际 `path`；多端口不猜测产品。产品适配器内置波特率、拆帧和映射。
+分包手套使用 `product: 'glove'`（规范 ID `handGloveSegmented`）；公开 0.4.0 需明确 path 和 side，0.5.0可选择自动识别或手动连接。手部检测垫使用 `product: 'pad'`（`hand`），不传 side。整包设备改用显式 `product: 'handGloveFullPacket'` 并明确 side，不接受分包扫描。手动方式按[搜索并选择串口](#flow-ports)查询实际 path；自动方式以有效配对识别，不猜测第一个端口。产品适配器内置波特率、拆帧和映射。
 
-手套是一只手一个串口；`side` 按实物决定该连接的左右手线序，`packetType` 不决定手侧。两只手各选自己的 `path`、各调用一次 `readProduct()`，后续服务与采集也使用各自的设备对象，不在单串口自动拆分双手。
+手套是一只手一个串口；手动 side 按实物决定线序，源码自动模式根据第二字节 packetType 的 1/2 识别左/右手。同侧多只设备不能靠此类型字节区分唯一设备，需要选择 path。两只手各调用一次 readProduct，后续服务与采集使用各自设备对象，不在单串口自动拆分双手。
 
 ### 安装 SDK {#guide-run}
 

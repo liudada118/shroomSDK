@@ -183,7 +183,7 @@
     -->
     <script>
     /**
-     * Shroom SDK 0.4.0 —— 单文件版（自动生成，别手改）
+     * Shroom SDK 0.5.0 —— 单文件版（自动生成，别手改）
      *
      * 由 scripts/build-sdk-bundle.mjs 从 src/core/ + src/web/ 拼出来，内容和模块版完全一致。
      * 它是「经典脚本」而不是模块，所以用普通的 script 标签引进去就行，file:// 下也能加载，
@@ -1652,8 +1652,8 @@
       // ---------- core/products/glove-segmented.js ----------
       /**
        * 手套分包协议：130 字节首包 + 146 字节尾包，各带 AA 55 03 99 帧尾。
-       * byte[0] 是段号 1/2，byte[1] 是配对类型（原始 0–255 字节），并非连续帧序号。
-       * 与上位机手动连接一致，输出手侧按显式 side 选择，不根据配对类型推断实物。
+       * byte[0] 是段号 1/2；byte[1] 在自动模式下表示 1=左手、2=右手，并非连续帧序号。
+       * side: auto 从包内识别手侧；显式 left/right 保留手动映射及原始 0–255 配对类型兼容。
        * 无 CRC 和真实序号，不能证明完整采样帧从未丢失；仅发布同连接、同类型的有效配对。
        */
 
@@ -1661,6 +1661,7 @@
       const FIRST_SIZE = 130;
       const SECOND_SIZE = 146;
       const PAIR_TIMEOUT_MS = 1000;
+      const SIDE_BY_TYPE = Object.freeze({ 1: 'left', 2: 'right' });
       const profile = Object.freeze({
         product: 'handGloveSegmented', label: '触觉手套（分包）', family: 'glove',
         baudRate: 921600, payloadLength: 276, sensorPoints: 256, rows: 13, cols: 15,
@@ -1668,8 +1669,8 @@
       });
 
       function validateOptions(options, invalid) {
-        if (!options || !['left', 'right'].includes(options.side)) {
-          invalid('side', '分包手套必须明确指定 side: left 或 right；该手侧用于本串口数据的线序映射。');
+        if (!options || !['left', 'right', 'auto'].includes(options.side)) {
+          invalid('side', '分包手套必须指定 side: left、right 或 auto；auto 根据包内手侧识别，left/right 使用指定线序。');
         }
       }
 
@@ -1693,6 +1694,9 @@
             discardFirst(); dropped += 1; return null;
           }
           const packetType = buffer[1];
+          const outputSide = side === 'auto' ? SIDE_BY_TYPE[packetType] : side;
+          // 自动识别只接受已定义的左右手类型；未知类型不能把前一只手的半包带过去。
+          if (!outputSide) { discardFirst(); dropped += 1; return null; }
           if (length === FIRST_SIZE) {
             discardFirst();
             first = { pressure: buffer.slice(2, FIRST_SIZE), packetType, receivedAt: now };
@@ -1706,8 +1710,8 @@
           pressure.set(buffer.subarray(2, 130), 128);
           frameLength = FIRST_SIZE + SECOND_SIZE;
           return {
-            ...createGlovePressureFrame(pressure, { side }),
-            product: profile.product, protocol: 'segmented', side, packetType,
+            ...createGlovePressureFrame(pressure, { side: outputSide }),
+            product: profile.product, protocol: 'segmented', side: outputSide, packetType,
             // 保留原始 16 字节，不猜测四元数轴序、单位，也不伪造 sequence。
             imu: { raw: buffer.slice(130, SECOND_SIZE) },
           };
@@ -1763,7 +1767,13 @@
         aliases: Object.freeze(['glove']),
         optionFields: Object.freeze(['side']),
         validateOptions,
-        connectionInfo: options => ({ side: options.side, protocol: 'segmented' }),
+        connectionInfo: options => options.side === 'auto'
+          ? { protocol: 'segmented' } : { side: options.side, protocol: 'segmented' },
+        // 串口扫描复用正式解析器，只有完整首尾包才提供左右手识别结果。
+        discovery: Object.freeze({
+          createParser: () => createParser({ side: 'auto' }),
+          identify: frame => ({ side: frame.side, packetType: frame.packetType }),
+        }),
         createParser,
         readStreamFields,
       });
@@ -2371,6 +2381,8 @@
         for (const field of ['onData', 'onError', ...(runtime === 'node' ? ['onStateChange'] : [])]) {
           if (options[field] !== undefined && typeof options[field] !== 'function') invalid(field, `${field} 必须是函数。`);
         }
+        // 自动探测只由 Node 连接层编排；浏览器仍在用户手势中选口，并明确手侧。
+        if (runtime !== 'node' && options.side === 'auto') invalid('side', '浏览器直接连接请明确选择 left 或 right；自动识别请使用 Node 入口。');
         adapter.validateOptions(options, invalid);
         // 部分产品明确支持多个传输格式/波特率，交由自身适配器解析，公共入口不判断型号。
         const profile = adapter.resolveProfile?.(options) ?? adapter.profile;
@@ -2395,7 +2407,7 @@
       /**
        * 从注册表创建产品自己的解析器；不靠帧长推测型号或手侧。
        * @param {string} product 已注册的规范产品名或连接别名，未知产品一律拒绝。
-       * @param {object} options 产品解析选项；手套与鞋垫必须明确传入 side: left/right。
+       * @param {object} options 产品解析选项；分包手套解析器支持 side: auto，其他有侧别产品使用 left/right。
        * @returns {object} 带 push / reset 和累计诊断计数的解析器；每个连接应各建一个。
        */
       function createProductParser(product, options = {}) {
@@ -4850,7 +4862,7 @@
         decodeStreamFrame: decodeStreamFrame,
         STREAM_SCHEMA: STREAM_SCHEMA,
         isSupported: isSerialSupported,
-        version: "0.4.0",
+        version: "0.5.0",
         // 想自己接数据源（WebSocket、蓝牙、录制回放）就用这几个
         createFramer: createFramer,
         decodeFrame: decodeFrame,

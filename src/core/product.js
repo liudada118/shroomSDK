@@ -33,6 +33,8 @@ export function prepareProductConnection(options = {}, runtime = 'web') {
   for (const field of ['onData', 'onError', ...(runtime === 'node' ? ['onStateChange'] : [])]) {
     if (options[field] !== undefined && typeof options[field] !== 'function') invalid(field, `${field} 必须是函数。`);
   }
+  // 自动探测只由 Node 连接层编排；浏览器仍在用户手势中选口，并明确手侧。
+  if (runtime !== 'node' && options.side === 'auto') invalid('side', '浏览器直接连接请明确选择 left 或 right；自动识别请使用 Node 入口。');
   adapter.validateOptions(options, invalid);
   // 部分产品明确支持多个传输格式/波特率，交由自身适配器解析，公共入口不判断型号。
   const profile = adapter.resolveProfile?.(options) ?? adapter.profile;
@@ -57,7 +59,7 @@ export function prepareProductConnection(options = {}, runtime = 'web') {
 /**
  * 从注册表创建产品自己的解析器；不靠帧长推测型号或手侧。
  * @param {string} product 已注册的规范产品名或连接别名，未知产品一律拒绝。
- * @param {object} options 产品解析选项；手套与鞋垫必须明确传入 side: left/right。
+ * @param {object} options 产品解析选项；分包手套解析器支持 side: auto，其他有侧别产品使用 left/right。
  * @returns {object} 带 push / reset 和累计诊断计数的解析器；每个连接应各建一个。
  */
 export function createProductParser(product, options = {}) {

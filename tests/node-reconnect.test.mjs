@@ -294,6 +294,8 @@ test('Node reconnection keeps stable subscriptions and owns every physical gener
     assert.equal(FakeSerial.instances.length, 1);
     assert.equal(errors.at(-1).code, 'CLOSE_FAILED');
     assert.doesNotThrow(() => FakeSerial.instances[0].emit('error', new Error('late driver error')));
+    // 此夹具此前故意保留物理占用；模拟最终拔线，避免下一用例复用尚未释放的路径。
+    FakeSerial.instances[0].unplug();
   });
 
   await t.test('timed-out pending opens never overlap and late success is released', async (t) => {

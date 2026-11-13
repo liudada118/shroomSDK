@@ -27,7 +27,7 @@ void Shroom.connectGlove({ side: 'right', filters: [{ usbVendorId: 0x1a86 }] });
 void Shroom.connectProduct({ product: 'hand', onData: (data) => console.log(data.pressure) });
 void listDeviceProducts();
 
-// @ts-expect-error A glove must have an explicit side.
+// Node 分包手套可在指定串口中自动识别手侧。
 void NodeShroom.connectGlove({ path: 'COM3' });
 // @ts-expect-error Product configuration cannot silently override the wire protocol.
 void NodeShroom.connectHandPad({ baudRate: 115200 });

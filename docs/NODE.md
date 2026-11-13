@@ -1,14 +1,18 @@
 # Node.js 接入
 
+**0.5.0 新增：** Node 分包手套支持手动选口与自动识别。手动传 `path + side`；自动调用 `readProduct({ product: 'glove', onData, onError })`，内部复用基础 `connectProduct()` → `scanProductPorts()`。五个快速函数保持不变；0.4.0 仍需手动配置，自动识别要求升级到 0.5.0。
+
 0.3.0 新增鞋垫和人体全身，仍使用 `readProduct()` 或基础 `connectProduct()`。鞋垫传 `product:'insole', side:'left'/'right', protocol:'12bit'/'8bit'`；人体传 `product:'body'`。详见[鞋垫字段](INSOLE.md)、[人体线序](HUMAN-BODY.md)。使用新产品需安装0.3.0或更高版本，Node与网页使用相同版本。
 
 连接实机前先[安装串口驱动](DRIVERS.md)并确认端口，再[激活 SDK 产品密钥](LICENSE.md)。SDK 授权不限制设备型号，产品接口和通用串口均可使用；驱动缺失与授权失败需要分别排查。
 
 适合 Node.js 服务、命令行采集和 Electron 应用。通过串口直接读取设备，或通过 HTTP / WebSocket 连接已经运行的后端。
 
-分包手套与手部检测垫优先按 **选产品 → 选端口与手侧 → onData 接收数据 → 错误诊断** 接入，波特率、协议和线序由产品入口内置。通用 `connect()` 保留为进阶配置；串口查询只列端口，不识别硬件型号，每个阶段都应处理结构化错误。
+分包手套优先按 **选产品 → 自动识别串口与手侧 → onData 接收数据** 接入；手部检测垫仍由应用选择实际端口。波特率、协议和线序由产品入口内置。通用 `connect()` 保留为进阶配置，每个阶段都应处理结构化错误。
 
 连接前从 `shroom-sdk/node` 导入 `listPorts()`，将返回的 `path` 展示给用户选择；不要直接取第一项。查询不打开串口，也不需要先激活授权；完整片段见[快速接入准备](QUICK-START.md#flow-ports)。
+
+需要识别分包手套时改用 `scanProductPorts()`：它在有效 `serial` 授权下读取实际数据，返回已确认设备和逐口报告。只要一步取数时可直接 `readProduct({ product: 'glove', onData })`，内部复用同一基础扫描 API，无需业务代码先扫描一次。
 
 ## 安装与入口
 
@@ -46,7 +50,19 @@ try {
 
 ## 改为串口采集
 
-已封装产品直接使用下面的入口；应用不必逐项填写协议配置：
+手动选口与自动识别任选其一。0.5.0 的自动方式：
+
+```js
+import { connectGlove } from 'shroom-sdk/node';
+
+// 完成授权后，发现唯一分包手套并识别左右手；双手都在时可加 side: 'left' 筛选。
+const device = await connectGlove({
+  onData: data => console.log(data.side, data.fingers, data.palm),
+  onError: error => console.error(error.code, error.message),
+});
+```
+
+已知串口或使用已发布 0.4.0 时，采用下面的手动方式；应用不必逐项填写协议配置：
 
 ```js
 import { Shroom } from './node/index.js';
@@ -67,9 +83,11 @@ try {
 }
 ```
 
-手部检测垫换为 `Shroom.connectHandPad({ path: 'COM3', onData: console.log, onError: console.error })`。`connectGlove()` 从 0.4.0 起固定分包协议 `handGloveSegmented`，side 必填；整包设备使用 `connectProduct({ product: 'handGloveFullPacket', ...options })`。`connectHandPad()` 固定 `hand`。也可使用 `Shroom.connectProduct({ product, ...options })`，清单来自 `Shroom.listDeviceProducts()`。这些方法同样具名导出。
+手部检测垫换为 `Shroom.connectHandPad({ path: 'COM3', onData: console.log, onError: console.error })`。`connectGlove()` 从 0.4.0 起固定分包协议 `handGloveSegmented`；上述 path+side 写法保持手动直连，0.5.0允许省略它们自动发现。整包设备使用 `connectProduct({ product: 'handGloveFullPacket', side: 'left', ...options })`，仍需显式手侧且不接受 scan。`connectHandPad()` 固定 `hand`。也可使用 `Shroom.connectProduct({ product, ...options })`，清单来自 `Shroom.listDeviceProducts()`。这些方法同样具名导出。
 
-产品入口省略 path 时，只在恰好一个端口时自动选择；零个为 `PORT_NOT_FOUND`、多个为 `PORT_AMBIGUOUS`。`onData / onError` 在打开前注册，避免漏首帧；连接前失败仍拒绝 Promise。产品入口不接受 delimiter、layout 等底层覆盖；只有鞋垫明确支持 protocol 和来源列出的 baudRate，其他产品固定波特率。
+0.5.0的分包手套省略 path、side 省略/为 auto 或显式传 scan 时，会验证实际分包；同侧至少 3 个完整配对才匹配。零匹配为 `PORT_NOT_FOUND`、多匹配为 `PORT_AMBIGUOUS`，详情见 `error.details.scan`；全部探测端口释放后才正式连接。传 side=left/right 可筛选，`scan: { paths: ['COM3'], timeoutMs: 1200, signal }` 可限制探测。其他产品仍保持单个串口自动选择、多个串口报歧义的原行为。扫描参数与返回值见[串口扫描](SERIAL.md#node-scan)。
+
+`onData / onError` 在正式打开前注册，避免漏首帧；探测样本不进入这些业务回调。连接前失败仍拒绝 Promise。产品入口不接受 delimiter、layout 等底层覆盖；只有鞋垫明确支持 protocol 和来源列出的 baudRate，其他产品固定波特率。
 
 从 0.2.0 起，Node 产品入口和快速 `readProduct()` 默认开启自动重连：意外断开后按原 `path` 每 3 秒尝试一次、最多 3 次。`reconnect: false` 可关闭，`reconnect: { intervalMs, maxAttempts }` 可调整。使用 `onStateChange: status => console.log(status.state, status.attempt)` 或返回设备的 `onStateChange(handler)` 显示状态；恢复后同一 `device` 和 `onData` 继续交付数据，不需要重新创建 WS。
 
@@ -83,7 +101,7 @@ node node/product-demo.js glove right COM4
 node node/product-demo.js hand-pad COM5
 ```
 
-默认手套按 921600 波特率解析 130 字节首包 + 146 字节尾包，每包尾为 `AA 55 03 99`，合并出 256 个压力 ADC 和 16 字节 IMU；分包帧没有 `sequence`，`packetType` 只是首尾包配对类型（0–255）。显式 `handGloveFullPacket` 仍保留 274 字节整包与序号，详见[手套协议](GLOVE.md)。`raw / pressure` 保留 256 个 ADC，`pressureMatrix` 为映射后 195 个 ADC，`values` 是归一化 13×15；一只手一个串口，side 由应用按该串口实物明确选择线序，不从 packetType 推断，IMU 只保留原字节。检测垫内置 1000000、1024 点、32×32 与 mat32；pressure 是原扫描值，pressureMatrix 和 values 已映射。产品字段仅 JS 提供，Python 未实现这些入口。
+默认手套按 921600 波特率解析 130 字节首包 + 146 字节尾包，每包尾为 `AA 55 03 99`，合并出 256 个压力 ADC 和 16 字节 IMU；分包帧没有 `sequence`。`packetType` 在两包中必须一致，当前固件 1=左手、2=右手，不是唯一设备编号；自动扫描据此识别手侧，未知/混合侧别不作为有效设备。显式 `handGloveFullPacket` 仍保留 274 字节整包与序号，详见[手套协议](GLOVE.md)。`raw / pressure` 保留 256 个 ADC，`pressureMatrix` 为映射后 195 个 ADC，`values` 是归一化 13×15；一只手一个串口，手动连接仍按显式 side 选择线序，IMU 只保留原字节。检测垫内置 1000000、1024 点、32×32 与 mat32；pressure 是原扫描值，pressureMatrix 和 values 已映射。产品字段仅 JS 提供，Python 未实现这些入口。
 
 两种手套协议均按同一份点位表直接给出 `fingers.thumb / index / middle / ring / little` 五指，每指主体 4×3、12 点，各指 `.pulp` 是独立 1×1 指腹点；`palm` 为手掌，rows=5、cols=15，但 rowLengths=`[12, 15, 15, 15, 15]`，共 72 点，不补零。区域含中文 name、rows、cols、rowLengths、0-based 扫描索引 sourceIndices（Uint16Array）、raw（ADC）、values（按父帧 fullScale 归一化）、matrix（按实际行长排列的 ADC 二维数组），完整字段见[产品帧 API](BACKEND-GUIDE.md#node-product-data)。
 

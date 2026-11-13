@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createProductParser, listDeviceProducts, prepareProductConnection } from '../src/core/product.js';
 import { encodeStreamFrame, decodeStreamFrame } from '../src/core/stream-codec.js';
 import { decodeGlovePacket } from '../src/core/glove.js';
+import { segmentedGloveProductAdapter } from '../src/core/products/glove-segmented.js';
 
 const tail = [0xaa, 0x55, 0x03, 0x99];
 const wire = payload => Uint8Array.from([...payload, ...tail]);
@@ -28,9 +29,78 @@ test('glove now selects segmented protocol while the explicit full-packet entry 
   assert.equal(options.info.protocol, 'segmented');
   assert.equal(options.serialOptions.baudRate, 921600);
   assert.equal(prepareProductConnection({ product: 'handGloveFullPacket', side: 'left' }).info.product, 'handGloveFullPacket');
-  for (const value of [null, {}, { side: 'auto' }, { side: 1 }]) {
+  for (const value of [null, {}, { side: 'unknown' }, { side: 1 }]) {
     assert.throws(() => createProductParser('glove', value), { code: 'INVALID_CONFIG' });
   }
+});
+
+test('automatic connection leaves side unset until the protocol identifies it and exposes a discovery parser', () => {
+  const connection = prepareProductConnection({ product: 'glove', side: 'auto' }, 'node');
+  assert.equal(connection.info.product, 'handGloveSegmented');
+  assert.equal(connection.info.protocol, 'segmented');
+  assert.equal(connection.serialOptions.baudRate, 921600);
+  assert.equal(Object.hasOwn(connection.info, 'side'), false);
+  const { discovery } = segmentedGloveProductAdapter;
+  assert.equal(Object.isFrozen(discovery), true);
+  const parser = discovery.createParser();
+  assert.deepEqual(parser.push(wire(sample('right').first)), []);
+  const [frame] = parser.push(wire(sample('right').second));
+  assert.deepEqual(discovery.identify(frame), { side: 'right', packetType: 2 });
+});
+
+for (const side of ['left', 'right']) {
+  test(`automatic mode identifies ${side} across byte-sized chunks and preserves identity through WS`, () => {
+    const fixture = sample(side, 13);
+    const parser = createProductParser('glove', { side: 'auto' });
+    const frames = [];
+    for (const byte of fixture.bytes) frames.push(...parser.push(Uint8Array.of(byte)));
+    assert.equal(frames.length, 1);
+    const [frame] = frames;
+    const [manual] = createProductParser('glove', { side }).push(fixture.bytes);
+    assert.equal(frame.side, side);
+    assert.equal(frame.packetType, side === 'left' ? 1 : 2);
+    assert.deepEqual(frame.pressure, fixture.pressure);
+    assert.deepEqual(frame.fingers, manual.fingers);
+    assert.deepEqual(frame.palm, manual.palm);
+    assert.deepEqual(frame.imu.raw, fixture.imu);
+    const decoded = decodeStreamFrame(JSON.parse(JSON.stringify(encodeStreamFrame(frame))));
+    assert.equal(decoded.side, side);
+    assert.equal(decoded.packetType, frame.packetType);
+    assert.deepEqual(decoded.pressure, frame.pressure);
+    assert.deepEqual(decoded.fingers, frame.fingers);
+    assert.deepEqual(decoded.palm, frame.palm);
+    assert.deepEqual(decoded.imu.raw, frame.imu.raw);
+    assert.equal(Object.hasOwn(decoded, 'sequence'), false);
+  });
+}
+
+test('automatic mode rejects unknown types and never bridges a known head across unknown packets', () => {
+  const known = sample('left');
+  for (const packetType of [0, 3, 128, 255]) {
+    const unknown = sample('left');
+    unknown.first[1] = packetType;
+    unknown.second[1] = packetType;
+    const parser = createProductParser('glove', { side: 'auto' });
+    assert.deepEqual(parser.push(concatenate(wire(unknown.first), wire(unknown.second))), []);
+    assert.deepEqual(parser.push(concatenate(wire(known.first), wire(unknown.first), wire(known.second))), []);
+    assert.deepEqual(parser.push(concatenate(wire(unknown.first), wire(known.second))), []);
+    assert.deepEqual(parser.push(concatenate(wire(known.first), wire(unknown.second), wire(known.second))), []);
+    assert.equal(parser.push(known.bytes).length, 1, 'valid pairing resumes after an unknown type');
+  }
+});
+
+test('automatic mode rejects cross-side pairs without hiding later mixed-side evidence from the scanner', () => {
+  const left = sample('left', 7), right = sample('right', 35);
+  const parser = createProductParser('glove', { side: 'auto' });
+  assert.deepEqual(parser.push(wire(left.first)), []);
+  const rightTail = wire(right.second);
+  assert.deepEqual(parser.push(rightTail.slice(0, 37)), []);
+  assert.deepEqual(parser.push(rightTail.slice(37)), []);
+  assert.deepEqual(parser.push(wire(left.second)), [], 'mismatched tail consumes the previous head');
+  const frames = parser.push(concatenate(left.bytes, right.bytes));
+  assert.deepEqual(frames.map(frame => frame.side), ['left', 'right']);
+  assert.deepEqual(frames[0].pressure, left.pressure);
+  assert.deepEqual(frames[1].pressure, right.pressure);
 });
 
 for (const side of ['left', 'right']) {
@@ -105,7 +175,7 @@ test('manual side matches upstream: type 2 can be configured left, and type 1 ca
   }
 });
 
-test('packet type is an opaque pairing byte, not a side filter or a sample sequence', () => {
+test('manual mode preserves opaque packet types without filtering side or inventing a sample sequence', () => {
   for (const packetType of [0, 3, 128, 255]) {
     const fixture = sample('left');
     fixture.first[1] = packetType;

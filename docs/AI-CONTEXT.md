@@ -4,13 +4,15 @@
 
 按下面的运行位置给用户短调用片段，接入已有程序与按钮；只有用户要求时才生成完整页面或工程。Node.js 连接 USB 设备，浏览器可通过 WS 接收数据并控制采集。本文的五步接口适用于 JavaScript；Python 的能力见文末。
 
+**0.5.0 新增：** Node 分包手套支持手动选口与自动识别。手动传 `path + side`；自动调用 `readProduct({ product: 'glove', onData, onError })`，内部复用基础 `connectProduct()` → `scanProductPorts()`。五个快速函数保持不变；0.4.0 仍需手动配置，自动识别要求升级到 0.5.0。
+
 ## 接入前确认 {#prepare}
 
 - **驱动**：CH34x 设备需有可用串口驱动，安装在连接 USB 的电脑上。[Windows CH341SER.EXE](https://shroom.jq-industries.com/drive/CH341SER.EXE) · [macOS CH34xVCPDriver.zip](https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip)。安装后重新插拔，确认系统能列出串口；Linux 检查驱动与权限，见[驱动排查](DRIVERS.md)。
 - **安装**：Node.js 18+，在业务项目终端执行 `npm install shroom-sdk`，通过 npm 安装 SDK 及其声明的依赖。真实串口、WS 与 SQLite 分别需要 `serialport / ws / better-sqlite3` 可用。SDK 免登记下载，密钥另行申请；固定版本、下载 `.tgz` 与历史 URL 安装见[npm 安装](NPM.md)。
 - **授权**：在 Node.js 连接实机前，按 [SDK 授权](LICENSE.md)调用 `await Shroom.activateLicense(key, { deviceId })`；`Shroom` 从 `shroom-sdk/node` 导入。应用保存稳定的安装标识，不能每次启动重新生成。仅取数需要 `serial`，完整五步还需 `stream / recording`；浏览器连接此 Node 服务时无需重复激活。不要导入精简安装包未交付的 `node/license-env.js`。
-- **产品**：手套 `glove`、鞋垫 `insole` 必须指定实物 `side: 'left' | 'right'`；检测垫 `pad`、人体全身 `body` 不传side。规范ID依次为 `handGloveSegmented / jqInsole / hand / humanBody`。从 0.4.0 起，`glove` 与 `connectGlove()` 默认分包；0.3.0 只有整包手套。整包设备必须显式用 `handGloveFullPacket`，不能沿用默认入口。当前安装命令为 `npm install --save-exact shroom-sdk@0.4.0`；鞋垫/人体最低要求 0.3.0。升级时让 Node 和网页安装同版本并重新构建前端。端口枚举不能识别产品或侧别。
-- **手套连接单位**：一只手一个串口。side 按该串口所接实物决定线序，packetType 仅是首尾包一致性校验字段（0–255），不表示左右手。双手使用两个不同 path 和两个设备对象；不要生成单串口自动路由代码。
+- **产品**：手套 `glove` 支持自动识别，也可手动传 path+side；鞋垫 `insole` 必须指定实物 `side: 'left' | 'right'`。自动识别仅支持 Node 分包手套。检测垫 `pad`、人体全身 `body` 不传side。规范ID依次为 `handGloveSegmented / jqInsole / hand / humanBody`。从 0.4.0 起，`glove` 与 `connectGlove()` 默认分包；0.3.0 只有整包手套。整包设备必须显式用 `handGloveFullPacket`，不能沿用默认入口。当前安装命令为 `npm install --save-exact shroom-sdk@0.5.0`；鞋垫/人体最低要求 0.3.0。升级时让 Node 和网页安装同版本并重新构建前端。listPorts 端口枚举不能识别产品或侧别。
+- **手套连接单位**：一只手一个串口。分包第一字节 1/2 是首包/尾包，第二字节 packetType 在当前固件中 1=左手、2=右手，且两包必须一致；它不是唯一设备 SN 或采样序号。0.5.0自动扫描据此确认手侧，手动 path+side 保持原映射。双手使用两个设备对象；不要生成单串口自动路由代码，也不能用 packetType 区分两只同侧手套。
 - **鞋垫数据**：明确 `protocol: '12bit' | '8bit'`，默认12bit；默认921600波特率。`pressure`保留256通道原始ADC，12bit使用Uint16Array、范围0..4095，`raw`是512个原始ADC字节，不能先压到Uint8；8bit为256字节ADC。`sensors`是A版112个真实点，不是插值后的224点。IMU含原始四元数，12bit另含gyro/accel，未确定单位，不生成欧拉角或标定压力。详见[鞋垫协议](INSOLE.md)。
 - **人体数据**：`raw / pressure`保留1024原扫描ADC，`regions`按十块物理矩阵映射400唯一通道，`sourceIndices`为0基索引；模型显示的14槽/翻转/插值不是采集数据。详见[人体线序](HUMAN-BODY.md)。新增产品没有内置 `createProductView`，由客户处理 `onData` 展示。
 - **运行位置**：以下示例放在客户项目，统一从 `shroom-sdk/quick-flow` 导入；Node 使用 ESM，网页使用 Vite 等构建工具解析包名，并通过本机 `http://localhost` 访问。普通 HTML 无法直接解析包名：使用源码 ZIP，将导入改为 SDK 根目录的 `./quick-flow.js`，保留其依赖目录并以模块方式加载；不要双击 HTML。
@@ -34,6 +36,23 @@ try {
 ```
 
 将用户选择的 `path` 传给下方 `readProduct()`；这里的 `COM3` 只是示例值。插拔后可重新查询并更新选择框。
+
+**使用SDK 0.5.0时**，无需把搜索作为强制第六步。直接让 `readProduct({ product: 'glove', onData, onError })` 完成识别与取数；需要列出已识别手套供用户选择时，使用基础 API：
+
+```js
+import { scanProductPorts } from 'shroom-sdk/node';
+
+// 先激活 serial 授权；这次搜索会打开串口读取数据。
+const result = await scanProductPorts({ product: 'glove', timeoutMs: 1200 });
+console.table(result.devices); // path/product/label/baudRate/side/packetType/可选 serialNumber。
+console.table(result.ports);   // matched、unrecognized、error；error 项保留 ShroomError。
+```
+
+仅支持 glove/handGloveSegmented，side 可筛选 left/right；paths 可限制候选串口，不能传空数组；timeoutMs 为每口读取窗口，默认 1200、范围 50–10000 ms；signal 可取消。固定 921600 波特率，至少 3 个同侧完整首尾配对后确认；未知/混合侧别不匹配，不自动尝试其他速率。扫描释放所有端口后返回，采样不触发业务回调、不进入录制。
+
+分包手套省略 path、side 省略/为 auto 或显式传 scan 时会识别；明确 path+left/right 且无 scan 时保持手动直连。唯一匹配才正式连接，零匹配 PORT_NOT_FOUND、多匹配 PORT_AMBIGUOUS，details.scan 含完整报告。相同手侧出现多个匹配时要求选择 path，不能默认连接第一个。整包手套、鞋垫等其他产品不要套用此扫描入口；Web Serial 仍需用户选口和 side，WS 客户端不接受 scan。
+
+自动连接会固定发现的 packetType；正式读取或原路径重连后收到另一手侧的有效帧，以 PARSE_FAILED 停止，不能静默换手或把另一设备映射成原侧。端口号变化由应用重新扫描连接。
 
 ## 1. 取数：readProduct {#flow-read}
 
@@ -190,7 +209,7 @@ function reportSdkError(error) {
 
 | 错误码 | 下一步 |
 | --- | --- |
-| `PORT_NOT_FOUND / PORT_AMBIGUOUS / PORT_BUSY` | 查驱动、实际端口及占用；多串口时明确 `path` |
+| `PORT_NOT_FOUND / PORT_AMBIGUOUS / PORT_BUSY` | 查驱动、实际端口及占用；自动发现失败时先查看 details.scan 的逐口结果，多匹配时选择 path |
 | `LICENSE_REQUIRED / LICENSE_EXPIRED / LICENSE_FEATURE_DENIED` | 检查 SDK 产品密钥、有效期与功能；修复后重新连接 |
 | `INVALID_CONFIG / INVALID_REQUEST` | 修正参数，或等待上次起停操作完成 |
 | `RECORDING_ACTIVE / RECORDING_NOT_ACTIVE` | 核实当前采集状态，按实际状态启用按钮 |
@@ -214,7 +233,7 @@ SDK 会隔离同步数据回调的异常并报告 `CALLBACK_FAILED`；异步业�
 
 | 产品 | 业务读取字段 | 注意 |
 | --- | --- | --- |
-| 分包手套 `glove` / `handGloveSegmented` | `fingers.*.raw`、`fingers.*.pulp.raw`、`palm.matrix`、`imu.raw` | 一只手一个串口，side 按实物决定线序，packetType 仅作首尾配对类型；原始压力 256 通道、手掌 72 点，行长 `[12, 15, 15, 15, 15]`；IMU 原始 16 字节；130+146 两包配对后交付一帧，无 sequence |
+| 分包手套 `glove` / `handGloveSegmented` | `fingers.*.raw`、`fingers.*.pulp.raw`、`palm.matrix`、`imu.raw` | 一只手一个串口，packetType 1=左、2=右且用于首尾配对，不是唯一 SN；源码自动模式识别 side，手动模式按显式 side 映射；原始压力 256 通道、手掌 72 点，行长 `[12, 15, 15, 15, 15]`；IMU 原始 16 字节；130+146 两包配对后交付一帧，无 sequence |
 | 检测垫 `pad` | `pressureMatrix`、`values`，以及 `rows / cols` | 1024 点、32 × 32；产品入口已完成点位映射 |
 
 ADC 与归一化相对值不是 kPa、牛顿、公斤或弯曲角度。手套以命名分区取数，不能编造整手的 `pressureMatrix / values` 展示映射；产品帧不要再次 `decodeFrame()` 或重复应用 layout。

@@ -1,10 +1,12 @@
 # 串口接入
 
+**0.5.0 新增：** Node 分包手套支持手动选口与自动识别。手动传 `path + side`；自动调用 `readProduct({ product: 'glove', onData, onError })`，内部复用基础 `connectProduct()` → `scanProductPorts()`。五个快速函数保持不变；0.4.0 仍需手动配置，自动识别要求升级到 0.5.0。
+
 0.3.0 增加鞋垫 `insole` 和人体 `body`：使用 `connectProduct` / 快速 `readProduct`，解析规则分别见[鞋垫](INSOLE.md)、[人体全身](HUMAN-BODY.md)。鞋垫的 `AA 55 03 99` 是包头，不能套用通用尾分隔器；12位ADC也不能按单字节解码。
 
 串口接入的工作是把设备字节转换成统一 `Frame`。Python 与 Node.js 可直接访问系统串口；网页直连方式见[前端通讯](FRONTEND-COMMUNICATION.md)。
 
-Node.js / 浏览器接入分包手套或手部检测垫时，优先用 `Shroom.connectGlove({ side, onData, onError })` / `connectHandPad({ onData, onError })`；Node 可传 path，浏览器在用户手势中选择端口。SDK 内置产品波特率、帧解析和映射，应用直接读取数据。Python 本次没有这些产品入口或手套分包/整包协议，仍使用通用串口。
+Node.js / 浏览器接入分包手套或手部检测垫时，优先用 `Shroom.connectGlove()` / `connectHandPad()`。0.5.0的 Node 手套可自动发现串口和手侧；浏览器仍在用户手势中选择端口并明确传入 side。SDK 内置产品波特率、帧解析和映射，应用直接读取数据。Python 本次没有这些产品入口或手套分包/整包协议，仍使用通用串口。
 
 通用协议进阶按 **查询串口 → 配置并连接 → 自动拆帧与解码 → 错误处理和诊断** 接入。查询只列出操作系统可见端口，不识别硬件型号；自定义协议才需要按设备资料提供参数。错误可能发生在查询、参数校验、打开端口、读取、解析和关闭等阶段，应贯穿整条流程处理。
 
@@ -14,7 +16,7 @@ Node.js / 浏览器接入分包手套或手部检测垫时，优先用 `Shroom.c
 
 - 插入设备，确认操作系统识别到串口。
 - CH34x 设备缺少驱动时无法提供串口：安装 [Windows EXE](https://shroom.jq-industries.com/drive/CH341SER.EXE) 或 [macOS ZIP](https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip)，重插设备并重启采集应用后再查询。
-- 已封装产品选择正确入口，手套明确选择 left / right；使用通用接口时再确认波特率、矩阵尺寸、分隔符与点位排列。
+- 已封装产品选择正确入口；Node 分包手套可自动识别或用 left / right 筛选，浏览器、整包手套和鞋垫仍需明确实物侧别。通用接口按设备资料确认协议参数。
 - 关闭占用该端口的上位机或其他采集程序。
 - 先用模拟设备运行代码，再换成真实端口。
 
@@ -29,15 +31,56 @@ import { Shroom } from './node/index.js';
 
 const device = await Shroom.connectGlove({
   path: 'COM3', side: 'left',
-  onData: (data) => console.log(data.pressureMatrix, data.sequence, data.imu.raw),
+  onData: (data) => console.log(data.fingers, data.palm, data.packetType, data.imu.raw),
   onError: (error) => console.error(error.code, error.suggestion),
 });
 process.once('SIGINT', () => { void device.close().catch(console.error); });
 ```
 
-手部检测垫用 `Shroom.connectHandPad({ path: 'COM3', onData: console.log, onError: console.error })`。统一入口示例为 `Shroom.connectProduct({ product: 'hand', path: 'COM3', onData: console.log })`，默认分包手套选 product 为 `handGloveSegmented`（或 `glove`）并提供 side；整包设备显式选 `handGloveFullPacket`。`Shroom.listDeviceProducts()` 返回可直连产品清单。省略 Node path 时仅单个端口可自动选择；零口报 `PORT_NOT_FOUND`、多口报 `PORT_AMBIGUOUS`，不自动扫描产品型号。协议与线序参数不可覆盖。
+手部检测垫用 `Shroom.connectHandPad({ path: 'COM3', onData: console.log, onError: console.error })`。统一入口示例为 `Shroom.connectProduct({ product: 'hand', path: 'COM3', onData: console.log })`。默认分包手套选 `handGloveSegmented`（或 `glove`）；0.5.0中省略 path 或手侧会扫描有效分包，明确 path+left/right 且无 scan 则保持上述手动直连。整包设备显式选 `handGloveFullPacket` 并提供 side。`Shroom.listDeviceProducts()` 返回产品清单；非分包手套仍保持单个串口自动选择、多个串口报 `PORT_AMBIGUOUS` 的行为。协议与线序参数不可覆盖。
 
 产品 `onData / onError` 在打开前注册，连接前失败仍需 `try / catch`。可直接运行包内示例：`node node/product-demo.js glove left COM3` 或 `node node/product-demo.js hand-pad COM5`。
+
+## Node 自动扫描分包手套 {#node-scan}
+
+此节要求 SDK 0.5.0 或更高版本。`listPorts()` 只查询系统端口，不要求授权；`scanProductPorts()` 实际打开并读取串口，调用前需完成 SDK `serial` 授权并关闭占用设备的上位机。
+
+```js
+import { scanProductPorts } from 'shroom-sdk/node';
+
+const controller = new AbortController(); // 用户取消搜索时调用 controller.abort()。
+try {
+  const result = await scanProductPorts({
+    product: 'glove', // 可省略；仅支持 glove / handGloveSegmented。
+    timeoutMs: 1200, // 每个串口的读取窗口，不是整个搜索的总时长。
+    signal: controller.signal,
+  });
+  console.table(result.devices); // 已确认的设备，含 path / side / packetType / baudRate。
+  console.table(result.ports);   // 所有候选口的识别结果及失败原因。
+} catch (error) {
+  console.error(error.code, error.message);
+}
+```
+
+| 参数 | 含义 |
+| --- | --- |
+| `product` | 默认 `glove`；也接受规范 ID `handGloveSegmented` |
+| `side` | 可选 `left / right` 筛选；省略时接受任一已确认手侧 |
+| `paths` | 可选串口路径数组；省略时枚举本机串口，空数组无效 |
+| `timeoutMs` | 每个端口读取窗口；默认 1200，范围 50–10000 ms |
+| `signal` | 可选 `AbortSignal`，取消时清理已打开的探测端口 |
+
+结果的 `devices` 包含 `path / product / label / baudRate / side / packetType`，驱动有序列号时附加 `serialNumber`。`ports` 每项含 `path / status`：`matched` 可读取 `device`，`unrecognized` 表示未确认目标协议，`error` 可读取结构化 `error`。side 只筛选 devices，ports 保留所有已识别侧别的报告。空 devices 也是有效扫描结果，可先展示逐口原因再让用户处理。
+
+扫描固定使用 921600 波特率，不发送设备命令、不自动更换波特率。至少 3 个同侧完整配对才确认：首包 130 字节、尾包 146 字节，各有 `AA 55 03 99` 帧尾；第二字节 1=左手、2=右手。未知类型、混合侧别或不完整包不识别为设备。`packetType` 不是唯一 SN，同侧多只设备必须靠串口区分。
+
+自动连接仍是原五步中的 `readProduct({ product: 'glove', onData })`，基础调用是 `connectProduct()` 内部复用 `scanProductPorts()`。可以传 `side: 'left'` 筛选，或 `scan: { paths, timeoutMs, signal }` 限定范围；省略 side 或填 `auto` 会识别手侧。显式 path+left/right 且无 scan 不探测，显式 scan 则会先验证该口。多个匹配报 `PORT_AMBIGUOUS`，零匹配报 `PORT_NOT_FOUND`，两者的 `details.scan` 都含完整报告。探测口全部释放后才正式连接，样本不进入 onData 或采集。
+
+自动连接后会固定发现的手侧类型；正式读取或原口重连时出现另一手侧的有效帧，会报 PARSE_FAILED 并停止，不把它映射成原设备数据。串口号改变时需重新扫描并创建连接。
+
+扫描与当前 SDK 的托管连接共用串口预约；活跃、重连等待或清理未完成的端口会报告 PORT_BUSY，不会被扫描抢占。逻辑连接结束且物理端口确认释放后才解除预约。
+
+Web Serial 仍由浏览器选择端口并明确 side；WS 客户端不接受 scan 配置，自动扫描放在 Node 采集程序执行。整包手套和其他产品尚无本次自动识别能力。
 
 **通用串口进阶示例**：自定义设备继续使用原 `connect()`：
 
@@ -93,7 +136,7 @@ Python 用 `with` 释放连接；Node.js 在结束时调用 `device.close()`。�
 - `max` / `avg` / `area` / `center`：帧统计。
 - `timestamp`：毫秒时间戳。
 
-Node.js / 浏览器产品入口已经映射：手垫 `raw / pressure` 是原扫描的 1024 个 ADC，`pressureMatrix` 是已映射 ADC，`values` 是 32×32 归一化值；两种手套的 `raw / pressure` 都是 256 个 ADC，`pressureMatrix / values` 是保留兼容用途的 195 点、13×15 映射，业务读取 `fingers / palm`。分包帧含 `protocol: segmented / side / packetType / imu.raw`，不含 `sequence`；整包帧保留原 sequence。IMU 保留 16 字节原始数据，不承诺单位或姿态解算；一只手一个串口，side 必须按实物明确指定；packetType 仅校验首尾包类型一致，不决定侧别。产品帧不要再次套 layout。
+Node.js / 浏览器产品入口已经映射：手垫 `raw / pressure` 是原扫描的 1024 个 ADC，`pressureMatrix` 是已映射 ADC，`values` 是 32×32 归一化值；两种手套的 `raw / pressure` 都是 256 个 ADC，`pressureMatrix / values` 是保留兼容用途的 195 点、13×15 映射，业务读取 `fingers / palm`。分包帧含 `protocol: segmented / side / packetType / imu.raw`，不含 `sequence`；整包帧保留原 sequence。IMU 保留 16 字节原始数据，不承诺单位或姿态解算。一只手一个串口：Node 自动模式根据类型字节 1/2 识别左右手，手动模式按显式 side 映射；packetType 不是唯一设备编号。产品帧不要再次套 layout。
 
 通用 Node.js 连接可指定 `layout`。Python 当前仅内置 `raw` / `mat32`，也可提供自定义排列，不能照搬 JS 产品入口或全部产品名称。点位配置与 API 对照见[SDK 说明与排错](../README.md)及[Python SDK](../python/README.md)。
 
