@@ -108,3 +108,71 @@ def serial_error(exc: Exception, stage: str, *, path: str | None = None) -> Shro
         details["winerror"] = winerror
     return ShroomIOError(message or f"Serial {stage} failed", code=code, stage=stage,
                          suggestion=suggestions[code], details=details, cause=exc)
+
+
+# 与 JavaScript SDK 的 ERROR_CODES 一致；业务逻辑应按 code 判断，而不是匹配文案。
+ERROR_CODES = (
+    "INVALID_CONFIG", "DEPENDENCY_MISSING", "PORT_NOT_FOUND", "PORT_AMBIGUOUS",
+    "PERMISSION_DENIED", "PORT_BUSY", "CONNECTION_FAILED", "UNSUPPORTED_ENVIRONMENT",
+    "USER_CANCELLED", "DISCONNECTED", "READ_FAILED", "WRITE_FAILED", "CLOSE_FAILED",
+    "PARSE_FAILED", "CALLBACK_FAILED",
+    "SERVER_CLOSED", "SERVER_ERROR", "SERVER_START_FAILED", "INVALID_REQUEST", "ORIGIN_DENIED",
+    "REQUEST_FAILED", "REQUEST_TIMEOUT", "RECORDING_ACTIVE", "RECORDING_NOT_ACTIVE",
+    "RECORDING_NOT_FOUND", "RECORDING_INTERRUPTED", "RECORDING_OVERFLOW", "RECORDING_WRITE_FAILED",
+    "LICENSE_REQUIRED", "LICENSE_INVALID", "LICENSE_EXPIRED", "LICENSE_UNAVAILABLE",
+    "LICENSE_REJECTED", "LICENSE_PRODUCT_MISMATCH", "LICENSE_SCOPE_DENIED", "LICENSE_FEATURE_DENIED",
+    "LICENSE_DEVICE_REQUIRED",
+)
+
+_HINTS = {
+    "INVALID_CONFIG": "检查参数名称、类型与范围；设备连接前即可修正配置。",
+    "DEPENDENCY_MISSING": "请运行 python -m pip install pyserial 安装串口依赖。",
+    "PORT_NOT_FOUND": "检查设备、USB 线与驱动，重新查询并明确指定串口。",
+    "PORT_AMBIGUOUS": "存在多个串口，请明确指定目标端口，不能据此自动识别传感器。",
+    "PERMISSION_DENIED": "检查系统串口权限，以及端口是否被其他程序占用。",
+    "PORT_BUSY": "关闭占用此串口的上位机、终端或其他程序后重试。",
+    "CONNECTION_FAILED": "核对端口、驱动、权限和波特率，并查看原始错误。",
+    "DISCONNECTED": "检查 USB 与设备供电；确认设备恢复后由应用显式重新连接。",
+    "READ_FAILED": "检查设备连接和供电；确认原因后关闭连接并重新打开。",
+    "WRITE_FAILED": "检查连接状态及发送字节是否符合设备协议，不自动重发指令。",
+    "CLOSE_FAILED": "检查原始关闭错误；连接已停止交付数据，确认端口是否释放。",
+    "PARSE_FAILED": "核对分隔符、帧长、矩阵尺寸、点位排列与设备协议。",
+    "CALLBACK_FAILED": "检查应用的数据回调；一个回调失败不会中断其他订阅。",
+}
+_IO_CODES = frozenset(("PORT_NOT_FOUND", "PERMISSION_DENIED", "PORT_BUSY", "CONNECTION_FAILED",
+                       "DISCONNECTED", "READ_FAILED", "WRITE_FAILED", "CLOSE_FAILED"))
+
+
+def make_error(code: str, message: str, *, stage: str, suggestion: str | None = None,
+               details: dict | None = None, cause: BaseException | None = None) -> ShroomError:
+    """按错误码选择兼容内置异常的子类；产品、数据流和录制模块共用此入口。
+
+    配置错误兼容 ValueError，I/O 类兼容 OSError，授权类兼容 PermissionError；
+    服务、请求和录制状态类使用 ShroomError 基类。suggestion 省略时取该错误码的默认建议。
+    """
+    if code == "INVALID_CONFIG":
+        kind = ShroomConfigError
+    elif code == "PARSE_FAILED":
+        kind = ShroomParseError
+    elif code == "DEPENDENCY_MISSING":
+        kind = ShroomDependencyError
+    elif code == "PORT_AMBIGUOUS":
+        kind = ShroomPortAmbiguousError
+    elif code in _IO_CODES:
+        kind = ShroomIOError
+    elif code.startswith("LICENSE_"):
+        kind = ShroomLicenseError
+    else:
+        kind = ShroomError
+    return kind(message, code=code, stage=stage,
+                suggestion=suggestion or _HINTS.get(code, "检查原始错误与当前配置。"),
+                details=details, cause=cause)
+
+
+def as_shroom_error(error: BaseException, *, code: str = "CONNECTION_FAILED", stage: str = "connect",
+                    message: str | None = None, suggestion: str | None = None) -> ShroomError:
+    """把未知异常转换为 ShroomError；已有的 SDK 错误原样返回，原始异常保留在 cause。"""
+    if isinstance(error, ShroomError):
+        return error
+    return make_error(code, message or str(error) or type(error).__name__, stage=stage,
+                      suggestion=suggestion, cause=error)

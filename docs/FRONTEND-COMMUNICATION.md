@@ -93,7 +93,7 @@ document.querySelector('#connect').onclick = async () => {
 };
 ```
 
-**注意事项**：连接前失败仍拒绝 Promise，不能只提供 onError。不接受 `baudRate / delimiter / rows / cols / layout` 等底层覆盖；自定义协议继续使用通用 `connect()`。该便捷入口只支持指定分包协议，不自动识别分包/整包或其他手套型号，也不提供 Python 同名入口。
+**注意事项**：连接前失败仍拒绝 Promise，不能只提供 onError。不接受 `baudRate / delimiter / rows / cols / layout` 等底层覆盖；自定义协议继续使用通用 `connect()`。该便捷入口只支持指定分包协议，不自动识别分包/整包或其他手套型号；Python 的同名入口为 `connect_glove()`。
 
 ### Shroom.connectHandPad(options) {#connect-hand-pad}
 
@@ -135,7 +135,7 @@ document.querySelector('#connect').onclick = async () => {
 
 每个分区含 `name / rows / cols / rowLengths / sourceIndices / raw / values / matrix`。sourceIndices 是 `Uint16Array`，按行展开的原扫描 0-based 索引（用户表点号已减 1）；raw 是 ADC `Uint8Array`，values 是按父帧 fullScale 归一化的 `Float32Array`，matrix 是按实际行长排列的 ADC `number[][]`，不要假定 raw.length=rows*cols。
 
-新分区按最新左右手表独立提取，共 137 个映射位置，不要求覆盖全部 256 通道；不能直接切片旧 pressureMatrix 取得。顶层 max/avg/area/center 等仍基于旧 195 点展示矩阵，未新增分区统计。分区值不是物理压力、力或弯曲角度。点位表元数据本身不提供传输能力。0.4.0 的分包由独立 `handGloveSegmented` 解析器实现，整包入口仍为 274 字节；两者均保留 16 字节 IMU 原数据，不新增蓝牙链路。Python 与通用 Mock 不提供这些分区。
+新分区按最新左右手表独立提取，共 137 个映射位置，不要求覆盖全部 256 通道；不能直接切片旧 pressureMatrix 取得。顶层 max/avg/area/center 等仍基于旧 195 点展示矩阵，未新增分区统计。分区值不是物理压力、力或弯曲角度。点位表元数据本身不提供传输能力。0.4.0 的分包由独立 `handGloveSegmented` 解析器实现，整包入口仍为 274 字节；两者均保留 16 字节 IMU 原数据，不新增蓝牙链路。Python 的产品帧提供相同分区（snake_case 属性）；通用 Mock 不提供这些分区。
 
 **注意事项**：首帧可能早于连接 Promise 完成，onData 直接使用传入的 data，不要依赖尚未初始化的外层 `const device`；需要设备引用时先声明 let 并判空，或在连接后订阅。压力字节与映射矩阵均为 `Uint8Array`，values 为 `Float32Array`；数据已经映射，不能再次套 layout。sequence 是可能回绕的单字节序号，不是时间戳。IMU 只交付原始字节，没有单位、姿态或手势识别承诺。通用 `Shroom.mock()` 不提供产品 onData、手套附加字段或 IMU；它只模拟基础矩阵。
 

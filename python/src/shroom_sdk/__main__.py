@@ -12,6 +12,7 @@ import sys
 
 from . import Shroom, ShroomError
 from .device import _timeout
+from .layout import LAYOUTS
 from .license import DEFAULT_SERVER_URL
 
 
@@ -24,7 +25,8 @@ def main(argv=None) -> int:
     parser.add_argument("--json", action="store_true", help="One JSON object per frame")
     parser.add_argument("--rows", type=int)
     parser.add_argument("--cols", type=int)
-    parser.add_argument("--layout", choices=("raw", "mat32"), default="raw")
+    parser.add_argument("--layout", choices=("raw", *LAYOUTS), default="raw", metavar="NAME",
+                        help="raw or a built-in layout name such as mat32, carSeat, car10")
     parser.add_argument("--baud-rate", type=int, default=1_000_000)
     parser.add_argument("--fps", type=float, default=30, help="Mock frame rate")
     parser.add_argument("--timeout", type=float, default=5.0, help="Seconds to wait for a complete frame")

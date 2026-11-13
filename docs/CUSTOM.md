@@ -40,7 +40,7 @@
 
 Node.js 快速服务可接收已有 `onFrame()` 设备源；自定义源需要提供兼容的帧和订阅生命周期。不要把任意对象直接发到 WS 后假定渲染器能理解。
 
-Python 目前只有基础串口、模拟、帧解析和矩阵能力，没有产品级手套连接、WS 服务或快速录制 API；语言切换不会让两种语言自动具备相同扩展能力。
+Python 提供同一套产品连接、WS 服务与快速录制 API，名称为 snake_case、调用为同步方式；浏览器专属的 Web Serial 与 Canvas 展示不在 Python 中提供，具体以 [Python SDK](../python/README.md) 为准。
 
 ## 前端：接收数据与自定义显示 {#frontend}
 

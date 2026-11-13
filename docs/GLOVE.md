@@ -116,7 +116,7 @@ const device = await readProduct({
 });
 ```
 
-自动扫描仅支持默认分包手套，不把整包设备当作匹配项；两种协议仍使用独立解析器。整包入口的 `side` 仍必填，不接受 `scan`。Python 仍没有手套产品入口；通用 Mock 不模拟手套分包协议。
+自动扫描仅支持默认分包手套，不把整包设备当作匹配项；两种协议仍使用独立解析器。整包入口的 `side` 仍必填，不接受 `scan`。Python 通过 `connect_glove(path, side=...)` 使用同一分包解析规则，整包为 `connect_product("handGloveFullPacket", ...)`；通用 Mock 不模拟手套分包协议，产品模拟见各语言文档。
 
 ## 来源与验证范围
 

@@ -45,15 +45,15 @@ python -m pip install "./python[serial]"
 from shroom_sdk import Shroom, Framer, decode_frame, resolve_shape, get_layout, ShroomError
 ```
 
-示例保存为 `.py` 文件，用 `python 文件名.py` 运行。串口需要 pySerial；Mock 与核心解析没有第三方运行依赖。Python 是同步读取模型，不提供 JavaScript 的帧回调接口。
+示例保存为 `.py` 文件，用 `python 文件名.py` 运行。串口需要 pySerial；Mock 与核心解析没有第三方运行依赖。Python 默认同步读取；需要回调时用 `device.on_frame(handler)` / `on_error(handler)`，产品接口见 [Python SDK](../python/README.md)。
 
 </div>
 
-JavaScript SDK 优先通过 npm 安装，下载包和历史 URL 安装方式见[npm 安装说明](NPM.md)。Python 继续使用 ZIP 与本地 pip 安装，尚未发布到 PyPI。浏览器接入见 [前端通讯 API](FRONTEND-COMMUNICATION.md)，Canvas 见 [渲染 API](RENDERING.md)。
+JavaScript SDK 优先通过 npm 安装，下载包和历史 URL 安装方式见[npm 安装说明](NPM.md)。Python 从 0.6.0 起可用 `python -m pip install "shroom-sdk[serial]"` 从 PyPI 安装，ZIP 解压后本地安装继续可用。浏览器接入见 [前端通讯 API](FRONTEND-COMMUNICATION.md)，Canvas 见 [渲染 API](RENDERING.md)。
 
 ## 串口 {#serial}
 
-Node.js / 浏览器连接已封装的手套、手部检测垫、人体全身和鞋垫时，优先使用产品入口，SDK 内置协议与映射，应用直接处理 `onData`。鞋垫和人体产品封装要求0.3.0构建；Python 仍使用通用串口与矩阵 API，不提供本节中的 JS 产品入口。通用 `connect()` 保留为进阶入口。
+Node.js / 浏览器连接已封装的手套、手部检测垫、人体全身和鞋垫时，优先使用产品入口，SDK 内置协议与映射，应用直接处理 `onData`。鞋垫和人体产品封装要求0.3.0构建；Python 的同名产品入口为 `connect_product / connect_glove / connect_hand_pad`（snake_case 参数），用法见 [Python SDK](../python/README.md)。通用 `connect()` 保留为进阶入口。
 
 通用接入路线是 **查询端口 → 配置连接 → 自动解析 → 错误诊断**。端口查询只枚举系统可见端口，不识别硬件型号；查询、参数校验、打开、运行与关闭都有错误处理入口。
 
@@ -139,7 +139,7 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 
 **示例**：`await Shroom.connectProduct({ product: 'handGloveSegmented', path: 'COM3', side: 'right', onData: console.log })`。
 
-**注意事项**：快速 readProduct 在 Node 调用本接口，本接口在自动模式复用公开 scanProductPorts，扫描完成后继续原解析与重连链路。别名只用于连接，device.info.product 与 frame.product 使用正式 ID。product 和鞋垫 protocol 仍由调用方选择；只有支持发现的分包手套可自动确认 side。通用协议继续用 Shroom.connect，Python 未提供这些产品方法。
+**注意事项**：快速 readProduct 在 Node 调用本接口，本接口在自动模式复用公开 scanProductPorts，扫描完成后继续原解析与重连链路。别名只用于连接，device.info.product 与 frame.product 使用正式 ID。product 和鞋垫 protocol 仍由调用方选择；只有支持发现的分包手套可自动确认 side。通用协议继续用 Shroom.connect；Python 的对应方法为 `connect_product / connect_glove / scan_product_ports`，见 [Python SDK](../python/README.md)。
 
 ### Shroom.listDeviceProducts() {#node-device-products}
 
@@ -207,7 +207,7 @@ console.log(data.palm.sourceIndices);       // 对应原 256 点扫描的 0-base
 
 五指主体 60 点、独立指腹 5 点、手掌 72 点合计 137 个映射位置，不要求覆盖全部 256 通道。分区直接依照左右手点位表从原始 `pressure` 提取，通过命名属性访问，不从其他矩阵切片获取。五指和手掌的统计由应用按目标分区计算，不把基础 Frame 的矩阵统计解释为这些分区的汇总。分区 `raw / matrix` 是 ADC，分区 `values` 是相对值，都不是力、物理压力或弯曲角度。
 
-点位表中的 `btPacketSize: 128` 仅为表元数据；实际分包组帧由独立 `handGloveSegmented` 适配器完成，不新增蓝牙链路。整包入口仍为 274 字节，两个手套入口均保留 16 字节原始 IMU 和同一套命名分区；Python 和通用 Mock 未实现这些分区。
+点位表中的 `btPacketSize: 128` 仅为表元数据；实际分包组帧由独立 `handGloveSegmented` 适配器完成，不新增蓝牙链路。整包入口仍为 274 字节，两个手套入口均保留 16 字节原始 IMU 和同一套命名分区；Python 的 `GloveFrame` 提供相同分区（`frame.fingers.thumb.pulp`、`frame.palm.row_lengths` 等 snake_case 属性）；通用 Mock 不产生这些分区。
 
 **注意事项**：两种产品的 `raw / pressure`、手套分区的 `raw` 和 `imu.raw` 均为 `Uint8Array`；手套 `palm.matrix` 为按实际行长排列的 ADC 二维数组，分区 `values` 为 `Float32Array`。手部检测垫的 `pressureMatrix` 为 `Uint8Array`、`values` 为 `Float32Array`。产品帧带有 `product` 标识；仅整包手套的 `sequence` 是可能回绕的单字节序号，不是毫秒时间戳；分包帧没有此字段，不能从首尾包标志或包类型字节补造。产品解析和映射已完成，不再调用 `decodeFrame()` 或套用 layout。产品诊断 frameLength 在首个合法包前为 0，之后为 payload 字节数（分包手套两包合计 276 / 整包手套 274 / 手垫 1024），不是映射后的点数。IMU 仅保留原始字节，不承诺单位解析或姿态解算；不提供手势识别或物理压力标定。其他手套协议仍需单独适配。
 
@@ -312,7 +312,7 @@ const device = await Shroom.connectHandPad({
 
 0.5.0的托管连接在重连等待期间仍保留原path预约，扫描不会抢占它；逻辑连接结束且所有物理连接确认释放后才解锁。自动识别的手套重连仍核对原packetType，另一侧有效帧导致PARSE_FAILED停止，不能静默换设备。
 
-状态回调可能在连接 Promise 完成前触发，不要引用尚未赋值的 `device`。`open` 表示串口已打开，不代表已经有有效产品帧。断线仍通过 `onError` 报告并使当前录制以 `error` 收尾，已接收数据保留；恢复只继续实时取数，新的采集必须由用户重新开始。Web Serial、浏览器 WS 客户端与 Python 不支持这些 Node 重连配置。
+状态回调可能在连接 Promise 完成前触发，不要引用尚未赋值的 `device`。`open` 表示串口已打开，不代表已经有有效产品帧。断线仍通过 `onError` 报告并使当前录制以 `error` 收尾，已接收数据保留；恢复只继续实时取数，新的采集必须由用户重新开始。Web Serial 与浏览器 WS 客户端不支持这些重连配置；Python 使用 `reconnect={"interval": 秒, "max_attempts": 次数}` 与 `on_state_change`，规则相同。
 
 ### Shroom.mock(options) {#node-mock}
 
@@ -616,7 +616,7 @@ with Shroom.connect("COM3", baud_rate=1_000_000, rows=32, cols=32) as device:
 | `seed` | `int \| None` | `None`，可控制噪声随机种子 |
 | 其他解码选项 | 关键字参数 | 同 `decode_frame()` |
 
-**返回值**：`MockDevice`，按读取或迭代产生帧，没有后台采集线程。
+**返回值**：`MockDevice`，按读取或迭代产生帧；只有订阅 `on_frame` 时才启动后台读取线程。
 
 **示例**：
 
@@ -790,14 +790,14 @@ print(frame.values, frame.center.x)
 
 | 参数 | 类型 | 必填 / 说明 |
 | --- | --- | --- |
-| `layout` | `str / Sequence[int] / None` | 必填，raw 或 None 为原序；mat32 为内置排列；也可给自定义序列 |
-| `rows / cols` | `int` | 必填，mat32 必须 `32 × 32` |
+| `layout` | `str / Sequence[int] / None` | 必填，raw 或 None 为原序；`mat32` 等内置排列名见 `list_layouts()`；也可给自定义序列 |
+| `rows / cols` | `int` | 必填，必须与内置排列的行列一致（如 mat32 为 `32 × 32`、car10 为 `10 × 10`） |
 
 **返回值**：`tuple[int, ...] | None`；原序为 `None`。
 
 **示例**：`get_layout([3, 2, 1, 0], 2, 2)` 得到 `(3, 2, 1, 0)`。
 
-**注意事项**：自定义排列必须是完整 `0 .. rows*cols-1` 置换，不支持 `-1` 空点；未知内置名抛 `ValueError`。Python 没有完整 JS 产品表、`listProducts()` 或 `listLayouts()`。
+**注意事项**：自定义排列必须是完整 `0 .. rows*cols-1` 置换，不支持 `-1` 空点；未知内置名抛 `ValueError`。内置排列名与 JS 相同，可用 `list_layouts()` / `list_products()` / `get_product()` 查询；内置排列里没有传感器的位置固定为 0。
 
 ### Shroom.render_ascii(frame, width=..., gain=...) {#python-ascii}
 
@@ -1060,15 +1060,15 @@ process.once('SIGINT', () => client.disconnectRealtime());
 
 ### Python 网络通讯支持范围 {#python-network}
 
-**当前 Python SDK 未包含 `BackendSdkClient`，没有已有后端的 HTTP / WebSocket 客户端、通道订阅或采集控制接口。**
+**Python SDK 提供同名的 `BackendSdkClient`：方法为 snake_case（如 `get_contract()`、`connect_realtime()`），HTTP 调用同步返回，实时事件在接收线程上触发。**
 
-Python 可直连串口，在应用中分析和保存。后端已占用设备时，使用现有 Node.js 客户端订阅，或自行开发符合 [后端 API 契约](BACKEND.md) 的 Python 网络适配；不能调用不存在的 Python SDK 方法。
+Python 可直连串口，在应用中分析和保存。后端已占用设备时，用 `BackendSdkClient` 订阅后端帧并按 [后端 API 契约](BACKEND.md) 显式调用控制接口；方法名与参数以 [Python SDK](../python/README.md) 为准。
 
 </div>
 
 ## 存储 {#storage}
 
-Node.js 快速服务已提供带标签会话录制、SQLite 持久化及 CSV / JSONL 导出，见[数据存储与下载](STORAGE.md)。新记录写入 `recordingsDir/recordings.sqlite` 的 `sessions / frames` 表，事务批写后才计入 `frameCount`，停止调用等待入库队列排空；下载从 SQLite 分页读取并流式导出。同目录旧版 JSONL 记录仍可读，不自动迁移。以下保留基础帧转换和应用侧保存示例；Python 没有快速服务或录制控制 API。
+Node.js 快速服务已提供带标签会话录制、SQLite 持久化及 CSV / JSONL 导出，见[数据存储与下载](STORAGE.md)。新记录写入 `recordingsDir/recordings.sqlite` 的 `sessions / frames` 表，事务批写后才计入 `frameCount`，停止调用等待入库队列排空；下载从 SQLite 分页读取并流式导出。同目录旧版 JSONL 记录仍可读，不自动迁移。以下保留基础帧转换和应用侧保存示例；Python 的 `serve_device / create_ws` 提供相同的服务、录制与导出，并使用同一数据库结构。
 
 <div data-sdk-language="node">
 
@@ -1155,6 +1155,6 @@ with Shroom.mock(fps=20) as device, open("frames.jsonl", "w", encoding="utf-8") 
 
 ### 数据库与能力边界 {#storage-boundary}
 
-Node.js 快速服务提供本地 SQLite 采集库、会话列表、带标签录制及 CSV / JSONL 导出，并校验对应 SDK 功能授权；不提供业务数据库、通用 SQL 查询、录制回放、力学标定或手势算法。SDK 不依赖 Electron，上位机数据库的表结构与本服务不同，不能直接混用。`BackendSdkClient.startCollection()` 仍只请求已有后端，不是 `stream.startRecording()`；Python 没有这两类网络控制接口。
+Node.js 快速服务提供本地 SQLite 采集库、会话列表、带标签录制及 CSV / JSONL 导出，并校验对应 SDK 功能授权；不提供业务数据库、通用 SQL 查询、录制回放、力学标定或手势算法。SDK 不依赖 Electron，上位机数据库的表结构与本服务不同，不能直接混用。`BackendSdkClient.startCollection()` 仍只请求已有后端，不是 `stream.startRecording()`；Python 提供对应的 `serve_device`、`connect_stream` 与 `BackendSdkClient`。
 
 长期保存仍需应用制定容量、备份和访问控制策略，并记录协议、产品、点位配置和采样信息。更多见 [数据存储参考](STORAGE.md)。

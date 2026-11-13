@@ -6,7 +6,7 @@
 
 串口接入的工作是把设备字节转换成统一 `Frame`。Python 与 Node.js 可直接访问系统串口；网页直连方式见[前端通讯](FRONTEND-COMMUNICATION.md)。
 
-Node.js / 浏览器接入分包手套或手部检测垫时，优先用 `Shroom.connectGlove()` / `connectHandPad()`。0.5.0的 Node 手套可自动发现串口和手侧；浏览器仍在用户手势中选择端口并明确传入 side。SDK 内置产品波特率、帧解析和映射，应用直接读取数据。Python 本次没有这些产品入口或手套分包/整包协议，仍使用通用串口。
+Node.js / 浏览器接入分包手套或手部检测垫时，优先用 `Shroom.connectGlove()` / `connectHandPad()`。0.5.0的 Node 手套可自动发现串口和手侧；浏览器仍在用户手势中选择端口并明确传入 side。SDK 内置产品波特率、帧解析和映射，应用直接读取数据。Python 提供同名的产品入口（`connect_glove / connect_hand_pad / connect_product`）与分包手套自动发现 `scan_product_ports()`，见 [Python SDK](../python/README.md)。
 
 通用协议进阶按 **查询串口 → 配置并连接 → 自动拆帧与解码 → 错误处理和诊断** 接入。查询只列出操作系统可见端口，不识别硬件型号；自定义协议才需要按设备资料提供参数。错误可能发生在查询、参数校验、打开端口、读取、解析和关闭等阶段，应贯穿整条流程处理。
 
@@ -138,7 +138,7 @@ Python 用 `with` 释放连接；Node.js 在结束时调用 `device.close()`。�
 
 Node.js / 浏览器产品入口已经映射：手垫 `raw / pressure` 是原扫描的 1024 个 ADC，`pressureMatrix` 是已映射 ADC，`values` 是 32×32 归一化值；两种手套的 `raw / pressure` 都是 256 个 ADC，`pressureMatrix / values` 是保留兼容用途的 195 点、13×15 映射，业务读取 `fingers / palm`。分包帧含 `protocol: segmented / side / packetType / imu.raw`，不含 `sequence`；整包帧保留原 sequence。IMU 保留 16 字节原始数据，不承诺单位或姿态解算。一只手一个串口：Node 自动模式根据类型字节 1/2 识别左右手，手动模式按显式 side 映射；packetType 不是唯一设备编号。产品帧不要再次套 layout。
 
-通用 Node.js 连接可指定 `layout`。Python 当前仅内置 `raw` / `mat32`，也可提供自定义排列，不能照搬 JS 产品入口或全部产品名称。点位配置与 API 对照见[SDK 说明与排错](../README.md)及[Python SDK](../python/README.md)。
+通用 Node.js 连接可指定 `layout`。Python 内置与 JS 相同的排列名（`list_layouts()`），也可提供自定义排列；未知名称会报错而不是回退。点位配置与 API 对照见[SDK 说明与排错](../README.md)及[Python SDK](../python/README.md)。
 
 ## 排错顺序
 
@@ -167,6 +167,6 @@ Mock 也支持状态和诊断；其字节数与帧数累计模拟生成量，两
 
 `close()` 可重复调用，并取消 Node 已安排的重连。Node 产品入口从 0.2.0 起默认在意外断线或读取失败后重连原 `path`，间隔 3000ms、最多 3 次；通用 `connectSerial / Shroom.connect` 默认关闭，可传 `reconnect: true` 或 `{ intervalMs, maxAttempts }` 开启。首次打开失败、主动关闭、授权失效和解析错误不重试；`CALLBACK_FAILED` 不会停止设备或触发重连。重连复用原句柄及数据订阅、清空旧半帧；端口号改变需重新查询选择。完整参数见[Node 自动重连](BACKEND-GUIDE.md#node-reconnect)。
 
-串口重连只恢复实时数据，断线中的录制会以 `error` 收尾，不能自动续录或伪造连续数据。Web Serial、浏览器 WS 和 Python 没有自动重连；Python 同步调用用 `with` 或 `try / finally` 释放设备。正常结束时也要显式关闭连接。
+串口重连只恢复实时数据，断线中的录制会以 `error` 收尾，不能自动续录或伪造连续数据。Web Serial 和浏览器 WS 没有自动重连；Python 产品连接与 Node 相同默认有限重连，通用串口需显式传 `reconnect`；Python 同步调用用 `with` 或 `try / finally` 释放设备。正常结束时也要显式关闭连接。
 
 不要直接把相对 ADC 值当成 kPa 或牛顿；物理单位换算需要产品对应的标定数据。

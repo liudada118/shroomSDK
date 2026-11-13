@@ -29,17 +29,17 @@ SDK 从 npm 注册表安装到 `node_modules/shroom-sdk`，免登记下载，真
 
 Node.js 通过 `readProduct({ product, path, onData })` 读取已注册产品。手套 `glove` 可自动识别或手动填写 path+side；鞋垫 `insole` 需要按实物填写 side。0.5.0 仅分包手套可自动发现串口与手侧。检测垫 pad、人体 body 不传 side，鞋垫显式选择 protocol: '12bit' / '8bit'，默认12bit并保留原始ADC精度。浏览器使用 `readProduct({ url, onData })` 读取 WS；Web Serial 直接连接仍明确 side，使用基础 connectProduct。参见[鞋垫协议与数据](docs/INSOLE.md)、[人体全身协议与线序](docs/HUMAN-BODY.md)。
 
-Node.js 产品连接默认在意外断线后重连原串口，每 3 秒尝试一次、最多 3 次。设备对象和数据订阅继续复用，可用 `onStateChange` 显示状态，或设置 `reconnect: false` 关闭。首次连接失败仍由调用方处理；手动关闭、授权失效和解析错误不触发重连。断线会结束当前录制，恢复数据后需重新开始采集。Web Serial、浏览器 WS 和 Python 没有新增自动重连，详见[重连参数与边界](docs/BACKEND-GUIDE.md#node-reconnect)。
+Node.js 产品连接默认在意外断线后重连原串口，每 3 秒尝试一次、最多 3 次。设备对象和数据订阅继续复用，可用 `onStateChange` 显示状态，或设置 `reconnect: false` 关闭。首次连接失败仍由调用方处理；手动关闭、授权失效和解析错误不触发重连。断线会结束当前录制，恢复数据后需重新开始采集。Web Serial 和浏览器 WS 没有自动重连；Python 产品连接使用相同的重连规则（参数为 `reconnect={"interval": 秒, "max_attempts": 次数}`），详见[重连参数与边界](docs/BACKEND-GUIDE.md#node-reconnect)。
 
-提供 **浏览器 / Node.js / Python** 三种入口。以上产品封装仅在 Node.js / 浏览器提供；Python 仍使用通用串口与矩阵接口，不包含手套分包/整包、鞋垫或人体区域解析。Python 3.10+ 可独立安装，不需要 Node；详见 [Python SDK](python/README.md)。
+提供 **浏览器 / Node.js / Python** 三种入口。以上产品封装在 Node.js、浏览器与 Python 中使用同一套协议和点位映射；Python 另提供同名的五个快速函数（snake_case）、WS 数据服务与 SQLite 录制，浏览器专属的 Web Serial 与 Canvas 展示除外。Python 3.10+ 可独立安装，不需要 Node；详见 [Python SDK](python/README.md)。
 
 官网下载时可选择 **Python** 或 **Node.js（含浏览器）**，下载文件名包含 SDK 版本。`shroom-sdk-python.zip` / `shroom-sdk-node.zip` 的兼容 URL 仍指向当前构建；需要固定版本时保留对应版本包或使用 GitHub Release 附件。Node.js 包不含 Python 源码；Python 包内的 `python/README.md` 和 `python/AI-CONTEXT.md` 提供专用说明。旧链接 `shroom-sdk.zip` 仍保留完整包，兼容已有使用方式。
 
 升级前查看包内 [CHANGELOG.md](CHANGELOG.md)。Node.js / 浏览器用 `Shroom.version` 查询当前运行版本；Python 用 `shroom_sdk.__version__`。同一发行版本中的不同语言能力以各自文档为准。
 
-Node.js 快速服务内置带标签会话录制与 **SQLite 持久化**，停止后从数据库导出 CSV / JSONL。新记录位于录制目录的 `recordings.sqlite`，使用 `sessions / frames` 表；旧版 JSONL 记录仍可读取下载。曲线、回放、报表、算法及业务数据库由应用实现。Python 不提供产品级连接、WS 服务或本次快速录制接口。源码 ZIP 包含 `package-lock.json`，在解压后的 SDK 根目录执行 `npm ci`；`.tgz` 则作为业务项目的依赖安装，由业务项目锁文件管理。两种方式都需要正确安装 `serialport / ws / better-sqlite3` 等运行依赖，详见[数据存储](docs/STORAGE.md)。
+Node.js 快速服务内置带标签会话录制与 **SQLite 持久化**，停止后从数据库导出 CSV / JSONL。新记录位于录制目录的 `recordings.sqlite`，使用 `sessions / frames` 表；旧版 JSONL 记录仍可读取下载。曲线、回放、报表、算法及业务数据库由应用实现。Python 的数据服务使用相同的数据库结构和导出格式，同一录制目录可先后由两种语言的服务打开。源码 ZIP 包含 `package-lock.json`，在解压后的 SDK 根目录执行 `npm ci`；`.tgz` 则作为业务项目的依赖安装，由业务项目锁文件管理。两种方式都需要正确安装 `serialport / ws / better-sqlite3` 等运行依赖，详见[数据存储](docs/STORAGE.md)。
 
-已有主项目后端时，可读取状态、订阅实时帧，并显式调用后端的串口／采集控制接口，见 [后端连接指南](docs/BACKEND.md)。这是客户端，不包含后端服务，也不等于 Shroom Monitor；Python 本次未增加后端客户端。
+已有主项目后端时，可读取状态、订阅实时帧，并显式调用后端的串口／采集控制接口，见 [后端连接指南](docs/BACKEND.md)。这是客户端，不包含后端服务，也不等于 Shroom Monitor；Python 提供同名的 `BackendSdkClient`（snake_case 方法）。
 
 > **不想自己写代码？** 看 [怎么用AI开发.md](docs/怎么用AI开发.md)——把 [AI-CONTEXT.md](docs/AI-CONTEXT.md)
 > 丢给 AI，然后说人话描述你要什么就行。
@@ -85,7 +85,7 @@ npm run pack:npm
 | `src/backend/` | 连接已经运行的主项目后端 | `client.js`；与快速 WS 服务使用不同协议 |
 | `examples/` | 产品例程、Node 演示、网页测试台和调用生成器 | `products/`、`node/`、`web/` |
 | `docs/` | 接入、基础 API、AI 上下文与发布说明 | `QUICK-START.md`、`AI-CONTEXT.md` |
-| `python/src/shroom_sdk/` | Python 通用串口、矩阵处理、模拟与授权 | `__init__.py` → `device.py` → `frame.py` |
+| `python/src/shroom_sdk/` | Python 产品协议与连接、五步流程、WS 服务与录制、通用串口、矩阵处理、模拟与授权 | `__init__.py` → `flow.py` → `product_device.py` / `quick_server.py` → `products/` |
 
 维护者在仓库根目录运行 `npm start -- --no-open` 打开网页示例，`npm run demo:quick:mock` 运行模拟快速服务。直接启动脚本位于 `scripts/start.mjs`、`scripts/start.sh` 和 `scripts/start-demo.bat`。`examples/web/index.html` 与 `shroom.bundle.js` 是构建产物，应修改模块或 `examples/web/index.template.html` 后重新生成。
 
@@ -185,10 +185,10 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 
 ## Python 里用 {#s4}
 
-在本仓库或解压后的 SDK 根目录执行：
+从 PyPI 安装（0.6.0 起；下载 ZIP 解压后也可用 `python -m pip install "./python[serial]"` 本地安装）：
 
 ```bash
-python -m pip install "./python[serial]"
+python -m pip install "shroom-sdk[serial]"
 python -m shroom_sdk --frames 3   # 无硬件，先跑模拟数据
 python -m shroom_sdk --list       # 列出串口
 python -m shroom_sdk COM3         # 真实设备
@@ -203,6 +203,7 @@ with Shroom.connect("COM3", rows=32, cols=32) as device:
 ```
 
 没有硬件时用 `Shroom.mock(rows=32, cols=32)` 替换 `Shroom.connect(...)`。
+已支持的产品用 `connect_product("glove", "COM3", side="left", on_data=...)` 直接收取解析后的数据；五步流程为 `read_product → create_ws → start_recording → stop_recording → download_recording`。
 `with` 自动关闭连接；需要超时判断时用 `device.read_frame(timeout=2)`，无完整帧返回 `None`。
 Python 使用同步迭代和 snake_case 参数；字段语义、float32 数值和点位排列与 JS 一致。
 提供终端文字热力图、可选 Matplotlib 示例；完整 API、安装和排错见 [Python SDK](python/README.md)。
@@ -232,7 +233,7 @@ Python 使用同步迭代和 snake_case 参数；字段语义、float32 数值�
 | `connectHandPad()` | `raw / pressure` 为原扫描顺序的 1024 个 ADC；`pressureMatrix` 为映射后的 1024 个 ADC，`values` 为映射并归一化的 32×32 矩阵 |
 | `connectGlove({ side })` | `raw / pressure` 为两包合并的 256 个原始压力 ADC；`fingers.*.raw` 为五指主体，`fingers.*.pulp.raw` 为独立指腹，`palm.matrix` 为 72 点手掌；另有 `protocol / side / packetType / imu.raw`，无 sequence |
 
-默认手套使用 921600 波特率，由 130 字节首包与 146 字节尾包组成，每包尾标记为 `AA 55 03 99`；合并后为 256 个压力 ADC 和 16 字节 IMU。分包帧 `product` 为 `handGloveSegmented`，没有 `sequence`。显式 `handGloveFullPacket` 保留原来的 274 字节整包和序号，详见[协议差异](docs/GLOVE.md)。`imu.raw` 仅保留 16 个原始字节，不承诺单位或姿态解算。手套按命名分区读取与展示；检测垫使用已映射的 `pressureMatrix / values`。产品解析和映射已完成，无需再次套用 `layout`。Python 不提供这些产品字段和入口。
+默认手套使用 921600 波特率，由 130 字节首包与 146 字节尾包组成，每包尾标记为 `AA 55 03 99`；合并后为 256 个压力 ADC 和 16 字节 IMU。分包帧 `product` 为 `handGloveSegmented`，没有 `sequence`。显式 `handGloveFullPacket` 保留原来的 274 字节整包和序号，详见[协议差异](docs/GLOVE.md)。`imu.raw` 仅保留 16 个原始字节，不承诺单位或姿态解算。手套按命名分区读取与展示；检测垫使用已映射的 `pressureMatrix / values`。产品解析和映射已完成，无需再次套用 `layout`。Python 提供相同的产品字段（属性为 snake_case）与 `connect_product / scan_product_ports` 入口，见 [Python SDK](python/README.md)。
 
 手套分区按最新左右手点位表直接从 256 个扫描 ADC 提取：`fingers.thumb / index / middle / ring / little` 分别为大拇指、食指、中指、无名指、小拇指，每指主体为 4×3、12 点；各指 `.pulp` 是独立 1×1 指腹点，不混入主体。`palm` 为 5 行、声明列宽 15，但首行只有 12 点，其余各 15 点，共 72 点，`rowLengths` 为 `[12, 15, 15, 15, 15]`，matrix 不补零。
 
@@ -352,7 +353,7 @@ await Shroom.connect({ layout: p.layout });   // 下拉里的 value 是产品名
 - 大多数产品一帧是 1024 个点，`smallSample` 和 `footInsole` 是 256 个。排列自己知道要几个点，
   不用你操心；但**排列选错了帧长，画面会大片是空的**——这是选错型号最明显的症状。
 - `tempFullBed` 只给压力矩阵，那三个温度点不在排列里，需要温度得自己从原始帧取。
-- **分包手套 `handGloveSegmented` 通过 Node.js / 浏览器的 `connectGlove({ side })` 封装**；整包设备通过 `connectProduct({ product: 'handGloveFullPacket', side })`。两者都不是这张通用线序表中的 layout；其他手套型号与 Python 手套接入仍需另行适配。
+- **分包手套 `handGloveSegmented` 通过 Node.js / 浏览器的 `connectGlove({ side })` 封装**；整包设备通过 `connectProduct({ product: 'handGloveFullPacket', side })`。两者都不是这张通用线序表中的 layout；Python 使用 `connect_glove(path, side=...)` / `connect_product('handGloveFullPacket', ...)`；其他手套型号仍需另行适配。
 
 拿不准手里是哪一款？打开网页测试台，挨个换着看，按下去的地方和画面上亮的地方对上了就是它。
 
@@ -402,7 +403,7 @@ device.frameLength             // 串口锁定帧长；Mock 首帧前 0、首帧
 await device.close()           // 主动断开并取消待执行的重连，可重复调用
 ```
 
-`onError(handler)` 的参数是 `ShroomError`，返回取消订阅函数；查询与连接失败则用 `try / catch` 捕获。可从 JS 入口具名导入 `ShroomError`、`asShroomError`、`ERROR_CODES`，通过 `code / stage / message / suggestion / details / cause` 展示或记录错误。Python 同步调用抛出 `ShroomError`，使用 `device.get_diagnostics()` 和 snake_case 字段，没有错误回调。详见[错误与诊断接口](docs/BACKEND-GUIDE.md#diagnostics)。
+`onError(handler)` 的参数是 `ShroomError`，返回取消订阅函数；查询与连接失败则用 `try / catch` 捕获。可从 JS 入口具名导入 `ShroomError`、`asShroomError`、`ERROR_CODES`，通过 `code / stage / message / suggestion / details / cause` 展示或记录错误。Python 同步调用抛出 `ShroomError`，使用 `device.get_diagnostics()` 和 snake_case 字段；订阅 `on_data` 后的运行期错误交给 `on_error`。详见[错误与诊断接口](docs/BACKEND-GUIDE.md#diagnostics)。
 
 Mock 的字节数与帧数反映模拟数据生成量，不是串口吞吐；其丢帧数为 0。浏览器取消选择使用 `error.code === ERROR_CODES.USER_CANCELLED` 判断。帧回调自身抛错会报告 `CALLBACK_FAILED`，不应据此认定设备断线。
 
@@ -523,7 +524,7 @@ device.frameLength     // 锁定下来的帧长（字节）
 console.log(device.getDiagnostics()); // 包含 state、status、hint 和 lastError
 ```
 
-诊断快照的 `status` 为 `waiting-data / waiting-frame / streaming / closed / error`，Node 串口另有 `reconnecting`；`hint` 提供下一步检查建议。字节与帧数保留累计值，但 Node 重连后的收数状态按本次连接判断；`streaming` 不证明设备仍在持续发送，也不代表尺寸、产品或线序选择正确。Node 产品连接在可重试断线后自动重连，通用 `Shroom.connect()` 需显式开启；应用调用 `close()` 会取消重连。解析错误、授权失效或关闭失败会终止恢复，`CALLBACK_FAILED` 不会停止设备。Web Serial 与 Python 仍由应用决定重新连接；Python 同步采集使用 `with` 或 `try / finally` 关闭设备。
+诊断快照的 `status` 为 `waiting-data / waiting-frame / streaming / closed / error`，Node 串口另有 `reconnecting`；`hint` 提供下一步检查建议。字节与帧数保留累计值，但 Node 重连后的收数状态按本次连接判断；`streaming` 不证明设备仍在持续发送，也不代表尺寸、产品或线序选择正确。Node 产品连接在可重试断线后自动重连，通用 `Shroom.connect()` 需显式开启；应用调用 `close()` 会取消重连。解析错误、授权失效或关闭失败会终止恢复，`CALLBACK_FAILED` 不会停止设备。Web Serial 与 Python 通用串口默认由应用决定重新连接，Python 产品连接与 Node 一样默认有限重连；Python 同步采集使用 `with` 或 `try / finally` 关闭设备。
 
 ---
 

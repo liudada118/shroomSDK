@@ -1,5 +1,5 @@
 /**
- * Shroom SDK 0.5.0 —— 单文件版（自动生成，别手改）
+ * Shroom SDK 0.6.0 —— 单文件版（自动生成，别手改）
  *
  * 由 scripts/build-sdk-bundle.mjs 从 src/core/ + src/web/ 拼出来，内容和模块版完全一致。
  * 它是「经典脚本」而不是模块，所以用普通的 script 标签引进去就行，file:// 下也能加载，
@@ -4678,7 +4678,7 @@
     decodeStreamFrame: decodeStreamFrame,
     STREAM_SCHEMA: STREAM_SCHEMA,
     isSupported: isSerialSupported,
-    version: "0.5.0",
+    version: "0.6.0",
     // 想自己接数据源（WebSocket、蓝牙、录制回放）就用这几个
     createFramer: createFramer,
     decodeFrame: decodeFrame,

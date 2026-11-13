@@ -1,6 +1,6 @@
 # BackendSdkClient API
 
-连接已经运行的 Shroom 主项目后端，使用 HTTP 查询 / 控制和 WebSocket 订阅 JSON 帧。适用于 Node.js、Electron 与浏览器；Python 未提供此客户端。它不会启动后端、自动开串口或自动采集，Shroom Monitor 和开发者网站本身不等于这个后端。
+连接已经运行的 Shroom 主项目后端，使用 HTTP 查询 / 控制和 WebSocket 订阅 JSON 帧。适用于 Node.js、Electron 与浏览器；Python 提供同名客户端，方法为 snake_case，见 [Python SDK](../python/README.md)。它不会启动后端、自动开串口或自动采集，Shroom Monitor 和开发者网站本身不等于这个后端。
 
 ## 导入与构造 {#constructor}
 

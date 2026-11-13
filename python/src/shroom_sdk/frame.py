@@ -2,13 +2,13 @@
 
 from array import array
 from dataclasses import dataclass
-from functools import lru_cache
 from math import isfinite, isqrt
 from numbers import Real
 from time import time_ns
 from typing import Sequence
 
 from .errors import ShroomParseTypeError, invalid_config
+from .layout import get_named_layout
 
 MAX_MATRIX_POINTS = 1_048_576
 
@@ -93,22 +93,26 @@ def resolve_shape(points: int, *, rows: int | None = None, cols: int | None = No
     return (side, side) if side * side == points else (1, points)
 
 
-@lru_cache(maxsize=32)
 def _builtin_layout(name: str, rows: int, cols: int) -> tuple[int, ...] | None:
-    """缓存内置线序；raw 保持原顺序，mat32 仅用于 32 × 32 点阵。"""
+    """按名称取内置线序；raw 保持原顺序，其余排列的行列由线序表固定。
+
+    内置排列可能从更大的扫描帧里取一块，下标指向扫描顺序，-1 表示该位置没有传感器。
+    """
     if name == "raw":
         return None
-    if name != "mat32":
-        raise invalid_config(f"Unknown layout: {name!r}; use 'raw', 'mat32' or a permutation", option="layout")
-    if (rows, cols) != (32, 32):
-        raise invalid_config("mat32 requires rows=32 and cols=32", option="layout")
-    return tuple((15 + y if y <= 16 else 31 - y) * cols + x
-                 for y in range(rows) for x in range(cols))
+    named = get_named_layout(name)
+    if named is None:
+        raise invalid_config(f"Unknown layout: {name!r}; use 'raw', a name from list_layouts() or a permutation",
+                             option="layout")
+    if (rows, cols) != (named.rows, named.cols):
+        raise invalid_config(f"{name} requires rows={named.rows} and cols={named.cols}", option="layout")
+    return named.perm
 
 
 def get_layout(layout: str | Sequence[int] | None, rows: int, cols: int) -> tuple[int, ...] | None:
     """返回 perm[显示位置] = 原始位置；None 表示不重排。
 
+    字符串取内置线序（见 list_layouts()），行列必须与该线序一致。
     自定义序列必须是 0～rows*cols-1 的完整排列，不能缺项、重复或越界。
     """
     _integer(rows, "rows")
@@ -118,7 +122,7 @@ def get_layout(layout: str | Sequence[int] | None, rows: int, cols: int) -> tupl
     if layout is None or isinstance(layout, str):
         return _builtin_layout(layout or "raw", rows, cols)
     if not isinstance(layout, Sequence):
-        raise invalid_config("layout must be 'raw', 'mat32' or an integer permutation", option="layout")
+        raise invalid_config("layout must be 'raw', a layout name or an integer permutation", option="layout")
     size = rows * cols
     if _layout_length(layout) != size:
         raise invalid_config("layout must be a permutation of 0 .. rows*cols-1", option="layout")
@@ -156,21 +160,23 @@ def _validate_decode_options(options: dict) -> dict:
             raise invalid_config(f"points must be <= {MAX_MATRIX_POINTS}", option="points")
     rows, cols = options.get("rows"), options.get("cols")
     layout = options.get("layout", "raw")
+    named = get_named_layout(layout) if isinstance(layout, str) else None
     if rows is not None or cols is not None:
         shape = resolve_shape(0, rows=rows, cols=cols)
-    elif isinstance(layout, str) and layout == "mat32":
-        if points is not None and points < 1024:
-            raise invalid_config("mat32 requires at least 1024 points", option="points")
-        shape = (32, 32)
+    elif named is not None:
+        if points is not None and points < named.scan:
+            raise invalid_config(f"{layout} requires at least {named.scan} points", option="points")
+        shape = (named.rows, named.cols)
     elif layout is not None and not isinstance(layout, str):
         if not isinstance(layout, Sequence):
-            raise invalid_config("layout must be 'raw', 'mat32' or an integer permutation", option="layout")
+            raise invalid_config("layout must be 'raw', a layout name or an integer permutation", option="layout")
         shape = resolve_shape(points if points is not None else _layout_length(layout))
     else:
         shape = resolve_shape(points or 0)
     permutation = get_layout(layout, *shape)
-    # 将调用方的可变排列固定为元组，避免校验后被外部修改。
-    return {**options, **({"layout": permutation} if permutation is not None else {})}
+    # 内置线序保留名称，由 decode_frame 按名称取行列；调用方的可变排列固定为元组，避免校验后被外部修改。
+    custom = permutation is not None and not isinstance(layout, str)
+    return {**options, **({"layout": permutation} if custom else {})}
 
 
 def decode_frame(
@@ -181,7 +187,8 @@ def decode_frame(
     """按每字节一个 ADC 点解析，返回包含矩阵统计和加权中心的 Frame。
 
     points 限定使用的原始字节数；指定矩阵更大时补零，更小时仅统计矩阵范围。
-    layout 决定 values 的排列，raw 保留选取后的原始字节。full_scale 为归一化除数，
+    layout 决定 values 的排列，raw 保留选取后的原始字节；内置线序名在省略 rows/cols 时
+    同时决定输出行列（例如 car10 从 1024 个扫描点取 10×10）。full_scale 为归一化除数，
     threshold 用于有效点与中心统计；values 是相对值，不是 kPa 或牛顿，也不强制截到 1。
     """
     if not isinstance(payload, (bytes, bytearray, memoryview)):
@@ -200,14 +207,21 @@ def decode_frame(
         if points > MAX_MATRIX_POINTS:
             raise invalid_config(f"points must be <= {MAX_MATRIX_POINTS}", option="points")
     count = len(data) if points is None else min(_integer(points, "points"), len(data))
-    rows, cols = resolve_shape(count, rows=rows, cols=cols)
+    named = get_named_layout(layout) if isinstance(layout, str) else None
+    if named is not None and rows is None and cols is None:
+        # 行列由线序决定；数据不足一帧扫描点时明确报错，避免静默显示一片空白。
+        if count < named.scan:
+            raise invalid_config(f"{layout} requires at least {named.scan} points", option="layout")
+        rows, cols = named.rows, named.cols
+    else:
+        rows, cols = resolve_shape(count, rows=rows, cols=cols)
     perm = get_layout(layout, rows, cols)
     raw = data[:count]
     values = array("f")
     low, high, total, weight, cx, cy, area = float("inf"), 0.0, 0.0, 0.0, 0.0, 0.0, 0
     for i in range(rows * cols):
         src = perm[i] if perm is not None else i
-        value = raw[src] / full_scale if src < count else 0.0
+        value = raw[src] / full_scale if 0 <= src < count else 0.0
         values.append(value)
         # 与 JS 保持一致：统计使用写入 float32 前的值，避免额外的精度差异。
         low, high = min(low, value), max(high, value)

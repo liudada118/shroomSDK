@@ -101,7 +101,7 @@ node node/product-demo.js glove right COM4
 node node/product-demo.js hand-pad COM5
 ```
 
-默认手套按 921600 波特率解析 130 字节首包 + 146 字节尾包，每包尾为 `AA 55 03 99`，合并出 256 个压力 ADC 和 16 字节 IMU；分包帧没有 `sequence`。`packetType` 在两包中必须一致，当前固件 1=左手、2=右手，不是唯一设备编号；自动扫描据此识别手侧，未知/混合侧别不作为有效设备。显式 `handGloveFullPacket` 仍保留 274 字节整包与序号，详见[手套协议](GLOVE.md)。`raw / pressure` 保留 256 个 ADC，`pressureMatrix` 为映射后 195 个 ADC，`values` 是归一化 13×15；一只手一个串口，手动连接仍按显式 side 选择线序，IMU 只保留原字节。检测垫内置 1000000、1024 点、32×32 与 mat32；pressure 是原扫描值，pressureMatrix 和 values 已映射。产品字段仅 JS 提供，Python 未实现这些入口。
+默认手套按 921600 波特率解析 130 字节首包 + 146 字节尾包，每包尾为 `AA 55 03 99`，合并出 256 个压力 ADC 和 16 字节 IMU；分包帧没有 `sequence`。`packetType` 在两包中必须一致，当前固件 1=左手、2=右手，不是唯一设备编号；自动扫描据此识别手侧，未知/混合侧别不作为有效设备。显式 `handGloveFullPacket` 仍保留 274 字节整包与序号，详见[手套协议](GLOVE.md)。`raw / pressure` 保留 256 个 ADC，`pressureMatrix` 为映射后 195 个 ADC，`values` 是归一化 13×15；一只手一个串口，手动连接仍按显式 side 选择线序，IMU 只保留原字节。检测垫内置 1000000、1024 点、32×32 与 mat32；pressure 是原扫描值，pressureMatrix 和 values 已映射。Python 提供相同的产品字段与入口（snake_case），见 [Python SDK](../python/README.md)。
 
 两种手套协议均按同一份点位表直接给出 `fingers.thumb / index / middle / ring / little` 五指，每指主体 4×3、12 点，各指 `.pulp` 是独立 1×1 指腹点；`palm` 为手掌，rows=5、cols=15，但 rowLengths=`[12, 15, 15, 15, 15]`，共 72 点，不补零。区域含中文 name、rows、cols、rowLengths、0-based 扫描索引 sourceIndices（Uint16Array）、raw（ADC）、values（按父帧 fullScale 归一化）、matrix（按实际行长排列的 ADC 二维数组），完整字段见[产品帧 API](BACKEND-GUIDE.md#node-product-data)。
 

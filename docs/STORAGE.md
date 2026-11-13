@@ -1,6 +1,6 @@
 # 数据存储
 
-Node.js 快速服务使用 **SQLite 保存采集记录**，提供会话标签、停止收尾及 CSV / JSONL 导出；浏览器提供录制控制和文件下载。业务数据库、跨设备同步和历史回放仍由应用实现。完整跑通方式见[快速接入](QUICK-START.md)。Python 当前只有基础文件输出，不具备这里的快速录制接口。
+Node.js 快速服务使用 **SQLite 保存采集记录**，提供会话标签、停止收尾及 CSV / JSONL 导出；浏览器提供录制控制和文件下载。业务数据库、跨设备同步和历史回放仍由应用实现。完整跑通方式见[快速接入](QUICK-START.md)。Python 的 `serve_device / create_ws` 提供相同的录制与导出，数据库结构一致，见 [Python SDK](../python/README.md)。
 
 五步流程的开始、停止和下载调用的就是本页基础 API。快速入口额外保存本次记录 ID，基础接口由调用方明确指定 ID，见[两层对应表](CUSTOM.md#quick-to-base)。
 

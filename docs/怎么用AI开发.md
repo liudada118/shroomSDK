@@ -2,7 +2,7 @@
 
 把 [AI-CONTEXT.md](AI-CONTEXT.md) 交给 AI，先用 **`readProduct()` 一个函数拿到产品数据**。你负责说明产品和目标，AI 依据现有函数写调用代码。
 
-实时取数在 Node.js 中即可完成。需要网页接收、保存和下载时，再按需扩展为 **取数 → 创建 WS → 开始采集 → 停止采集 → 下载**。Python 请使用 [Python 专用说明](../python/README.md)，目前不提供这五个函数。
+实时取数在 Node.js 中即可完成。需要网页接收、保存和下载时，再按需扩展为 **取数 → 创建 WS → 开始采集 → 停止采集 → 下载**。Python 请使用 [Python 专用说明](../python/README.md)：同样是这五个函数，名称为 snake_case，调用为同步方式。
 
 ## 1. 准备 SDK 和设备 {#prepare}
 

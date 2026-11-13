@@ -301,4 +301,4 @@ await Shroom.activateLicense(process.env.SHROOM_LICENSE_KEY, {
 
 默认服务只监听本机并检查网页来源。跨机连接需另配 `host / allowedOrigins` 和前端地址；HTTPS 页面需 WSS，部署边界见[前端通讯](FRONTEND-COMMUNICATION.md)。
 
-Python 当前提供基础串口、模拟与矩阵解析，不提供本篇的产品连接、WS 服务或浏览器采集控制，见 [Python SDK](../python/README.md)。
+Python 提供同名的五个函数（`read_product / create_ws / start_recording / stop_recording / download_recording`）和相同的 WS 数据协议，可与本篇的 Node 服务或网页互连；参数为 snake_case，见 [Python SDK](../python/README.md)。

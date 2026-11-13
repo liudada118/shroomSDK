@@ -4,9 +4,9 @@
 
 ## 1. 项目概述
 
-本仓库维护独立的 `shroom-sdk`：读取传感器数据、按需创建 WebSocket 服务、采集到 SQLite、停止采集并导出 CSV / JSONL。快速入口只导出五个函数，产品协议和点位映射由内部适配器管理。Node.js、浏览器和 Python 共享版本号，但语言能力按各自文档定义。
+本仓库维护独立的 `shroom-sdk`：读取传感器数据、按需创建 WebSocket 服务、采集到 SQLite、停止采集并导出 CSV / JSONL。快速入口只导出五个函数，产品协议和点位映射由内部适配器管理。Node.js、浏览器和 Python 共享版本号，使用同一套产品协议、WS 数据格式和录制数据库；浏览器专属能力（Web Serial、Canvas 展示）只在 JavaScript 中，各语言的具体接口按各自文档定义。
 
-当前版本 **0.5.0 已发布至 npm，latest 指向 0.5.0**：Node 分包手套新增自动扫描与左右手识别，同时保留手动 path+side 和五个快速函数。客户安装命令为 `npm install --save-exact shroom-sdk@0.5.0`，Node 与网页使用同一版本。0.4.0 首次提供 130+146 字节分包协议；整包仍显式使用 handGloveFullPacket。Python 仅同步版本元数据，不新增这些产品能力；合成帧测试不代替实物验收。完整发布门禁与官方注册表独立安装验收通过，结果见下方发布记录。
+当前版本为 **0.6.0**：Python 包获得与 JavaScript 相同的产品协议、自动发现、五步流程和数据服务（见 4.1），并首次以 `shroom-sdk` 为名发布到 PyPI。JavaScript 运行代码与 0.5.0 相同，只有版本常量变化；npm 上的最新版本仍是 0.5.0（已发布，latest 指向 0.5.0），是否发布 npm 0.6.0 另行决定。0.5.0 为 Node 分包手套新增自动扫描与左右手识别，同时保留手动 path+side 和五个快速函数；JavaScript 客户安装命令仍为 `npm install --save-exact shroom-sdk@0.5.0`，Node 与网页使用同一版本。0.4.0 首次提供 130+146 字节分包协议；整包仍显式使用 handGloveFullPacket。0.5.0 及更早的 Python 包只有通用串口与矩阵能力，且未发布到 PyPI；合成帧测试不代替实物验收。0.5.0 的完整发布门禁与官方注册表独立安装验收通过，结果见下方发布记录；0.6.0 的 PyPI 发布结果另行追加。
 
 0.5.0 扫描逐口读取固定 921600 波特率分包数据，按类型 1/2 确认左/右手；明确 path+side 且无 scan 保持手动直连。只读探测样本与正式取数隔离，全部探测连接释放后才正式连接；重连保持原路径，不跨口迁移。
 
@@ -19,7 +19,7 @@
 | 分类 | 技术与边界 |
 | --- | --- |
 | JavaScript | ES Module；Node.js 运行时要求见根 `package.json`；浏览器使用 Web Serial 或 WebSocket |
-| Python | Python 3.10+，同步迭代与通用矩阵接口；不提供 JS 五步 WS/SQLite 服务 |
+| Python | Python 3.10+；产品协议与自动发现、五步流程、WS/HTTP 服务与 SQLite 录制只用标准库（`socket` / `http.server` / `sqlite3` / `threading`），同步调用加可选回调线程 |
 | 串口 | Node `serialport`、浏览器 Web Serial、Python `pyserial` |
 | 采集 | `better-sqlite3`，`sessions / frames` 表，批量事务与分页导出 |
 | 通信 | `ws`，同端口 HTTP 下载；应用后端通过独立 `BackendSdkClient` 访问 |
@@ -50,6 +50,12 @@ shroomSDK/
 ├─ scripts/              启动、构建、版本、打包与发布检查
 ├─ tests/                JavaScript 与类型测试
 ├─ python/               独立 Python 包、文档、示例和测试
+│  ├─ src/shroom_sdk/    flow（五函数）、product_device（产品连接与重连）、serial_scan / _serial_path（发现与串口预约）、
+│  │                     quick_server / stream_client / _ws（服务与客户端）、recording（SQLite）、stream_codec、layout、glove、
+│  │                     colormap、backend_client 及原有 device / frame / framer / license
+│  │  └─ products/       与 src/core/products 一一对应的适配器：glove_segmented / glove / pad / body / insole
+│  ├─ examples/          product_demo、quick_demo、stream_client 及原有 read_frames、heatmap
+│  └─ tests/             单元测试，以及调用 JS 实现的对照（js_reference.mjs）和互通（js_interop.mjs）辅助脚本
 ├─ .github/              跨平台检查与 Release 草稿工作流
 ├─ package.json          公开包入口与开发命令
 ├─ package-lock.json     JavaScript 依赖锁
@@ -94,7 +100,7 @@ flowchart LR
 
 Node `connectProduct()` 在分包手套缺少 path、side 省略/auto 或显式 scan 时内部调用公开 `scanProductPorts()`；唯一匹配才连接，零/多匹配分别报 PORT_NOT_FOUND/PORT_AMBIGUOUS，details.scan 保留完整报告。显式 path+left/right 且无 scan 保持手动直连。`readProduct()` 继续复用 connectProduct，快速入口仍只导出五函数。Web Serial、WS 客户端、整包手套和其他产品没有本次自动扫描入口。
 
-Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产品连接默认启用，通用 `connectSerial` 默认关闭。意外断线后先清理旧端口，再按原 `path` 每 3 秒尝试、最多 3 次；只有收到有效帧才重置尝试次数。首次打开失败、主动关闭、授权或解析错误、端口清理失败不进入重试。恢复保持设备对象和数据订阅，通过 `onStateChange` 暴露 `open / reconnecting / error / closed`；诊断保留累计计数，同时按本次连接判断是否真正收到数据。Web Serial、浏览器 WS 与 Python 本次未增加自动重连。
+Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产品连接默认启用，通用 `connectSerial` 默认关闭。意外断线后先清理旧端口，再按原 `path` 每 3 秒尝试、最多 3 次；只有收到有效帧才重置尝试次数。首次打开失败、主动关闭、授权或解析错误、端口清理失败不进入重试。恢复保持设备对象和数据订阅，通过 `onStateChange` 暴露 `open / reconnecting / error / closed`；诊断保留累计计数，同时按本次连接判断是否真正收到数据。Web Serial 与浏览器 WS 没有自动重连；Python 的产品连接采用相同的重连规则（见 4.1）。
 
 产品代码集中在 `src/core/products/`。增加产品通过适配器与注册表扩展协议、映射和 WS 字段校验，不改五个函数签名。产品扩展测试会在临时副本注册测试产品，验证串口、五步调用、录制、导出和浏览器 bundle 的一致性。
 
@@ -120,6 +126,34 @@ Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产�
 
 授权区分 SDK 与上位机产品密钥，检查有效期、电脑名额和功能权限，不按传感器型号限制。JS/Python 均提供结构化错误；连接阶段的拒绝由调用方捕获，连接后的运行错误通过订阅反馈。模拟数据源用于无硬件验证。
 
+### 4.1 Python 实现
+
+Python 包在 `python/src/shroom_sdk/` 内按 JavaScript 的模块划分实现同一套能力，JavaScript 是协议与数据格式的基准；两边不共享运行代码。
+
+| Python 模块 | 对应的 JavaScript 模块 | 说明 |
+| --- | --- | --- |
+| `products/`、`product.py`、`glove.py` | `src/core/products/`、`core/product.js`、`core/glove*.js` | 适配器注册表、参数校验、流解析器、发现钩子与 WS 字段校验；解析结果和丢弃计数与 JS 逐块一致 |
+| `product_frames.py` | `src/index.d.ts` 的产品帧类型 | 冻结数据类，属性为 snake_case；`to_dict()` 输出 JS 字段名，作为 WS 与录制的格式 |
+| `product_device.py` | `node/serial.js`、`node/serial-reconnect.js`、`core/mock.js` | 产品连接（手动 / 自动）、有限重连、产品模拟 |
+| `serial_scan.py`、`_serial_path.py` | `node/serial-scan.js`、`node/serial-path.js` | 分包手套逐口发现；连接与扫描共用的进程内串口预约 |
+| `stream_codec.py` | `core/stream-codec.js` | `shroom.frame.v1` 校验与还原 |
+| `quick_server.py`、`_ws.py` | `node/quick-server.js` + `ws` | 同端口 WS / HTTP、来源与 Host 校验、慢客户端断开 |
+| `recording.py` | `node/recording.js`、`node/recording-sqlite.js` | 同一 v1 表结构、目录独占锁、批量事务、恢复与导出 |
+| `stream_client.py` | `web/stream.js` | ready 握手、请求关联、录制控制；下载直接保存文件 |
+| `flow.py` | `flow/runtime.js` | 五个快速函数及本次记录 ID 管理 |
+| `layout.py`、`colormap.py` | `core/layout.js`、`core/colormap.js` | 30 种排列与产品菜单、调色板 |
+| `backend_client.py` | `backend/client.js` | 已有后端的 HTTP / WS 客户端 |
+
+与 JavaScript 的设计差异：
+
+- **线程模型**：核心读取仍是同步的 `read_frame()`。订阅 `on_data / on_frame` 时由一个后台线程调用它并分发，重连状态机运行在读取调用内，不另起定时器；数据服务为每个 WS 连接使用独立的写线程和有界队列，慢客户端不阻塞设备读取线程。录制由一个写线程批量提交。扫描是同步调用，用 `threading.Event` 取消。
+- **命名与单位**：对外为 snake_case、时间单位为秒；线上 JSON、SQLite 行和导出文件保持 JavaScript 的字段名，使两种语言的服务、客户端和录制目录可以互通。
+- **串口预约**：受管理的连接与扫描按路径预约，重连间隙也保留；端口关闭失败且仍被驱动持有时预约不释放，再次 `close()` 重试。原有的同步 `Shroom.connect()` 设备只做弱引用登记：自身行为不变，但不会被扫描或受管理的连接再次打开。`loop://` 等 pySerial URL 不参与预约。
+- **授权**：新入口调用既有的 `license.py`（未改动）：产品连接与扫描要求 `serial`，通用入口要求 `serial.raw`，数据服务要求 `stream`，采集要求 `recording`。只有 SDK 自带的模拟设备类型免授权，自定义数据源按真实数据处理；源码交付下这不是防篡改机制。
+- **HTTP 与连接处理**：数据服务每个连接只处理一个 HTTP 请求并立即关闭，请求正文从不读取，也不会被当作后续请求解析（否则网页可以借请求正文绕过来源与 Host 校验）。发出 WS 关闭帧后先读完对端在途的数据再断开，保证关闭码送达；录制目录可以位于网络路径。
+- **不移植**：Web Serial、Canvas 热力图与 `createProductView` 属于浏览器。`layout` 对未知名称报错而不是回退 raw，这是 Python 包原有的行为。
+- **验证方式**：`python/tests/js_reference.mjs` 让测试直接调用 JS 实现，对照线序表、解码、产品解析（含自动手侧以及噪声、截断与重排的语料）和调色板；`js_interop.mjs` 用 JS 的 `connectStream` 连接 Python 服务、用 Python 客户端连接 Node `serveDevice`，并互读对方写入的 SQLite 目录。这些测试在缺少 Node 或 npm 依赖时自动跳过。全部数据为合成数据，未连接真实硬件。
+
 ## 5. 快速服务端点
 
 `createWS` 默认在 `127.0.0.1:19999` 创建本机服务，浏览器经同一服务获取数据和下载。跨主机使用必须显式指定允许的网页来源。
@@ -132,7 +166,7 @@ Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产�
 | WebSocket | `/` 或 `/ws` | 实时帧、状态与控制响应 |
 | WS JSON | `recording.start / stop / status / list` | 带 `requestId` 的采集控制 |
 
-这些端点属于快速本机服务；`BackendSdkClient` 访问的主项目 HTTP/WS 协议另见 [BACKEND.md](docs/BACKEND.md)。
+Python 的 `create_ws / serve_device` 提供相同的端点与消息。这些端点属于快速本机服务；`BackendSdkClient` 访问的主项目 HTTP/WS 协议另见 [BACKEND.md](docs/BACKEND.md)。
 
 ## 6. 版本、发布与官网集成
 
@@ -147,6 +181,8 @@ Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产�
 同日复核修正 `ProductDevice / NodeProductDevice` 默认帧类型为注册产品联合，`ProductFrame` 的 ADC 泛型支持 Uint8/Uint16；常规显式设备注解与协议收窄通过类型检查。增强的安装包验收从独立 `node_modules` 使用公开入口解析人体及鞋垫双协议，再跨 Node/浏览器 WS 编解码，确认 400 个唯一通道、112 个真实点、4095 与负 IMU 不丢失；NodeNext/Bundler 均通过。人体仍沿用来源的尾分隔规则，载荷内同值标记可能使该帧被丢弃，限制已写入 `HUMAN-BODY.md`。
 
 客户使用 `npm install shroom-sdk` 安装到业务项目 `node_modules`，无需解压或登记；真实设备密钥另行申请。下载 `.tgz` 后手动安装及历史官网 URL 仍可用，本地文件依赖需要随项目保存安装包与锁文件。压缩并隐藏内部导入路径用于交付管理，不能作为防篡改或授权不可绕过的保证。
+
+Python 包由维护者手动发布到 PyPI：在干净的发布提交上用锁定的构建工具离线构建 wheel 与 sdist，`twine check` 后先上传 TestPyPI 并在全新环境验证，再把同一批文件上传 PyPI。PyPI 的版本不可覆盖，问题只能通过新版本修正；步骤见 [SDK-RELEASING.md](docs/SDK-RELEASING.md)。包元数据声明 `LicenseRef-Proprietary`，与 npm 包的 `UNLICENSED` 一致。
 
 GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运行检查；`sdk-vX.Y.Z` 标签触发 Windows/macOS/Linux 检查，Linux 打包并保存附件，具有写权限的后续任务重新验证附件再创建 Release 草稿。同名 Release 不覆盖。工作流不自动发布 npm、PyPI 或部署官网。
 
@@ -191,6 +227,8 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-11-04 | 0.4.0 发布文档准备 | 客户安装命令固定到 0.4.0，移除当前版本的本地修订提示，保留整包手套显式入口、双端同版本与实物验收边界；最终打包与注册表发布结果另行记录 |
 | 2026-11-04 | 0.4.0 正式发布与消费验证 | 源码提交 `50d0956c192c892f7bd701cbdde8e22bb0ae0b4b` 与 `sdk-v0.4.0` 标签已推送；npm 0.4.0 / latest 可用。完整本地发布门禁通过，公开注册表独立安装及 SHA-512 比对通过；最终 TGZ 为 118542 字节，SHA-256 为 `7adbe50638e965ab86b27263211f7aee752cecd82b44bcdb56bd88461ad8f024` |
 | 2026-11-13 | 分包手套串口自动发现与两种连接方式 | 新增 Node scanProductPorts 基础 API，识别 packetType 1=左/2=右；readProduct 内部复用扫描，保留手动 path+side 和原五函数。补充逐口报告、取消与清理、歧义处理、类型及接入文档；源码新增尚未发布 npm 或完成真机验收 |
+| 2026-11-13 | Python 版产品与五步能力 | Python 包实现五种产品协议与分区、分包手套自动发现与手动直连、回调与有限重连、五个快速函数、同端口 WS/HTTP 服务、SQLite 录制与导出、流客户端、后端客户端、全部线序与调色板；仅用标准库，授权模块未改动。与 JS 的解析对照、双向 WS 互通和录制目录互读均通过；未发布、未做真机验收 |
+| 2026-11-13 | Python 审查修复与 0.6.0 PyPI 发布准备 | 修复审查发现的 1 项高危、4 项中等和 10 项低风险问题并补回归测试；版本升至 0.6.0，完成 PyPI 元数据、安装文档与发布流程。上传 TestPyPI / PyPI 由维护者手动执行，结果另行记录；仍未做真机验收 |
 
 ## 9. 更新日志
 
@@ -213,6 +251,9 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-11-04 | 文档更新 | 准备 0.4.0 客户交付说明，统一 npm 固定版本与 TGZ 安装示例，保留协议迁移提示，并修正点位表元数据与分包适配器的关系；未改变运行代码或五函数 |
 | 2026-11-04 | 版本发布 | 推送 SDK 0.4.0 源码与标签，发布已验证的精简 TGZ；从官方注册表重新安装并核对完整性，确认分包手套、五步流程、WS/SQLite/导出与 NodeNext/Bundler 类型可用 |
 | 2026-11-13 | 新增功能 | 补充分包手套左右手类型语义和 Node 串口自动发现，以产品 discovery 钩子扩展；公开扫描与五步取数共用，保持手动直连、原路径有限重连和整包兼容边界。更新架构、协议、串口、五步与 AI 文档，不覆盖已发布 0.4.0 制品 |
+| 2026-11-13 | 新增功能 | 在 `python/` 内移植 JavaScript SDK 的非浏览器能力：产品适配器与自动发现、产品连接与重连、串口预约、WS 服务与客户端、SQLite 录制、五函数、后端客户端、线序与调色板；新增对照与互通测试、三个示例，重写 Python 文档并修正各文档中关于 Python 能力的说明。JavaScript 运行代码、版本号与发布脚本未改动 |
+| 2026-11-13 | 修复缺陷 | 按独立代码审查修正 Python 数据服务与连接层的 15 项问题：未读取的请求正文可被当作后续请求（可绕过来源与 Host 校验）、网络路径上的录制无法导出、下载中断与建连失败的错误类型、授权失效时关闭卡顿、关闭码丢失及若干并发与资源边界；每项都有回归测试 |
+| 2026-11-13 | 配置变更 | 升版至 0.6.0；Python 包补充 PyPI 元数据（许可、链接、分类）与 pip 安装说明，发布指南新增 TestPyPI → PyPI 的手动流程。未新增 CI 发布步骤，npm 包未重新发布 |
 
 ## 10. 原 SDK 历史记录
 

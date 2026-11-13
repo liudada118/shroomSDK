@@ -161,7 +161,54 @@ git push origin "sdk-v$sdkVersion"
 4. 等 Windows、macOS、Linux 检查通过。Linux 执行完整门禁并打包，后续发布任务重新校验文件哈希、干净状态和来源提交，再创建带附件的 GitHub Release 草稿。
 5. 在 GitHub 检查版本、更新说明、三个 ZIP 与一个 `.tgz`，确认后点击 **Publish release**。草稿不是已经对外发布的版本。
 
-日常分支或 PR 使用 `.github/workflows/sdk-ci.yml` 的 **SDK checks**。GitHub 工作流不会自动发布到 npm 或 PyPI；npm 按上节手动发布，Python 继续通过 ZIP 与本地 pip 安装。客户也可使用已交付的 `.tgz`、官网 ZIP 与已发布的 GitHub Release 附件。
+日常分支或 PR 使用 `.github/workflows/sdk-ci.yml` 的 **SDK checks**。GitHub 工作流不会自动发布到 npm 或 PyPI；两者都由维护者手动发布（PyPI 见下节），Python 的 ZIP 与本地 pip 安装继续可用。客户也可使用已交付的 `.tgz`、官网 ZIP 与已发布的 GitHub Release 附件。
+
+## 发布 Python 包到 PyPI
+
+Python 包以 `shroom-sdk` 为名发布到 [PyPI](https://pypi.org/project/shroom-sdk/)，版本号与根 `package.json` 相同。**PyPI 上同一版本的文件一旦上传，不能覆盖，也不能删除后重新上传同名文件**；发现问题只能升到新版本，必要时在 PyPI 上把有问题的版本标记为 yanked。因此每个版本先在 [TestPyPI](https://test.pypi.org/) 演练。发布由维护者手动执行，CI 不参与。
+
+1. 确认 `npm run sdk:verify` 通过、修改已合并，工作区干净并位于要发布的提交。
+2. 用锁定测试环境里的构建工具离线构建（`--no-isolation` 避免临时拉取未锁定的构建依赖）：
+
+```bash
+rm -rf python/dist python/build
+.venv/Scripts/python.exe -m build --no-isolation python      # macOS/Linux 用 .venv/bin/python
+```
+
+得到 `python/dist/shroom_sdk-<版本>-py3-none-any.whl` 与 `python/dist/shroom_sdk-<版本>.tar.gz`；该目录已被 Git 忽略。wheel 只含 `shroom_sdk` 包，sdist 另含示例，两者都不含测试。
+
+3. 在单独的工具环境安装 twine 并检查元数据与说明文档能否正常渲染。twine 不加入 `python/requirements-test.lock`：
+
+```bash
+python -m pip install twine
+python -m twine check --strict python/dist/*
+```
+
+4. 上传到 TestPyPI，并在全新的虚拟环境里验证。TestPyPI 与 PyPI 的账号、API token 各自独立；用户名固定为 `__token__`，密码为 token，token 不写入仓库或命令历史：
+
+```bash
+python -m twine upload --repository testpypi python/dist/*
+python -m pip install --index-url https://test.pypi.org/simple/ --no-deps shroom-sdk==<版本>
+python -c "import shroom_sdk; print(shroom_sdk.__version__)"
+python -m shroom_sdk --frames 1
+```
+
+TestPyPI 上的第三方依赖不可靠，所以用 `--no-deps`；核心功能没有第三方运行依赖。同时在浏览器里检查 `https://test.pypi.org/project/shroom-sdk/` 的说明、版本、许可与链接。
+
+5. 确认无误后上传 PyPI，使用**同一批**已检查的文件，不重新构建：
+
+```bash
+python -m twine upload python/dist/*
+```
+
+6. 在全新的虚拟环境里从 PyPI 安装并验证，再记录发布结果：
+
+```bash
+python -m pip install "shroom-sdk[serial]==<版本>"
+python -c "import shroom_sdk; print(shroom_sdk.__version__)"
+```
+
+首次上传使用全账号范围的 token；项目创建后改用只限 `shroom-sdk` 项目的 token，并删除全账号 token。若上传请求中断，先在 PyPI 上查询该版本的文件是否已经存在，再决定后续处理。
 
 ## 官网下载与回退
 

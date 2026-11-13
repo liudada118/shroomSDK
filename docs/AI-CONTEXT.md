@@ -82,7 +82,7 @@ try {
 
 Node 产品连接从 0.2.0 起默认自动重连，不要在业务 `onError` 里再创建一套重连循环。默认重试原 `path`，间隔 3000ms、最多 3 次；重连保留同一 `device`、原数据订阅和 WS 服务。可传 `reconnect: false` 关闭，或 `reconnect: { intervalMs: 3000, maxAttempts: 3 }` 配置；`onStateChange({ state, path, attempt, maxAttempts })` 或 `device.onStateChange(handler)` 用于更新界面，状态为 `open / reconnecting / error / closed`。状态回调可能早于 Promise 完成，同样不要引用尚未赋值的 `device`。
 
-首次打开失败不会后台重试；主动 `close()`、授权失效、配置或解析错误不重连。SDK 不自动识别换号后的原设备，COM 号变化要重新查询、选择并连接。通用 Node `connectSerial()` 默认关闭重连，Web Serial、浏览器 WS 和 Python 没有本次自动重连能力。
+首次打开失败不会后台重试；主动 `close()`、授权失效、配置或解析错误不重连。SDK 不自动识别换号后的原设备，COM 号变化要重新查询、选择并连接。通用 Node `connectSerial()` 默认关闭重连，Web Serial 和浏览器 WS 没有自动重连；Python 产品连接的重连规则相同，写法见 Python 文档。
 
 ## 2. 创建 WS：createWS {#flow-ws}
 
@@ -249,6 +249,6 @@ ADC 与归一化相对值不是 kPa、牛顿、公斤或弯曲角度。手套以
 | 自定义协议与矩阵 | [基础与自定义](CUSTOM.md)、[串口](SERIAL.md)；不要覆盖产品接口的 `baudRate / delimiter / rows / cols / layout` |
 | 无硬件开发 | [Mock](FRONTEND-COMMUNICATION.md#mock)：只验证基础矩阵与显示，不模拟手套分包/整包、IMU 或实际按压，不代表实机验收完成 |
 | 已有主项目后端 | [BackendSdkClient](BACKEND.md)：连接已有服务，不启动服务；其 WS 协议与快速 WS 服务不同，不能混接 |
-| Python | 独立下载 Python 包，读 [Python AI 上下文](../python/AI-CONTEXT.md)与 [Python SDK](../python/README.md)。目前只有通用串口、矩阵、模拟与显示，没有本文的产品五函数、手套分包/整包或 WS 录制服务；不要生成不存在的 Python 对应函数 |
+| Python | 独立下载 Python 包，读 [Python AI 上下文](../python/AI-CONTEXT.md)与 [Python SDK](../python/README.md)。提供同一套产品协议、五个快速函数、WS 数据服务与 SQLite 录制，但使用 snake_case 名称、同步调用和秒为单位的时间（如 `read_product("glove", "COM3", side="left", on_data=...)`）；按 Python 文档书写，不要把本文的 JavaScript 写法直接改写成 Python |
 
 本地采集 SQLite 已内置，SDK 数据库与上位机数据库不直接兼容，也不依赖 Electron。业务数据库、曲线、回放、算法、标定与云端上传由应用实现。不要因用户需要这些功能就绕过现有录制接口重新实现一套采集。接入验证以实机持续取数、明确起停、记录状态和实际下载内容为准。

@@ -1,20 +1,24 @@
 """同步设备抽象：单线程按需读帧，显式管理生命周期，串口读取有有限等待。
 
 SerialDevice 将串口字节送入 Framer，再解码为 Frame；MockDevice 生成相同形状的
-模拟帧。两者都支持 with 和迭代器，不在后台线程持续采集。
+模拟帧。两者都支持 with 和迭代器；只有调用 on_frame / on_data 订阅回调时，
+才会启动一个后台线程代为读取并分发。
 """
 
 from collections import deque
 from dataclasses import dataclass
 from math import cos, exp, sin
 from random import Random
-from threading import Event, RLock
+from threading import Event, RLock, Thread, current_thread
 from time import monotonic
 from typing import Iterator
 
+from . import _trust
+from ._hub import FrameHub
+from ._serial_path import note_open_device
 from .errors import (ShroomDependencyError, ShroomError, ShroomIOError,
                      ShroomParseError, ShroomPortAmbiguousError, ShroomStateError,
-                     invalid_config, serial_error)
+                     as_shroom_error, invalid_config, serial_error)
 from .frame import Frame, _integer, _number, _validate_decode_options, decode_frame
 from .framer import DEFAULT_DELIMITER, Framer
 from .license import _assert_license, _subscribe_license
@@ -34,7 +38,9 @@ def _timeout(value: float | None) -> float | None:
 class Device:
     """设备公共生命周期与诊断接口；使用 with 管理，且只在一个线程中读取。
 
-    实际读取由子类实现；close 可从其他线程发出停止信号，不会启动后台采集。
+    实际读取由子类实现；close 可从其他线程发出停止信号。默认不启动后台采集：
+    用 read_frame / 迭代器同步读取，或用 on_frame / on_data 订阅后由后台线程读取，
+    两种方式不要在同一设备上混用。
     """
 
     def __init__(self, info: dict):
@@ -43,6 +49,10 @@ class Device:
         self._state = "open"
         self._bytes_received = self._frame_count = self._parse_dropped = 0
         self._last_error: ShroomError | None = None
+        self._hub = FrameHub()
+        self._reported: BaseException | None = None  # 已通知过错误订阅的终止错误，避免重复上报。
+        self._pump: Thread | None = None
+        self._pump_lock = RLock()
 
     @property
     def state(self) -> str:
@@ -127,7 +137,8 @@ class Device:
             self._parse_dropped += 1
             self._record_error(error)
             raise error from exc
-        self._state = "open"
+        if not self.closed:
+            self._state = "open"
         return frame
 
     def read_frame(self, timeout: float | None = 1.0) -> Frame | None:
@@ -149,11 +160,75 @@ class Device:
     def __iter__(self) -> Iterator[Frame]:
         return self.frames()
 
+    def on_frame(self, handler):
+        """订阅每一帧并返回取消订阅的函数；首次订阅会启动后台读取线程。
+
+        回调在读取线程上同步执行，可能早于创建设备的调用返回；回调应直接使用传入的帧，
+        不要做耗时操作。订阅后不要再从其他线程调用 read_frame 或迭代同一设备。
+        回调抛出的异常会转成 CALLBACK_FAILED 交给 on_error，不中断其他订阅。
+        """
+        unsubscribe = self._hub.on_frame(handler)
+        self._start_pump()
+        return unsubscribe
+
+    def on_data(self, handler):
+        """on_frame 的别名，与产品接口的命名一致。"""
+        return self.on_frame(handler)
+
+    def on_error(self, handler):
+        """订阅后台读取期间的运行期错误，返回取消订阅函数；不会重放此前的错误。
+
+        同步调用 read_frame 时错误仍直接抛给调用方。读取、解析或授权失败会结束后台读取
+        并释放设备，state 保留 error；恢复需要应用重新连接。
+        """
+        return self._hub.on_error(handler)
+
+    def _start_pump(self) -> None:
+        with self._pump_lock:
+            if self._pump is None and not self.closed:
+                self._pump = Thread(target=self._pump_frames, name="shroom-device-reader", daemon=True)
+                self._pump.start()
+
+    def _pump_frames(self) -> None:
+        """后台读取循环：把同步读到的帧分发给订阅者；出错时通知一次并结束。"""
+        try:
+            while not self.closed:
+                try:
+                    frame = self.read_frame(timeout=0.25)
+                except Exception as exc:
+                    # 正常关闭与读取之间的竞态只会得到“设备已关闭”，不是需要上报的故障。
+                    if self.closed and self._state == "closed":
+                        break
+                    error = as_shroom_error(exc, code="READ_FAILED", stage="read")
+                    if self._state != "error":
+                        self._record_error(error)
+                    if self._reported is not error:
+                        self._reported = error
+                        self._hub.emit_error(error)
+                    try:
+                        self.close()
+                    except ShroomError as close_error:
+                        self._hub.emit_error(close_error)
+                    break
+                if frame is not None:
+                    self._hub.emit(frame)
+        finally:
+            self._hub.clear()
+
     def close(self) -> None:
         """发出停止信号；可重复调用，已有错误状态留给诊断查询。"""
         self._closed.set()
         if self.state != "error":
             self._state = "closed"
+        pump = self._pump
+        if pump is not None and pump is not current_thread():
+            # 等后台读取退出当前这次读取，再由子类释放端口；回调内调用 close 时不等待自身。
+            pump.join(timeout=1.0)
+            # 读取线程可能在收到停止信号的同时完成了一帧解码；关闭后的状态以关闭为准。
+            if self._state != "error":
+                self._state = "closed"
+        if pump is None or not pump.is_alive():
+            self._hub.clear()
 
     def __enter__(self):
         self._ensure_open("connect")
@@ -252,6 +327,8 @@ class SerialDevice(Device):
         self._options = options
         self._pending: deque[bytes] = deque()
         self._serial_close_lock = RLock()
+        self._port_closing = False
+        self._port_released = Event()
         # 同时支持系统端口名和用于无硬件测试的 loop:// 回环地址。
         try:
             self._port = serial.serial_for_url(path, baudrate=baud_rate, timeout=0.1, write_timeout=1.0)
@@ -259,6 +336,8 @@ class SerialDevice(Device):
             raise serial_error(exc, "connect", path=path) from exc
         self._license_unsubscribe = _subscribe_license(self._license_changed)
         self._check_license()
+        # 让串口扫描和受管理的连接知道此端口正被使用，不会在同一进程里再次打开它。
+        note_open_device(path, self)
 
     def _license_changed(self) -> None:
         """授权管理器通知变化时立即复核，保证闲置串口也会在授权失效时关闭。"""
@@ -358,23 +437,32 @@ class SerialDevice(Device):
         return written
 
     def close(self) -> None:
-        # 授权定时器可能与业务同时关闭端口，用锁保证只释放一次。
+        # 授权定时器、后台读取线程和业务代码可能同时关闭；只有第一个调用者释放端口。
+        # 不能持锁等待读取线程退出：它自己发现授权失效时也会调用 close()。
         with self._serial_close_lock:
-            if not self.closed:
-                unsubscribe = getattr(self, "_license_unsubscribe", None)
-                if unsubscribe is not None:
-                    unsubscribe()
-                super().close()
-                self._pending.clear()
-                try:
-                    self._port.close()
-                except Exception as exc:
-                    error = serial_error(exc, "close", path=self.info["path"])
-                    self._record_error(error)
-                    raise error from exc
+            first = not self._port_closing
+            self._port_closing = True
+        if not first:
+            if current_thread() is not self._pump:
+                self._port_released.wait(2.0)
+            return
+        try:
+            unsubscribe = getattr(self, "_license_unsubscribe", None)
+            if unsubscribe is not None:
+                unsubscribe()
+            super().close()
+            self._pending.clear()
+            try:
+                self._port.close()
+            except Exception as exc:
+                error = serial_error(exc, "close", path=self.info["path"])
+                self._record_error(error)
+                raise error from exc
+        finally:
+            self._port_released.set()
 
 
-class MockDevice(Device):
+class MockDevice(_trust.FrozenSource, Device):
     """无硬件模拟设备：rows/cols 指定矩阵，fps 控制读取节奏，seed 控制噪声序列。
 
     生成移动压力峰并复用真实帧解析器；不占用串口，也不要求 SDK 授权。
@@ -395,6 +483,9 @@ class MockDevice(Device):
             raise invalid_config(str(exc), option="seed", cause=exc) from exc
         self._phase = 0.0
         self._next_frame = monotonic()
+        if type(self) is MockDevice:
+            # 只登记 SDK 自带的类型；重写了取数方法的子类属于自定义数据源。
+            _trust.mark_mock_device(self)
 
     def read_frame(self, timeout: float | None = 1.0) -> Frame | None:
         """等待下一模拟帧时刻并生成 Frame；等待超时或期间关闭则返回 None。"""
@@ -428,8 +519,15 @@ class MockDevice(Device):
         return self.info["rows"] * self.info["cols"] if self.frame_count else 0
 
 
-def connect(path: str | None = None, **options) -> SerialDevice:
-    """打开真实串口并返回设备；options 透传给 SerialDevice，读取结束后须 close。"""
+def connect(path: str | None = None, *, reconnect=None, on_state_change=None, **options):
+    """打开真实串口并返回设备；options 透传给 SerialDevice，读取结束后须 close。
+
+    通用串口默认不自动重连。传入 reconnect=True 或 {"interval": 秒, "max_attempts": 次数}
+    时改用带有限重连的连接（与产品连接相同的规则），on_state_change 接收连接状态变化。
+    """
+    if (reconnect is not None and reconnect is not False) or on_state_change is not None:
+        from .product_device import connect_managed_serial
+        return connect_managed_serial(path, reconnect=reconnect, on_state_change=on_state_change, **options)
     return SerialDevice(path, **options)
 
 

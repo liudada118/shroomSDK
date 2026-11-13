@@ -1,5 +1,29 @@
 # Shroom SDK 更新日志
 
+## [0.6.0] - 2026-11-16
+
+本版本的功能改动只涉及 Python 包。JavaScript 运行代码和五个快速函数与 0.5.0 相同，只有版本常量随全仓版本号变为 0.6.0；JavaScript 的安装说明仍以 npm 上已发布的版本为准。
+
+- Python 包首次以 `shroom-sdk` 为名发布到 PyPI：`python -m pip install "shroom-sdk[serial]"`。ZIP 解压后本地安装继续可用；0.5.0 及更早的 Python 包没有发布到 PyPI。
+
+### Python：与 JavaScript 同一套产品与五步能力
+
+- 增加产品协议与点位映射：`handGloveSegmented`（`glove`）、`handGloveFullPacket`、`hand`（`pad`）、`humanBody`（`body`）、`jqInsole`（`insole`），解析规则、分区和丢弃计数与 JavaScript 实现逐块对照一致。入口为 `connect_product / connect_glove / connect_hand_pad`、`list_device_products()` 与 `create_product_parser()`，产品帧为 `GloveFrame / PadFrame / BodyFrame / InsoleFrame`。
+- 分包手套支持与 0.5.0 Node 相同的两种连接方式：`path + side` 手动直连；省略其一或传入 `scan` 时自动发现，唯一匹配才连接，并在重连后继续核对手侧。新增 `scan_product_ports()`：逐口只读采样，按 `packet_type` 1/2 识别左/右手，返回设备列表与逐口诊断，支持取消；扫描样本不进入回调或采集。连接与扫描共用进程内的串口预约，扫描不会打开已被连接占用的串口。
+- 产品连接支持 `on_data / on_error / on_state_change` 回调（后台读取线程）和原有的同步 `read_frame()`；默认在原串口上有限重连（每 3 秒、最多 3 次），规则与 Node 相同。通用 `connect()` 可用 `reconnect=` 显式启用。
+- 增加五个快速函数 `read_product / create_ws / start_recording / stop_recording / download_recording`，以及基础的 `serve_device`、`connect_stream`、`encode_stream_frame / decode_stream_frame`。WS 数据协议为 `shroom.frame.v1`，Python 服务可被 JavaScript 网页连接，Python 客户端也可连接 Node 服务。
+- 增加带标签的 SQLite 录制与 CSV / JSONL 导出，数据库结构与 JavaScript 相同，同一录制目录可先后由两种语言的服务打开；`download_recording(target, path)` 直接保存文件。
+- 增加 `BackendSdkClient`、产品模拟 `create_product_mock_device()`、30 种内置点位排列与 `list_layouts / list_products / get_product`、调色板 `shroom / jet / jet_white / grey`。
+- 真实设备的数据服务需要 `stream` 授权，采集另需 `recording`；授权校验代码（`license.py`）未改动。
+- 数据服务默认只监听本机并校验网页来源与 Host；每个连接只处理一个 HTTP 请求，未读取的请求正文不会被当作后续请求。
+- 仍只使用标准库（真实串口需要 `pyserial`）。不提供 Web Serial、Canvas 热力图与产品视图。
+
+### 行为变化（Python）
+
+- `layout` 现在接受全部内置排列名；省略 `rows / cols` 时由排列决定输出行列，数据不足一帧扫描点时报错。此前只接受 `raw` / `mat32`，其他名称报错；`mat32` 的结果不变。
+- 设备新增 `on_frame / on_data / on_error`：只有订阅时才启动后台读取线程，不订阅时与之前一样没有后台线程。
+- 新协议均以合成数据和 JavaScript 参考实现验证，未连接真实硬件；接入实物前需用对应固件核对。
+
 ## [0.5.0] - 2026-11-13
 
 - Node 新增基础 API `scanProductPorts()`：在 921600 波特率下逐口读取分包手套数据，按 `packetType=1/2` 识别左/右手，返回设备列表与逐口诊断。只识别手侧，不将类型字节视为唯一设备编号。

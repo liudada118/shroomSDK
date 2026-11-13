@@ -119,7 +119,7 @@ const color = getColormap('shroom');
 console.log(color(0.5));
 ```
 
-**注意事项**：内置函数把输入限制在 0～1，自定义函数由应用保证范围和性能。此函数在 Node.js 与浏览器入口都可用，Python 没有相同色图 API。
+**注意事项**：内置函数把输入限制在 0～1，自定义函数由应用保证范围和性能。此函数在 Node.js 与浏览器入口都可用；Python 提供数值一致的 `shroom / jet / jet_white / grey` 与 `get_colormap()`，返回 `(R, G, B)` 元组。
 
 ### shroom / jet / jetWhite / grey / COLORMAPS {#builtin-colormaps}
 
