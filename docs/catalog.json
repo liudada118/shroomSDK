@@ -74,7 +74,7 @@
       { "id": "storage", "label": "存储" }
     ],
     "tocDescriptions": {
-      "node-connect-glove": "连接分包手套并指定实物左右手",
+      "node-connect-glove": "连接分包手套：手动或自动识别",
       "node-connect-hand-pad": "连接手部检测垫",
       "node-connect-product": "按产品类型连接设备",
       "node-serve-device": "创建独立 WS 与下载服务",
@@ -83,6 +83,7 @@
       "node-on-data": "订阅高层产品数据",
       "node-product-data": "读取产品压力矩阵与手套分包/整包字段",
       "node-list-ports": "列出可用串口",
+      "node-scan-product-ports": "扫描分包手套并识别左右手",
       "node-connect": "连接串口设备",
       "node-mock": "生成模拟传感器数据",
       "node-on-frame": "订阅每一帧数据",
