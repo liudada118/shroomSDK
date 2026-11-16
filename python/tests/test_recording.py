@@ -161,8 +161,13 @@ class RecordingStoreTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: first.status()["frame_count"] >= 200))
         error = self.assert_code("RECORDING_WRITE_FAILED", RecordingStore, self.directory)
         self.assertNotIn(str(self.directory), str(error))
-        committed = self.rows("SELECT COUNT(*) FROM frames")[0][0]
-        first._database._release()  # The process dies: no stop, no close.
+        # The process dies: no stop, no close. The writer thread may still be committing the last frames, so
+        # the cut is made under the database lock, between two transactions, which is how a crash leaves the
+        # file. Closing a connection another thread is using crashes the interpreter instead.
+        with first._database._lock:
+            first._database._release()
+        committed = self.rows("SELECT COUNT(*) FROM frames")[0][0]  # Counted after the cut: nothing is written later.
+        self.assertGreaterEqual(committed, 200)
         second = self.store()
         recovered, = second.list()
         self.assertEqual((recovered["id"], recovered["status"], recovered["frame_count"], recovered["error"]["code"]),
