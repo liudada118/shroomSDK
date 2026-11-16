@@ -7,7 +7,11 @@ import { encodeStreamFrame } from '../../src/core/stream-codec.js';
 import { createRecordingStore, recordingCsv, recordingJsonl } from '../../src/node/recording.js';
 
 const [mode, ...args] = process.argv.slice(2);
-const print = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
+// 管道上的 stdout 在 macOS / Linux 是异步写入：必须等写完再继续，
+// 否则随后的 process.exit() 会把超过管道缓冲区（约 64 KiB）的输出截断。
+const print = (value) => new Promise((resolve, reject) => {
+  process.stdout.write(`${JSON.stringify(value)}\n`, (error) => (error ? reject(error) : resolve()));
+});
 const stdinLines = createInterface({ input: process.stdin });
 const nextLine = () => new Promise((resolve) => stdinLines.once('line', resolve));
 const text = async (chunks) => { let out = ''; for await (const chunk of chunks) out += chunk; return out; };
@@ -21,9 +25,9 @@ if (mode === 'client') {
   const stream = await connectStream({ url, WebSocketImpl: WebSocket,
     onData: (frame) => frames.push(encodeStreamFrame(frame)),
     onError: (error) => errors.push({ code: error.code, message: error.message }) });
-  print({ event: 'ready', info: stream.info, recording: stream.recording });
+  await print({ event: 'ready', info: stream.info, recording: stream.recording });
   const started = await stream.startRecording({ label });
-  print({ event: 'recording', id: started.id });
+  await print({ event: 'recording', id: started.id });
   const deadline = Date.now() + 15000;
   while (frames.length < Number(expected) && Date.now() < deadline) await new Promise((done) => setTimeout(done, 20));
   const stopped = await stream.stopRecording();
@@ -36,7 +40,7 @@ if (mode === 'client') {
   const csv = await download('csv');
   const jsonl = await download('jsonl');
   await stream.close();
-  print({ event: 'done', frames, errors, started, stopped, list, csv, jsonl });
+  await print({ event: 'done', frames, errors, started, stopped, list, csv, jsonl });
   process.exit(0);
 }
 
@@ -45,7 +49,7 @@ if (mode === 'server') {
   const [product, side, directory] = args;
   const device = createProductMockDevice(product === 'hand' ? { product } : { product, side });
   const server = await serveDevice(device, { port: 0, recordingsDir: directory });
-  print({ url: server.url, httpUrl: server.httpUrl });
+  await print({ url: server.url, httpUrl: server.httpUrl });
   await nextLine();
   await server.close();
   await device.close();
@@ -61,7 +65,7 @@ if (mode === 'store-write') {
   for (const frame of frames) store.append(frame);
   const stopped = await store.stop();
   await store.close();
-  print({ started, stopped });
+  await print({ started, stopped });
   process.exit(0);
 }
 
@@ -73,7 +77,7 @@ if (mode === 'store-read') {
   const descriptor = store.download(id);
   const result = { list, jsonl: await text(recordingJsonl(descriptor)), csv: await text(recordingCsv(descriptor)) };
   await store.close();
-  print(result);
+  await print(result);
   process.exit(0);
 }
 
