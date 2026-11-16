@@ -102,9 +102,12 @@ class RecordingStoreTests(unittest.TestCase):
                 self.assert_code("INVALID_CONFIG", store.start, label)
         self.assert_code("RECORDING_NOT_ACTIVE", store.stop)
         self.assertIsNone(store.status())
-        store.start("x" * 200)
+        first = store.start("x" * 200)
         self.assert_code("RECORDING_ACTIVE", store.start, "second")
         store.stop()
+        # The list is ordered by start time in milliseconds; on a fast disk both sessions can start within
+        # the same one, so let the clock move on before the order is checked.
+        self.assertTrue(wait_until(lambda: time.time_ns() // 1_000_000 > first["started_at"]))
         self.assertEqual(store.start("second")["label"], "second")
         self.assertEqual([meta["label"] for meta in store.list()][-1], "x" * 200)
 
