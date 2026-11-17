@@ -4,7 +4,7 @@ const callProducts = {
   pad: { connect: 'connectHandPad', fields: ['pressureMatrix', 'values'] },
   body: { connect: 'connectProduct', nodeExampleOnly: true, minSdkVersion: '0.3.0', fields: ['regions', 'raw'] },
   insole: { connect: 'connectProduct', side: '脚', nodeExampleOnly: true, minSdkVersion: '0.3.0', fields: ['sensors', 'pressure', 'imu'] },
-  foot: { connect: 'connectTactileFoot', side: '脚', nodeExampleOnly: true, minSdkVersion: '0.7.0', fields: ['pressure', 'imu.raw', 'rawPackets'] },
+  foot: { connect: 'connectTactileFoot', side: '脚', nodeExampleOnly: true, minSdkVersion: '0.7.1', fields: ['pressure', 'imu.raw', 'rawPackets'] },
 };
 
 /** 供同一五步流程的 Node / WS 回调共用；仅返回字段名，不解码或绘制数据。 */
@@ -45,7 +45,7 @@ export function createProductCall(options) {
     env === 'web' ? '// SDK 授权完成后，在“连接”按钮的点击事件中调用。'
       : automatic ? '// SDK 授权完成后自动扫描；仅在找到唯一匹配设备时连接。'
         : '// SDK 授权完成后调用；path 替换为系统中的实际串口。',
-    ...(product === 'foot' ? ['// 包类型 3=左脚、4=右脚；ADC、IMU 字节和带帧尾的两份原包均原样保留。'] : []),
+    ...(product === 'foot' ? ['// 包类型 3=左脚、4=右脚；60点原始ADC，6列×10行；IMU字节和带帧尾的两份原包均保留。'] : []),
     `const device = await ${name}({`,
     ...(quickFlow || name === 'connectProduct' ? [`  product: '${product}', // 由 SDK 注册表选择对应产品协议`] : []),
     ...(env === 'node' && !automatic ? [`  path: '${path}', // 替换为 listPorts() 查询后用户选择的串口`] : []),

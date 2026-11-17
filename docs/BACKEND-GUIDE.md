@@ -135,7 +135,7 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 
 **参数**：可选 `{ path, side, scan, onData, onError, reconnect, onStateChange }`。Node 可省略 `path/side` 或设置 `side: 'auto'` 自动识别，也可明确指定 `path + side: 'left' / 'right'` 直连；显式 `scan` 会先验证串口。固定 921600 波特率，不接受协议或布局覆盖。
 
-**返回值**：`Promise<NodeProductDevice<TactileFootFrame>>`。包类型 `3=左脚、4=右脚` 始终决定侧别，显式参数只作筛选；不匹配的包不会被重新标记后交付。`pressure` 保留 256 个原扫描 ADC，`imu.raw` 保留 16 字节，`rawPackets` 为含头尾的两包（134/150 字节）。16×16 仅为扫描存储形状。
+**返回值**：`Promise<NodeProductDevice<TactileFootFrame>>`。包类型 `3=左脚、4=右脚` 始终决定侧别，显式参数只作筛选；不匹配的包不会被重新标记后交付。从 0.7.1 起，`raw / pressure / pressureMatrix` 输出对应脚线序的 60 点原始 ADC，6 列×10 行（rows=10、cols=6）。`imu.raw` 保留 16 字节，`rawPackets` 为含头尾的两包（134/150 字节），保留完整扫描通道。
 
 **示例**：`const device = await Shroom.connectTactileFoot({ path: 'COM3', side: 'left', onData: data => console.log(data.pressure, data.rawPackets) })`；结束时 `await device.close()`。
 
@@ -165,7 +165,7 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 | `handGloveFullPacket` | 触觉手套（整包）/ glove | 921600 / 274 | 256 / 五指、独立指腹与手掌分区 |
 | `humanBody` | 人体全身 / body | 1000000 / 1024 | 1024扫描通道 / 10区400真实映射点 |
 | `jqInsole` | 鞋垫A版 / insole | 默认921600 / 默认552（8bit为272） | 256扫描通道 / 112真实点；payload不包含魔术头和分包type/index |
-| `footVideo` | 触觉足底 / foot（0.7.0） | 921600 / 130+146=276 | 256原扫描 ADC、16字节原始 IMU、含帧尾的完整两包；不映射/抽点 |
+| `footVideo` | 触觉足底 / foot（0.7.1） | 921600 / 130+146=276 | 60点原始ADC、6列×10行；左右脚独立线序，16字节原始IMU与完整两包保留；不插值或滤波 |
 | `hand` | 手部检测垫 / mat | 1000000 / 1024 | 1024 / 32×32 |
 
 **示例**：`console.log(Shroom.listDeviceProducts())`。

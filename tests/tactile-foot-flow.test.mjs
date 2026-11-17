@@ -12,14 +12,26 @@ import { readProduct, createWS, startRecording, stopRecording, downloadRecording
 const tail = [0xaa, 0x55, 0x03, 0x99];
 const timings = { openTimeoutMs: 100, closeTimeoutMs: 100 };
 const delay = milliseconds => new Promise(resolveDelay => setTimeout(resolveDelay, milliseconds));
+// Independent desktop 0-based orders; never import the adapter's own mapping as an expectation.
+const goldenOrder = {
+  3: [223, 207, 191, 175, 159, 143, 222, 206, 190, 174, 158, 142, 221, 205, 189, 173, 157, 141,
+    220, 204, 188, 172, 156, 140, 219, 203, 187, 171, 155, 139, 218, 202, 186, 170, 154, 138,
+    217, 201, 185, 169, 153, 137, 216, 200, 184, 168, 152, 136, 215, 199, 183, 167, 151, 135,
+    214, 198, 182, 166, 150, 134],
+  4: [22, 6, 246, 230, 214, 198, 23, 7, 247, 231, 215, 199, 24, 8, 248, 232, 216, 200,
+    25, 9, 249, 233, 217, 201, 26, 10, 250, 234, 218, 202, 27, 11, 251, 235, 219, 203,
+    28, 12, 252, 236, 220, 204, 29, 13, 253, 237, 221, 205, 30, 14, 254, 238, 222, 206,
+    31, 15, 255, 239, 223, 207],
+};
 
 /** Synthetic pressure and opaque IMU wire data; no real devices are opened by this suite. */
 function sample(type = 3, offset = 0) {
-  const pressure = Uint8Array.from({ length: 256 }, (_, i) => (i + offset) & 255);
+  const scan = Uint8Array.from({ length: 256 }, (_, i) => (i + offset) & 255);
   const imu = Uint8Array.of(0, 0, 192, 127, 0, 0, 128, 255, 5, 4, 3, 2, 255, 254, 1, 0);
-  const first = Uint8Array.from([1, type, ...pressure.slice(0, 128), ...tail]);
-  const second = Uint8Array.from([2, type, ...pressure.slice(128), ...imu, ...tail]);
-  return { pressure, imu, first, second, wire: Buffer.from([...first, ...second]) };
+  const first = Uint8Array.from([1, type, ...scan.slice(0, 128), ...tail]);
+  const second = Uint8Array.from([2, type, ...scan.slice(128), ...imu, ...tail]);
+  const pressure = Uint8Array.from(goldenOrder[type] ?? [], index => scan[index]);
+  return { pressure, scan, imu, first, second, wire: Buffer.from([...first, ...second]) };
 }
 
 /** Provide the three complete frames needed to identify a stable side during a probe. */
@@ -213,6 +225,9 @@ test('both feet retain exact wire bytes through Node five-step calls, WS, SQLite
       assert.equal(frame.product, 'footVideo');
       assert.equal(frame.side, side);
       assert.equal(frame.packetType, type);
+      assert.equal(frame.rows, 10);
+      assert.equal(frame.cols, 6);
+      assert.equal(frame.raw.length, 60);
       assert.deepEqual(frame.raw, fixture.pressure);
       assert.deepEqual(frame.pressureMatrix, fixture.pressure);
       assert.deepEqual(frame.imu.raw, fixture.imu);
@@ -227,6 +242,9 @@ test('both feet retain exact wire bytes through Node five-step calls, WS, SQLite
       assert.deepEqual(exported.frame.imu.raw, Array.from(fixture.imu));
       assert.deepEqual(exported.frame.rawPackets, [Array.from(fixture.first), Array.from(fixture.second)]);
       assert.deepEqual(Buffer.from(exported.frame.rawPackets.flat()), fixture.wire);
+      assert.equal(exported.frame.raw.length, 60);
+      assert.equal(exported.frame.rows, 10);
+      assert.equal(exported.frame.cols, 6);
       const { default: Database } = await import('better-sqlite3');
       const db = new Database(join(directory, 'recordings.sqlite'), { readonly: true });
       try {

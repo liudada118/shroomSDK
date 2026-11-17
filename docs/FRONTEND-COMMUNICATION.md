@@ -113,7 +113,7 @@ document.querySelector('#connect').onclick = async () => {
 
 **参数**：必填 `side: 'left' | 'right'`，可选 `port / filters / onData / onError`。浏览器不提供 Node 的串口扫描；包类型 3=左脚、4=右脚，必须与 side 一致，参数不能覆盖包内脚侧。
 
-**返回值**：`Promise<ProductDevice<TactileFootFrame>>`，提供 `onData / onFrame / onError / close`。`raw / pressure` 为原扫描 256 字节，`imu.raw` 为原始 16 字节，`rawPackets` 保留两份含头尾的完整包。16×16 仅为存储形状，不提供鞋形映射或专用产品视图。
+**返回值**：`Promise<ProductDevice<TactileFootFrame>>`，提供 `onData / onFrame / onError / close`。从 0.7.1 起，`raw / pressure / pressureMatrix` 为对应脚线序的 60 点原始 ADC，6 列×10 行（rows=10、cols=6）；`imu.raw` 为原始 16 字节，`rawPackets` 保留两份含头尾的完整包。不插值、滤波或标定。
 
 **示例**：在点击回调中执行 `const device = await Shroom.connectTactileFoot({ side: 'left', onData: data => console.log(data.pressure, data.rawPackets), onError: console.error })`，结束时 `await device.close()`；首次调用失败仍需捕获 Promise。完整格式见[触觉足底](TACTILE-FOOT.md)。
 
@@ -138,7 +138,7 @@ document.querySelector('#connect').onclick = async () => {
 | `hand` | `raw / pressure`，1024 个原扫描 ADC | `pressureMatrix`，1024 个 ADC；`values`，归一化 32×32 | 基础 Frame 统计与时间戳 |
 | `handGloveSegmented` | `raw / pressure`，两包合并的 256 个 ADC | 旧 `pressureMatrix / values` 保留兼容，业务读取命名分区 | `fingers / palm / side / protocol / packetType / imu.raw`（16 字节），无 sequence |
 | `handGloveFullPacket` | `raw / pressure`，256 个 ADC | 旧 `pressureMatrix / values`，195 点、13×15 展示映射 | `fingers / palm / side / sequence / packetType / imu.raw`（16 字节） |
-| `footVideo`（0.7.0） | `raw / pressure`，256 个原扫描 ADC | `pressureMatrix` 仍为原扫描，`values` 为 ADC/255；16×16 不是鞋形 | `side / protocol / packetType / imu.raw`（16字节）、`rawPackets`（134/150字节），无 sequence |
+| `footVideo`（0.7.1） | `raw / pressure`，对应脚线序的 60 点原始 ADC | `pressureMatrix` 同为 60 点，6 列×10 行；`values` 为 ADC/255 | `side / protocol / packetType / imu.raw`（16字节）、`rawPackets`（134/150字节），无 sequence |
 
 **示例**：`const off = device.onData((data) => heatmap.render(data))`；优先把首个回调作为连接选项 `onData` 提供，以避免连接期间漏掉首帧。
 

@@ -1,11 +1,12 @@
 /**
  * 触觉足底：130 字节首包 + 146 字节尾包，各带 AA 55 03 99 帧尾。
  * byte[0] 是段号 1/2；byte[1] 为 3=左脚、4=右脚，首尾类型必须一致。
- * 交付全部 256 个原扫描 ADC、16 字节原始 IMU 和含帧尾的两份原包；不抽点或插值。
+ * 按左右脚线序交付 6 列×10 行的 60 个测点原始 ADC；完整扫描和 IMU 保留于两份原包。
  */
 import { ShroomError } from '../errors.js';
 import { decodeFrame } from '../frame.js';
 import { streamArray, streamInvalid, streamNumber, streamObject, streamOutput, streamPressureFields } from './stream-utils.js';
+import { mapTactileFootPressure } from './tactile-foot-layout.js';
 
 const tactileFootTail = [0xaa, 0x55, 0x03, 0x99];
 const tactileFootFirstSize = 130;
@@ -15,7 +16,7 @@ const tactileFootSideByType = Object.freeze({ 3: 'left', 4: 'right' });
 const tactileFootProfile = Object.freeze({
   product: 'footVideo', label: '触觉足底', family: 'foot',
   baudRate: 921600, payloadLength: tactileFootFirstSize + tactileFootSecondSize,
-  sensorPoints: 256, rows: 16, cols: 16,
+  sensorPoints: 60, rows: 10, cols: 6,
   firstPacketLength: tactileFootFirstSize, secondPacketLength: tactileFootSecondSize,
 });
 
@@ -27,12 +28,13 @@ function validateTactileFootOptions(options, invalid) {
 }
 
 function createTactileFootFrame(first, second, side) {
-  const pressure = new Uint8Array(256);
-  pressure.set(first.subarray(2, tactileFootFirstSize));
-  pressure.set(second.subarray(2, 130), 128);
+  const scan = new Uint8Array(256);
+  scan.set(first.subarray(2, tactileFootFirstSize));
+  scan.set(second.subarray(2, 130), 128);
+  const pressure = mapTactileFootPressure(scan, side);
   return {
-    // 16×16 仅为扫描存储形状；归一化值和统计量不代表物理鞋形或标定压力。
-    ...decodeFrame(pressure, { rows: 16, cols: 16 }),
+    // raw/pressure 保留测点 ADC 原值；values 和统计量为单独的兼容派生字段。
+    ...decodeFrame(pressure, { rows: 10, cols: 6 }),
     product: tactileFootProfile.product, protocol: 'segmented', side, packetType: first[1],
     pressure, pressureMatrix: pressure.slice(),
     imu: { raw: second.slice(130, tactileFootSecondSize) },
@@ -125,7 +127,7 @@ function readTactileFootPacket(value, field, length, segment, packetType) {
 
 function readTactileFootStreamFields(input, output, typed) {
   streamPressureFields(input, output, typed);
-  if (output.rows !== 16 || output.cols !== 16 || output.raw.length !== 256) streamInvalid('footVideo.shape');
+  if (output.rows !== 10 || output.cols !== 6 || output.raw.length !== 60) streamInvalid('footVideo.shape');
   if (input.protocol !== 'segmented') streamInvalid('protocol');
   if (Object.hasOwn(input, 'sequence')) streamInvalid('sequence');
   const packetType = streamNumber(input.packetType, 'packetType', 3, 4, true);
@@ -140,7 +142,8 @@ function readTactileFootStreamFields(input, output, typed) {
   if (!Array.isArray(input.rawPackets) || input.rawPackets.length !== 2) streamInvalid('rawPackets');
   const first = readTactileFootPacket(input.rawPackets[0], 'rawPackets[0]', tactileFootFirstSize, 1, packetType);
   const second = readTactileFootPacket(input.rawPackets[1], 'rawPackets[1]', tactileFootSecondSize, 2, packetType);
-  tactileFootEqualValues([...first.slice(2, tactileFootFirstSize), ...second.slice(2, 130)], output.raw, 'rawPackets/raw');
+  const scan = [...first.slice(2, tactileFootFirstSize), ...second.slice(2, 130)];
+  tactileFootEqualValues(mapTactileFootPressure(scan, input.side), output.raw, 'rawPackets/raw');
   tactileFootEqualValues(second.slice(130, tactileFootSecondSize), imu, 'rawPackets/imu.raw');
 
   output.protocol = 'segmented'; output.side = input.side; output.packetType = packetType;

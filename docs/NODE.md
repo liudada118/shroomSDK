@@ -2,7 +2,7 @@
 
 **0.5.0 新增：** Node 分包手套支持手动选口与自动识别。手动传 `path + side`；自动调用 `readProduct({ product: 'glove', onData, onError })`，内部复用基础 `connectProduct()` → `scanProductPorts()`。五个快速函数保持不变；0.4.0 仍需手动配置，自动识别要求升级到 0.5.0。
 
-**0.7.0 新增：** 触觉足底 `footVideo / foot` 使用 `connectTactileFoot()` 或 `readProduct({ product: 'foot', onData })`，支持手动与自动发现，按包类型3=左脚、4=右脚保留256个原扫描ADC、16字节IMU和两份完整 `rawPackets`。详见[触觉足底](TACTILE-FOOT.md)；Python暂未增加此产品。
+**0.7.1 修正：** 触觉足底 `footVideo / foot` 使用 `connectTactileFoot()` 或 `readProduct({ product: 'foot', onData })`，支持手动与自动发现，按包类型3=左脚、4=右脚输出对应脚线序的60点原始ADC（6列×10行，rows=10、cols=6）、16字节IMU和两份完整 `rawPackets`。详见[触觉足底](TACTILE-FOOT.md)；Python暂未增加此产品。
 
 0.3.0 新增鞋垫和人体全身，仍使用 `readProduct()` 或基础 `connectProduct()`。鞋垫传 `product:'insole', side:'left'/'right', protocol:'12bit'/'8bit'`；人体传 `product:'body'`。详见[鞋垫字段](INSOLE.md)、[人体线序](HUMAN-BODY.md)。使用新产品需安装0.3.0或更高版本，Node与网页使用相同版本。
 

@@ -34,6 +34,15 @@ function supportsSegmentedGlove(version) {
     || (Number(minor) === 4 && (Number(patch) > 0 || !prerelease));
 }
 
+/** 足底 60 点线序从 0.7.1 起修正；历史 0.7.0 仍按原 256 通道合同独立验收。 */
+function supportsMappedTactileFoot(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([\w.-]+))?(?:\+[\w.-]+)?$/.exec(version);
+  if (!match) throw new Error('无法判断 npm 验收版本：' + version);
+  const [, major, minor, patch, prerelease] = match;
+  return Number(major) > 0 || Number(minor) > 7
+    || (Number(minor) === 7 && (Number(patch) > 1 || (Number(patch) === 1 && !prerelease)));
+}
+
 /** 不经过 shell，Windows 上同样以参数数组启动 npm。 */
 async function npmCli() {
   const binary = dirname(process.execPath);
@@ -115,8 +124,10 @@ import * as core from 'shroom-sdk/core';
 const [recordingsDir, expectedVersion, browserBundle] = process.argv.slice(2);
 ${supportsNewProducts.toString()}
 ${supportsSegmentedGlove.toString()}
+${supportsMappedTactileFoot.toString()}
 const checkExpandedProducts = supportsNewProducts(expectedVersion);
 const checkSegmentedGlove = supportsSegmentedGlove(expectedVersion);
+const checkMappedTactileFoot = supportsMappedTactileFoot(expectedVersion);
 // 同版本的本地候选包可能增加能力；注册表旧包不能按版本号被要求具备新足底入口。
 const checkTactileFoot = typeof node.connectTactileFoot === 'function';
 await writeFile('capabilities.json', JSON.stringify({ tactileFoot: checkTactileFoot }));
@@ -217,12 +228,38 @@ if (checkExpandedProducts) {
   }
   function footSample(side) {
     const packetType = side === 'left' ? 3 : 4;
-    const adc = Array.from({ length: 256 }, (_, i) => (i * 19 + 7) % 256);
+    const scanAdc = Array.from({ length: 256 }, (_, i) => (i * 19 + 7) % 256);
+    // 独立 1 基 golden 表来自足底点位合同；消费者不导入包内线序或映射函数。
+    const goldenPoints = side === 'left' ? [
+      224, 208, 192, 176, 160, 144,
+      223, 207, 191, 175, 159, 143,
+      222, 206, 190, 174, 158, 142,
+      221, 205, 189, 173, 157, 141,
+      220, 204, 188, 172, 156, 140,
+      219, 203, 187, 171, 155, 139,
+      218, 202, 186, 170, 154, 138,
+      217, 201, 185, 169, 153, 137,
+      216, 200, 184, 168, 152, 136,
+      215, 199, 183, 167, 151, 135,
+    ] : [
+      23, 7, 247, 231, 215, 199,
+      24, 8, 248, 232, 216, 200,
+      25, 9, 249, 233, 217, 201,
+      26, 10, 250, 234, 218, 202,
+      27, 11, 251, 235, 219, 203,
+      28, 12, 252, 236, 220, 204,
+      29, 13, 253, 237, 221, 205,
+      30, 14, 254, 238, 222, 206,
+      31, 15, 255, 239, 223, 207,
+      32, 16, 256, 240, 224, 208,
+    ];
+    assert.equal(goldenPoints.length, 60);
+    const adc = checkMappedTactileFoot ? goldenPoints.map(point => scanAdc[point - 1]) : scanAdc;
     // IMU 是不透明字节；包含 NaN/Infinity 位型也不能在数据交付前被过滤或改写。
     const imu = Uint8Array.of(0, 0, 192, 127, 0, 0, 128, 127, 0, 0, 128, 255, 255, 0, 128, 1);
-    const rawPackets = [[1, packetType, ...adc.slice(0, 128), ...header],
-      [2, packetType, ...adc.slice(128), ...imu, ...header]];
-    return { adc, imu, packetType, rawPackets, wire: Uint8Array.from(rawPackets.flat()) };
+    const rawPackets = [[1, packetType, ...scanAdc.slice(0, 128), ...header],
+      [2, packetType, ...scanAdc.slice(128), ...imu, ...header]];
+    return { adc, scanAdc, imu, packetType, rawPackets, wire: Uint8Array.from(rawPackets.flat()) };
   }
   const browserBytes = runInNewContext('Uint8Array', browser);
   const typed = (value, name) => assert.equal(Object.prototype.toString.call(value), '[object ' + name + ']');
@@ -294,15 +331,21 @@ if (checkExpandedProducts) {
             assert.equal(copy.side, config.side);
             assert.equal(copy.packetType, sample.packetType);
             assert.equal('sequence' in copy, false);
-            assert.equal(copy.rows, 16); assert.equal(copy.cols, 16);
+            assert.equal(copy.rows, checkMappedTactileFoot ? 10 : 16);
+            assert.equal(copy.cols, checkMappedTactileFoot ? 6 : 16);
+            assert.equal(copy.raw.length, checkMappedTactileFoot ? 60 : 256);
             typed(copy.pressure, 'Uint8Array'); typed(copy.pressureMatrix, 'Uint8Array');
             typed(copy.imu.raw, 'Uint8Array');
             assert.deepEqual(Array.from(copy.raw), sample.adc);
             assert.deepEqual(Array.from(copy.pressureMatrix), sample.adc);
+            assert.deepEqual(Array.from(copy.values), sample.adc.map(value => Math.fround(value / 255)));
             assert.deepEqual(Array.from(copy.imu.raw), Array.from(sample.imu));
             assert.deepEqual(Array.from(copy.rawPackets, packet => packet.length), [134, 150]);
             for (const packet of copy.rawPackets) typed(packet, 'Uint8Array');
             assert.deepEqual(Array.from(copy.rawPackets, packet => Array.from(packet)), sample.rawPackets);
+            const retainedScan = [...copy.rawPackets[0].slice(2, 130), ...copy.rawPackets[1].slice(2, 130)];
+            assert.equal(retainedScan.length, 256);
+            assert.deepEqual(retainedScan, sample.scanAdc, '完整原包必须保留全部 256 个扫描 ADC，不得压缩为 60 点');
             assert.equal(copy.fingers, undefined); assert.equal(copy.sensors, undefined);
           } else if (isBody) {
             assert.equal(copy.product, 'humanBody');

@@ -262,7 +262,7 @@ export interface DeviceProductInfo {
   /** 分包手套分别为 130、146；payloadLength 为二者合计 276，均不含帧尾。 */
   firstPacketLength?: number;
   secondPacketLength?: number;
-  /** 协议扫描通道数；不等于物理布局中已定义的传感器数量。 */
+  /** 产品 pressure 的点数；触觉足底为60个有效点，其他产品可能仍交付完整扫描通道。 */
   sensorPoints: number;
   /** 有明确物理点位表时，给出不含显示插值/重复格的点数。 */
   mappedSensorPoints?: number;
@@ -272,7 +272,7 @@ export interface DeviceProductInfo {
 /** 产品共有字段；按 product/协议收窄时使用 RegisteredProductFrame。 */
 export interface ProductFrame<TAdc extends Uint8Array | Uint16Array = Uint8Array | Uint16Array> extends Frame {
   product: DeviceProductId;
-  /** 原始扫描顺序 ADC；不是物理压力单位。12位鞋垫与 raw 字节数组不同。 */
+  /** 产品原始 ADC；顺序以产品契约为准。不是物理压力单位，12位鞋垫与 raw 字节数组不同。 */
   pressure: TAdc;
   /** 按产品映射后的 ADC，长度 rows*cols；values 是对应的 0~1 相对值。 */
   pressureMatrix: TAdc;
@@ -328,7 +328,7 @@ export interface SegmentedGloveFrame extends Omit<GloveFrame, 'product' | 'seque
   sequence?: never;
 }
 
-/** 触觉足底分包原始数据；16×16 仅为扫描存储形状，不代表物理鞋形。 */
+/** 触觉足底测点原始数据；6 列×10 行，按左右脚独立线序保留 60 个 ADC 原值。 */
 export interface TactileFootFrame extends ProductFrame<Uint8Array> {
   product: 'footVideo';
   protocol: 'segmented';
@@ -336,13 +336,16 @@ export interface TactileFootFrame extends ProductFrame<Uint8Array> {
   /** 包内身份：3=左脚、4=右脚；显式 side 只用于筛选，不能改变身份。 */
   packetType: 3 | 4;
   sequence?: never;
-  rows: 16;
-  cols: 16;
-  /** 与 raw / pressure 相同的 256 个扫描 ADC，未抽点、插值、镜像或标定。 */
+  rows: 10;
+  cols: 6;
+  /** 对应脚线序的60个有效测点ADC原值，逐行排列，每行6点。 */
+  raw: Uint8Array;
+  pressure: Uint8Array;
+  /** 与 raw / pressure 相同的 60 个测点 ADC，未插值、归一化或标定。 */
   pressureMatrix: Uint8Array;
   /** 原样保留全部 16 字节，不解释四元数、轴序或单位。 */
   imu: { raw: Uint8Array };
-  /** 两份完整串口原包，含各自 AA550399 帧尾，长度依次为 134、150。 */
+  /** 两份完整串口原包，含完整 256 点扫描和各自 AA550399 帧尾，长度依次为 134、150。 */
   rawPackets: [Uint8Array, Uint8Array];
 }
 

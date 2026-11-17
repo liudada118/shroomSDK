@@ -9,14 +9,30 @@ import { createProductMockDevice } from '../src/core/mock.js';
 
 const tail = Uint8Array.of(0xaa, 0x55, 0x03, 0x99);
 const concatenate = (...parts) => Uint8Array.from(parts.flatMap(part => Array.from(part)));
+// Independent 0-based golden orders transcribed from the desktop footL/footR source tables.
+const goldenOrder = {
+  left: [223, 207, 191, 175, 159, 143, 222, 206, 190, 174, 158, 142, 221, 205, 189, 173, 157, 141,
+    220, 204, 188, 172, 156, 140, 219, 203, 187, 171, 155, 139, 218, 202, 186, 170, 154, 138,
+    217, 201, 185, 169, 153, 137, 216, 200, 184, 168, 152, 136, 215, 199, 183, 167, 151, 135,
+    214, 198, 182, 166, 150, 134],
+  right: [22, 6, 246, 230, 214, 198, 23, 7, 247, 231, 215, 199, 24, 8, 248, 232, 216, 200,
+    25, 9, 249, 233, 217, 201, 26, 10, 250, 234, 218, 202, 27, 11, 251, 235, 219, 203,
+    28, 12, 252, 236, 220, 204, 29, 13, 253, 237, 221, 205, 30, 14, 254, 238, 222, 206,
+    31, 15, 255, 239, 223, 207],
+};
+
+/** Extract expected original ADCs using the independent desktop golden order. */
+function expectedPressure(scan, type) {
+  return Uint8Array.from(goldenOrder[type === 3 ? 'left' : 'right'], index => scan[index]);
+}
 
 /** Independent synthetic wire bytes, including non-finite float bit patterns in the opaque IMU. */
 function sample(type = 3, offset = 0) {
-  const pressure = Uint8Array.from({ length: 256 }, (_, i) => (i + offset) & 255);
+  const scan = Uint8Array.from({ length: 256 }, (_, i) => (i + offset) & 255);
   const imu = Uint8Array.of(0, 0, 192, 127, 0, 0, 128, 127, 0, 0, 128, 255, 255, 0, 128, 1);
-  const first = concatenate([1, type], pressure.slice(0, 128), tail);
-  const second = concatenate([2, type], pressure.slice(128), imu, tail);
-  return { pressure, imu, first, second, wire: concatenate(first, second) };
+  const first = concatenate([1, type], scan.slice(0, 128), tail);
+  const second = concatenate([2, type], scan.slice(128), imu, tail);
+  return { scan, imu, first, second, wire: concatenate(first, second) };
 }
 
 /** Assert the protocol's original bytes without deriving expected results from the adapter. */
@@ -26,15 +42,17 @@ function assertOriginal(frame, fixture, type = 3) {
   assert.equal(frame.side, type === 3 ? 'left' : 'right');
   assert.equal(frame.packetType, type);
   assert.equal(Object.hasOwn(frame, 'sequence'), false);
-  assert.equal(frame.rows, 16);
-  assert.equal(frame.cols, 16);
+  assert.equal(frame.rows, 10);
+  assert.equal(frame.cols, 6);
   assert.ok(frame.raw instanceof Uint8Array);
   assert.ok(frame.pressure instanceof Uint8Array);
   assert.ok(frame.pressureMatrix instanceof Uint8Array);
-  assert.deepEqual(frame.raw, fixture.pressure);
-  assert.deepEqual(frame.pressure, fixture.pressure);
-  assert.deepEqual(frame.pressureMatrix, fixture.pressure);
-  assert.deepEqual(frame.values, Float32Array.from(fixture.pressure, value => value / 255));
+  const pressure = expectedPressure(fixture.scan, type);
+  assert.equal(frame.raw.length, 60);
+  assert.deepEqual(frame.raw, pressure);
+  assert.deepEqual(frame.pressure, pressure);
+  assert.deepEqual(frame.pressureMatrix, pressure);
+  assert.deepEqual(frame.values, Float32Array.from(pressure, value => value / 255));
   assert.deepEqual(frame.imu.raw, fixture.imu);
   assert.ok(frame.imu.raw instanceof Uint8Array);
   assert.equal(frame.rawPackets.length, 2);
@@ -55,9 +73,9 @@ test('tactile foot registers footVideo and foot separately from the legacy insol
   assert.equal(profile.label, '触觉足底');
   assert.equal(profile.baudRate, 921600);
   assert.equal(profile.payloadLength, 276);
-  assert.equal(profile.sensorPoints, 256);
-  assert.equal(profile.rows, 16);
-  assert.equal(profile.cols, 16);
+  assert.equal(profile.sensorPoints, 60);
+  assert.equal(profile.rows, 10);
+  assert.equal(profile.cols, 6);
   assert.ok(profiles.some(item => item.product === 'jqInsole'));
   for (const product of ['footVideo', 'foot']) {
     const prepared = prepareProductConnection({ product }, 'node');
@@ -71,6 +89,27 @@ test('tactile foot registers footVideo and foot separately from the legacy insol
   }
   for (const options of [{ baudRate: 115200 }, { rows: 32 }, { protocol: '12bit' }]) {
     assert.throws(() => prepareProductConnection({ product: 'foot', ...options }, 'node'), { code: 'INVALID_CONFIG' });
+  }
+});
+
+test('the two feet use their distinct physical 60-point orders as ten rows of six original ADCs', () => {
+  const left = createProductParser('foot').push(sample(3).wire)[0];
+  const right = createProductParser('foot').push(sample(4).wire)[0];
+  assert.deepEqual(Array.from(left.pressure), goldenOrder.left);
+  assert.deepEqual(Array.from(right.pressure), goldenOrder.right);
+  assert.notDeepEqual(left.pressure, right.pressure);
+  for (const [type, side] of [[3, 'left'], [4, 'right']]) {
+    const fixture = sample(type);
+    fixture.scan.fill(123);
+    goldenOrder[side].forEach((index, i) => { fixture.scan[index] = i % 2 ? 255 : 0; });
+    fixture.first = concatenate([1, type], fixture.scan.slice(0, 128), tail);
+    fixture.second = concatenate([2, type], fixture.scan.slice(128), fixture.imu, tail);
+    fixture.wire = concatenate(fixture.first, fixture.second);
+    const [frame] = createProductParser('foot').push(fixture.wire);
+    assertOriginal(frame, fixture, type);
+    assert.deepEqual(Array.from(frame.pressure), Array.from({ length: 60 }, (_, i) => i % 2 ? 255 : 0));
+    assert.equal(Object.hasOwn(frame, 'scanRaw'), false);
+    assert.equal(Object.hasOwn(frame, 'scan'), false);
   }
 });
 
@@ -146,8 +185,8 @@ test('noise, invalid packet boundaries and oversized chunks cannot bridge an old
   const invalid = [
     tail,
     concatenate([3], tail),
-    concatenate([7, 3], fixture.pressure.slice(0, 128), tail),
-    concatenate([1, 3], fixture.pressure.slice(0, 127), tail),
+    concatenate([7, 3], fixture.scan.slice(0, 128), tail),
+    concatenate([1, 3], fixture.scan.slice(0, 127), tail),
     concatenate(new Uint8Array(200000).fill(19), tail),
   ];
   for (const boundary of invalid) {
@@ -209,7 +248,7 @@ test('the stream codec refuses corrupted raw packets or fields inconsistent with
     source => { source.imu.raw[0] ^= 1; },
     source => { source.rawPackets[0][0] = 2; },
     source => { source.rawPackets[1][1] = 4; },
-    source => { source.rawPackets[0][2] ^= 1; },
+    source => { source.rawPackets[1][97] ^= 1; }, // Left-foot ADC223 is the first mapped point.
     source => { source.rawPackets[1][130] ^= 1; },
     source => { source.rawPackets[0][133] ^= 1; },
     source => { source.rawPackets[1].pop(); },
@@ -222,6 +261,17 @@ test('the stream codec refuses corrupted raw packets or fields inconsistent with
     assert.throws(() => decodeStreamFrame(source), { code: 'PARSE_FAILED' });
     assert.throws(() => encodeStreamFrame(source), { code: 'PARSE_FAILED' });
   }
+});
+
+test('unmapped scan channels remain byte-exact in rawPackets without entering the sixty measured values', () => {
+  const [frame] = createProductParser('foot').push(sample().wire);
+  const source = encodeStreamFrame(frame);
+  source.rawPackets[0][2] ^= 1; // Scan index0 is not a measured point on either foot.
+  const decoded = decodeStreamFrame(source);
+  assert.deepEqual(decoded.raw, frame.raw);
+  assert.deepEqual(decoded.pressureMatrix, frame.pressureMatrix);
+  assert.equal(decoded.rawPackets[0][2], source.rawPackets[0][2]);
+  assert.deepEqual(encodeStreamFrame(decoded).rawPackets, source.rawPackets);
 });
 
 for (const [side, type] of [['left', 3], ['right', 4]]) {
@@ -237,12 +287,18 @@ for (const [side, type] of [['left', 3], ['right', 4]]) {
     assert.equal(frame.side, side);
     assert.equal(frame.packetType, type);
     assert.equal(frame.protocol, 'segmented');
-    assert.equal(frame.raw.length, 256);
+    assert.equal(frame.raw.length, 60);
     assert.deepEqual(frame.raw, frame.pressure);
     assert.deepEqual(frame.pressureMatrix, frame.pressure);
     assert.deepEqual(frame.imu.raw, new Uint8Array(16));
-    assert.deepEqual(frame.rawPackets[0], concatenate([1, type], frame.pressure.slice(0, 128), tail));
-    assert.deepEqual(frame.rawPackets[1], concatenate([2, type], frame.pressure.slice(128), frame.imu.raw, tail));
+    assert.deepEqual(frame.rawPackets.map(packet => packet.length), [134, 150]);
+    assert.deepEqual(frame.rawPackets[0].slice(0, 2), Uint8Array.of(1, type));
+    assert.deepEqual(frame.rawPackets[1].slice(0, 2), Uint8Array.of(2, type));
+    const scan = concatenate(frame.rawPackets[0].slice(2, 130), frame.rawPackets[1].slice(2, 130));
+    assert.deepEqual(frame.pressure, expectedPressure(scan, type));
+    assert.deepEqual(frame.rawPackets[1].slice(130, 146), frame.imu.raw);
+    assert.deepEqual(frame.rawPackets[0].slice(-4), tail);
+    assert.deepEqual(frame.rawPackets[1].slice(-4), tail);
     assert.equal(Object.hasOwn(frame, 'sequence'), false);
     assert.equal(device.frameLength, 276);
     const decoded = decodeStreamFrame(encodeStreamFrame(frame));
@@ -263,8 +319,12 @@ test('the raw-foot CLI prints one complete right-foot JSON frame and exits in mo
   assert.equal(frame.product, 'footVideo');
   assert.equal(frame.side, 'right');
   assert.equal(frame.packetType, 4);
-  assert.equal(frame.pressure.length, 256);
+  assert.equal(frame.pressure.length, 60);
   assert.equal(frame.imuRaw.length, 16);
-  assert.deepEqual(frame.rawPackets[0], [1, 4, ...frame.pressure.slice(0, 128), ...tail]);
-  assert.deepEqual(frame.rawPackets[1], [2, 4, ...frame.pressure.slice(128), ...frame.imuRaw, ...tail]);
+  assert.deepEqual(frame.rawPackets.map(packet => packet.length), [134, 150]);
+  const scan = [...frame.rawPackets[0].slice(2, 130), ...frame.rawPackets[1].slice(2, 130)];
+  assert.deepEqual(frame.pressure, Array.from(expectedPressure(scan, 4)));
+  assert.deepEqual(frame.rawPackets[1].slice(130, 146), frame.imuRaw);
+  assert.deepEqual(frame.rawPackets[0].slice(-4), Array.from(tail));
+  assert.deepEqual(frame.rawPackets[1].slice(-4), Array.from(tail));
 });

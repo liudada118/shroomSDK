@@ -6,7 +6,7 @@
   },
   {
     "slug": "tactile-foot", "file": "docs/TACTILE-FOOT.md", "label": "触觉足底原始数据", "navLabel": "触觉足底协议",
-    "summary": "0.7.0 触觉足底分包协议、3/4 左右脚识别，以及原始 ADC、IMU 和完整两包保留。",
+    "summary": "0.7.1 触觉足底 60 点原始 ADC（6 列×10 行）、左右脚各自线序与 3/4 识别、IMU 和完整两包。",
     "forAi": false, "area": "guides", "group": "guides"
   },
   {

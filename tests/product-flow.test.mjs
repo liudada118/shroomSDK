@@ -56,7 +56,7 @@ test('tactile-foot flows use Node manual or automatic reads and a raw-data-only 
     assert.deepEqual(steps.map(step => step.id), ['flow-read', 'flow-ws', 'flow-start', 'flow-stop', 'flow-download']);
     assert.equal(steps.flatMap(step => step.blocks).length, 6);
     assert.match(steps[0].blocks[0].code, /product: 'foot'/);
-    assert.match(steps[0].blocks[0].code, /0\.7\.0 或更高版本/);
+    assert.match(steps[0].blocks[0].code, /0\.7\.1 或更高版本/);
     const source = steps.flatMap(step => step.blocks.map(block => block.code)).join('\n');
     assert.doesNotMatch(source, /fingers|palm|sensors|createProductView|<!doctype|protocol:/);
     const data = { pressure: new Uint8Array([0, 255]), imu: { raw: new Uint8Array([128, 255]) },

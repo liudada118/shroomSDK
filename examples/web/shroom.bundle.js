@@ -1,5 +1,5 @@
 /**
- * Shroom SDK 0.7.0 —— 单文件版（自动生成，别手改）
+ * Shroom SDK 0.7.1 —— 单文件版（自动生成，别手改）
  *
  * 由 scripts/build-sdk-bundle.mjs 从 src/core/ + src/web/ 拼出来，内容和模块版完全一致。
  * 它是「经典脚本」而不是模块，所以用普通的 script 标签引进去就行，file:// 下也能加载，
@@ -2136,11 +2136,48 @@
     readStreamFields: readInsoleStreamFields,
   });
 
+  // ---------- core/products/tactile-foot-layout.js ----------
+  /**
+   * 触觉足底有效测点线序：来源上位机 lineOrderDefinitions/foot.js 的左右脚独立 ADC 表。
+   * 下标已从来源的 1 基转换为 0 基；每 6 个值为一行，共 10 行，不增减或改写 ADC 值。
+   */
+  const tactileFootSourceIndices = Object.freeze({
+    left: Object.freeze([
+      223, 207, 191, 175, 159, 143,
+      222, 206, 190, 174, 158, 142,
+      221, 205, 189, 173, 157, 141,
+      220, 204, 188, 172, 156, 140,
+      219, 203, 187, 171, 155, 139,
+      218, 202, 186, 170, 154, 138,
+      217, 201, 185, 169, 153, 137,
+      216, 200, 184, 168, 152, 136,
+      215, 199, 183, 167, 151, 135,
+      214, 198, 182, 166, 150, 134,
+    ]),
+    right: Object.freeze([
+      22, 6, 246, 230, 214, 198,
+      23, 7, 247, 231, 215, 199,
+      24, 8, 248, 232, 216, 200,
+      25, 9, 249, 233, 217, 201,
+      26, 10, 250, 234, 218, 202,
+      27, 11, 251, 235, 219, 203,
+      28, 12, 252, 236, 220, 204,
+      29, 13, 253, 237, 221, 205,
+      30, 14, 254, 238, 222, 206,
+      31, 15, 255, 239, 223, 207,
+    ]),
+  });
+
+  /** 从完整扫描载荷提取该脚的 60 个有效测点；只按物理线序取值，不插值或归一化。 */
+  function mapTactileFootPressure(scan, side) {
+    return Uint8Array.from(tactileFootSourceIndices[side], index => scan[index]);
+  }
+
   // ---------- core/products/tactile-foot.js ----------
   /**
    * 触觉足底：130 字节首包 + 146 字节尾包，各带 AA 55 03 99 帧尾。
    * byte[0] 是段号 1/2；byte[1] 为 3=左脚、4=右脚，首尾类型必须一致。
-   * 交付全部 256 个原扫描 ADC、16 字节原始 IMU 和含帧尾的两份原包；不抽点或插值。
+   * 按左右脚线序交付 6 列×10 行的 60 个测点原始 ADC；完整扫描和 IMU 保留于两份原包。
    */
 
   const tactileFootTail = [0xaa, 0x55, 0x03, 0x99];
@@ -2151,7 +2188,7 @@
   const tactileFootProfile = Object.freeze({
     product: 'footVideo', label: '触觉足底', family: 'foot',
     baudRate: 921600, payloadLength: tactileFootFirstSize + tactileFootSecondSize,
-    sensorPoints: 256, rows: 16, cols: 16,
+    sensorPoints: 60, rows: 10, cols: 6,
     firstPacketLength: tactileFootFirstSize, secondPacketLength: tactileFootSecondSize,
   });
 
@@ -2163,12 +2200,13 @@
   }
 
   function createTactileFootFrame(first, second, side) {
-    const pressure = new Uint8Array(256);
-    pressure.set(first.subarray(2, tactileFootFirstSize));
-    pressure.set(second.subarray(2, 130), 128);
+    const scan = new Uint8Array(256);
+    scan.set(first.subarray(2, tactileFootFirstSize));
+    scan.set(second.subarray(2, 130), 128);
+    const pressure = mapTactileFootPressure(scan, side);
     return {
-      // 16×16 仅为扫描存储形状；归一化值和统计量不代表物理鞋形或标定压力。
-      ...decodeFrame(pressure, { rows: 16, cols: 16 }),
+      // raw/pressure 保留测点 ADC 原值；values 和统计量为单独的兼容派生字段。
+      ...decodeFrame(pressure, { rows: 10, cols: 6 }),
       product: tactileFootProfile.product, protocol: 'segmented', side, packetType: first[1],
       pressure, pressureMatrix: pressure.slice(),
       imu: { raw: second.slice(130, tactileFootSecondSize) },
@@ -2261,7 +2299,7 @@
 
   function readTactileFootStreamFields(input, output, typed) {
     streamPressureFields(input, output, typed);
-    if (output.rows !== 16 || output.cols !== 16 || output.raw.length !== 256) streamInvalid('footVideo.shape');
+    if (output.rows !== 10 || output.cols !== 6 || output.raw.length !== 60) streamInvalid('footVideo.shape');
     if (input.protocol !== 'segmented') streamInvalid('protocol');
     if (Object.hasOwn(input, 'sequence')) streamInvalid('sequence');
     const packetType = streamNumber(input.packetType, 'packetType', 3, 4, true);
@@ -2276,7 +2314,8 @@
     if (!Array.isArray(input.rawPackets) || input.rawPackets.length !== 2) streamInvalid('rawPackets');
     const first = readTactileFootPacket(input.rawPackets[0], 'rawPackets[0]', tactileFootFirstSize, 1, packetType);
     const second = readTactileFootPacket(input.rawPackets[1], 'rawPackets[1]', tactileFootSecondSize, 2, packetType);
-    tactileFootEqualValues([...first.slice(2, tactileFootFirstSize), ...second.slice(2, 130)], output.raw, 'rawPackets/raw');
+    const scan = [...first.slice(2, tactileFootFirstSize), ...second.slice(2, 130)];
+    tactileFootEqualValues(mapTactileFootPressure(scan, input.side), output.raw, 'rawPackets/raw');
     tactileFootEqualValues(second.slice(130, tactileFootSecondSize), imu, 'rawPackets/imu.raw');
 
     output.protocol = 'segmented'; output.side = input.side; output.packetType = packetType;
@@ -4851,7 +4890,7 @@
     decodeStreamFrame: decodeStreamFrame,
     STREAM_SCHEMA: STREAM_SCHEMA,
     isSupported: isSerialSupported,
-    version: "0.7.0",
+    version: "0.7.1",
     // 想自己接数据源（WebSocket、蓝牙、录制回放）就用这几个
     createFramer: createFramer,
     decodeFrame: decodeFrame,

@@ -2,11 +2,11 @@
 
 同一台电脑上，Node.js 连接设备、创建 WS 并保存记录；浏览器连接一次，后面三步复用同一个 `stream`。下面只列 API 调用，放进自己的 Node.js 程序和网页，不需要复制完整 HTML。
 
-**运行前提**：设备驱动可用，业务项目已执行 `npm install --save-exact shroom-sdk@0.7.0`，Node.js 已按 [SDK 授权](LICENSE.md)激活有效 SDK 产品密钥，功能包括 `serial / stream / recording`。安装和授权要点见文末[接入准备](#product-guide)。
+**运行前提**：设备驱动可用，业务项目已执行 `npm install --save-exact shroom-sdk@0.7.1`，Node.js 已按 [SDK 授权](LICENSE.md)激活有效 SDK 产品密钥，功能包括 `serial / stream / recording`。安装和授权要点见文末[接入准备](#product-guide)。
 
 **0.5.0 新增：** Node 分包手套支持手动选口与自动识别。手动传 `path + side`；自动调用 `readProduct({ product: 'glove', onData, onError })`，内部复用基础 `connectProduct()` → `scanProductPorts()`。五个快速函数保持不变；0.4.0 仍需手动配置，自动识别要求升级到 0.5.0。
 
-**0.7.0 新增触觉足底**：`readProduct({ product: 'foot', onData })` 可按包类型 3=左脚、4=右脚自动识别，也可手动指定 `path + side`；`pressure / imu.raw / rawPackets` 保留完整原始数据，见[触觉足底](TACTILE-FOOT.md)。Python 暂未增加此产品。
+**触觉足底请使用 0.7.1**：`readProduct({ product: 'foot', onData })` 可按包类型 3=左脚、4=右脚自动识别，也可手动指定 `path + side`；`pressure / imu.raw / rawPackets` 保留完整原始数据，见[触觉足底](TACTILE-FOOT.md)。Python 暂未增加此产品。
 
 **业务流程仍是五个函数**：`readProduct`、`createWS`、`startRecording`、`stopRecording`、`downloadRecording`，统一从 `shroom-sdk/quick-flow` 导入。当前手套和触觉足底取数内部复用基础扫描 API；需要展示设备列表时再单独调用，不增加第六个快速函数。
 
@@ -19,7 +19,7 @@
 | 产品 | product | 必要配置 | 主要数据 |
 | --- | --- | --- | --- |
 | 分包手套（0.4.0 起） | `glove` | 0.5.0 可自动识别；手动传 `path + side` | `fingers / palm / imu.raw` |
-| 触觉足底（0.7.0） | `foot` | 可自动识别；手动 `path + side` 只筛选脚侧 | `pressure` 原扫描256ADC、`imu.raw` 16字节、`rawPackets` 完整两包 |
+| 触觉足底（0.7.1） | `foot` | 可自动识别；手动 `path + side` 只筛选脚侧 | `raw / pressure / pressureMatrix` 为60点原始ADC，6列×10行、`imu.raw` 16字节、`rawPackets` 完整两包 |
 | 手部检测垫 | `pad` | 无侧别 | `pressureMatrix / values` |
 | 人体全身（0.3.0） | `body` | 无侧别 | `regions` 十块物理矩阵、400个唯一通道；`raw` 保留1024扫描值 |
 | A版鞋垫（0.3.0） | `insole` | `side` 必填；`protocol: '12bit' / '8bit'` | `pressure` 保留256通道ADC，`sensors` 为112真实点，`imu` 保留线上数值 |

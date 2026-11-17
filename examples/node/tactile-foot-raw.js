@@ -1,5 +1,5 @@
 /**
- * 触觉足底原始数据：每帧输出 256 个 ADC、16 个 IMU 字节和带帧尾的完整两包。
+ * 触觉足底原始数据：每帧输出60点原始ADC（6列×10行）、16个IMU字节和带帧尾的完整两包。
  * node examples/node/tactile-foot-raw.js --path COM3 --side left
  * node examples/node/tactile-foot-raw.js --mock --side right --frames 3
  * 实机复用 license-env.js 的 SDK 授权配置；标准输出为逐行 JSON，可重定向到文件。
@@ -35,7 +35,7 @@ async function main() {
   let count = 0;
   const onData = frame => {
     process.stdout.write(JSON.stringify({ product: frame.product, side: frame.side,
-      packetType: frame.packetType, timestamp: frame.timestamp,
+      packetType: frame.packetType, timestamp: frame.timestamp, rows: frame.rows, cols: frame.cols,
       pressure: Array.from(frame.pressure), imuRaw: Array.from(frame.imu.raw),
       rawPackets: frame.rawPackets.map(packet => Array.from(packet)) }) + '\n');
     count += 1;

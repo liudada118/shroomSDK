@@ -3,7 +3,7 @@
 **一步拿到产品数据。** 在自己项目的终端安装 SDK，无需查找仓库、解压或复制源码：
 
 ```bash
-npm install --save-exact shroom-sdk@0.7.0
+npm install --save-exact shroom-sdk@0.7.1
 ```
 
 ```js
@@ -13,11 +13,11 @@ import { readProduct, createWS, startRecording, stopRecording, downloadRecording
 
 SDK 从 npm 注册表安装到 `node_modules/shroom-sdk`，免登记下载，真实设备密钥单独申请。[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)继续提供 `.tgz` 下载；历史安装包 URL 仍可使用。安装包只含压缩运行代码、类型与说明；保存项目依赖和锁文件，以便重复安装。入口、升级和本地包安装见[npm 安装说明](docs/NPM.md)。压缩不等于加密，也不能防止有意修改代码。
 
-**0.4.0 起**，手套默认使用 130 + 146 字节分包，五个函数保持不变。`shroom-sdk@0.3.0` 只支持整包手套；升级时让 Node 服务端与网页同时安装 0.7.0，并重新构建前端。整包设备升级时改为显式 `product: 'handGloveFullPacket'`，见[手套协议与迁移](docs/GLOVE.md)。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)。
+**0.4.0 起**，手套默认使用 130 + 146 字节分包，五个函数保持不变。`shroom-sdk@0.3.0` 只支持整包手套；升级时让 Node 服务端与网页同时安装 0.7.1，并重新构建前端。整包设备升级时改为显式 `product: 'handGloveFullPacket'`，见[手套协议与迁移](docs/GLOVE.md)。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)。
 
 **0.5.0 新增：** Node 分包手套支持手动选口与自动识别。手动传 `path + side`；自动调用 `readProduct({ product: 'glove', onData, onError })`，内部复用基础 `connectProduct()` → `scanProductPorts()`。五个快速函数保持不变；0.4.0 仍需手动配置，自动识别要求升级到 0.5.0。
 
-**0.7.0 新增触觉足底：** Node 使用 `readProduct({ product: 'foot', path: 'COM3', side: 'left', onData })` 或 `connectTactileFoot()`，按 `packetType: 3=左脚、4=右脚` 接入。`pressure` 保留 256 个原扫描 ADC，`imu.raw` 保留 16 字节，`rawPackets` 保留含包头和帧尾的完整两包；支持手动与自动识别，不抽点、插值或标定。Node 与网页均使用 0.7.0；Python 暂未增加此产品。详见[触觉足底原始数据](docs/TACTILE-FOOT.md)。
+**0.7.1 修正触觉足底原始测点：** Node 使用 `readProduct({ product: 'foot', path: 'COM3', side: 'left', onData })` 或 `connectTactileFoot()`，按 `packetType: 3=左脚、4=右脚` 接入。`raw / pressure / pressureMatrix` 输出对应脚线序的 60 个原始 ADC，6 列×10 行（rows=10、cols=6），`imu.raw` 保留 16 字节，`rawPackets` 保留含包头和帧尾的完整两包；支持手动与自动识别，不插值、滤波或标定。Node 与网页均使用 0.7.1；Python 暂未增加此产品。详见[触觉足底原始数据](docs/TACTILE-FOOT.md)。
 
 **取数 → 创建 WS → 开始采集 → 停止采集 → 下载**：五个函数保持不变。Node.js 连接设备并创建服务，网页连接一次后复用同一 `stream`。直接查看[五步 API 调用](docs/QUICK-START.md#quick-call)，使用上面的包名导入，接入自己的程序与按钮；源码 ZIP 的相对路径示例作为另一种交付方式保留。
 
@@ -300,7 +300,7 @@ Shroom.decodeFrame(payload, { layout: 'carSeat' });  // 自己接数据源时选
 | `wholeChairHead` | 整椅头枕 | 10×10 |
 | `tempFullBed` | 温度全床，只取压力那块 | 12×15 |
 | `smallSample` | 小样垫（一帧 256 点） | 10×10 |
-| `footInsole` | 触觉足底（一帧 256 点） | 10×6 |
+| `footInsole` | 触觉足底（256 个扫描通道中对应的 60 点） | 10×6 |
 
 这张表在代码里也能拿到：
 
@@ -462,7 +462,7 @@ await Shroom.connect({
 });
 ```
 
-串口、拆帧与解码选项会在打开端口前校验。波特率和矩阵尺寸必须有效，`rows / cols` 成对提供；分隔符不能为空，长度范围、`fullScale`、`threshold` 与 `layout` 也需符合约束。通用 `connect()` 仍由应用配置协议，产品入口不根据帧长猜测型号。Node 分包手套从0.5.0起、触觉足底从0.7.0起，可在所选产品固定的921600波特率下识别左右侧；手套采用对应线序，足底保持原扫描顺序，不扫描波特率或自动匹配未选定的其他协议。
+串口、拆帧与解码选项会在打开端口前校验。波特率和矩阵尺寸必须有效，`rows / cols` 成对提供；分隔符不能为空，长度范围、`fullScale`、`threshold` 与 `layout` 也需符合约束。通用 `connect()` 仍由应用配置协议，产品入口不根据帧长猜测型号。Node 分包手套从0.5.0起、触觉足底从0.7.0起，可在所选产品固定的921600波特率下识别左右侧；手套采用对应线序，足底按左右脚各自线序输出 60 个测点的原始 ADC，不扫描波特率或自动匹配未选定的其他协议。
 
 **关于 `lockLength`。** 分隔符只有 4 个字节，数据里迟早会撞出一模一样的一串
 `AA 55 03 99`，于是切出一个长度不对的短帧。这种长度多半不是完全平方数，

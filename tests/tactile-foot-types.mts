@@ -13,9 +13,11 @@ async function tactileFootTypes() {
     const packetType: 3 | 4 = data.packetType;
     const raw: Uint8Array = data.raw;
     const pressure: Uint8Array = data.pressure;
+    const rows: 10 = data.rows;
+    const columns: 6 = data.cols;
     const imuRaw: Uint8Array = data.imu.raw;
     const packets: [Uint8Array, Uint8Array] = data.rawPackets;
-    void [product, protocol, packetType, raw, pressure, imuRaw, packets];
+    void [product, protocol, packetType, raw, pressure, rows, columns, imuRaw, packets];
     // @ts-expect-error Segment ordinals are not a device sample sequence.
     const sequence: number = data.sequence;
     void sequence;

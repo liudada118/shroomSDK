@@ -100,7 +100,7 @@ test('tactile-foot call snippets preserve raw field access for manual and automa
       const entry = importStyle === 'package' ? `shroom-sdk/${quickFlow ? 'quick-flow' : 'node'}`
         : quickFlow ? './quick-flow.js' : './node/index.js';
       assert.ok(source.includes(`from '${entry}'`));
-      assert.match(source, /0\.7\.0 或更高版本/);
+      assert.match(source, /0\.7\.1 或更高版本/);
       assert.match(source, /3=左脚、4=右脚/);
       assert.doesNotMatch(source, /fingers|palm|sensors|createProductView|createFramer|baudRate|protocol:/);
       const calls = [], output = [], device = { close: async () => {} };

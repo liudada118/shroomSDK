@@ -6,7 +6,7 @@
 
 本仓库维护独立的 `shroom-sdk`：读取传感器数据、按需创建 WebSocket 服务、采集到 SQLite、停止采集并导出 CSV / JSONL。快速入口只导出五个函数，产品协议和点位映射由内部适配器管理。Node.js、浏览器和 Python 共享版本号，使用同一套产品协议、WS 数据格式和录制数据库；浏览器专属能力（Web Serial、Canvas 展示）只在 JavaScript 中，各语言的具体接口按各自文档定义。
 
-当前源码与发布准备版本为 **0.7.0**：Node 新增触觉足底 `footVideo / foot`，按包类型 3=左脚、4=右脚支持手动或自动发现，原扫描 ADC、原始 IMU 和含头尾的完整分包贯通 WS 与录制导出。Node 与网页依赖使用同一版本，目标安装命令为 `npm install --save-exact shroom-sdk@0.7.0`；正式 npm 发布与注册表独立安装结果另行记录。Python 的版本元数据按全仓规则同步至 0.7.0，运行功能仍为 0.6.0 的五种产品，本次不发布新的 PyPI 版本，也不新增足底入口。0.6.0 扩展了 Python 的产品协议与五步能力，0.5.0 首次提供 Node 分包手套自动识别，0.4.0 首次提供 130+146 字节分包协议；整包仍显式使用 handGloveFullPacket。历史发布与未发布记录保留在下方，合成帧和安装包验证不代替实物验收。
+当前源码与发布准备版本为 **0.7.1**：修正触觉足底 `footVideo / foot` 的顶层数据为左右脚各自线序的 **60 点原始 ADC，6 列×10 行**（rows=10、cols=6），不是 256 个扫描通道。完整通道与 IMU 仍保存在两份 `rawPackets`；类型 3=左脚、4=右脚，手动与自动发现保持原协议。Node 与网页依赖使用同一版本，安装命令为 `npm install --save-exact shroom-sdk@0.7.1`；正式发布与注册表独立安装结果另行记录。0.7.0 已正式发布，旧版本数据契约见历史记录。Python 版本元数据按全仓规则同步，产品运行实现未扩展，本次不发布 PyPI。合成帧和安装验证不代替实物验收。
 
 扫描逐口读取所选产品固定的 921600 波特率分包数据：手套从 0.5.0 起按类型 1/2 确认左/右手，触觉足底从 0.7.0 起按类型 3/4 确认左/右脚；明确 path+side 且无 scan 保持手动直连。只读探测样本与正式取数隔离，全部探测连接释放后才正式连接；重连保持原路径，不跨口迁移。
 
@@ -111,15 +111,15 @@ Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产�
 | `glove-segmented.js` / `glove.js` / `../glove.js` | 默认分包在单连接内按相同原始包类型配对 130/146 字节包，最大间隔 1 秒；重置/非法包清缓存，孤立尾包不交付。一只手一个串口；手动 side 决定线序，自动模式识别 packetType 1=左/2=右，未知/混合类型不作设备匹配；不路由单串口双手，不构造假序号。整包适配器保留 274 字节与原 sequence |
 | `body.js` / `body-layout.js` | 无 side；1000000 baud，1024 字节 uint8 载荷与尾分隔。保留 1024 原扫描 ADC，十个 `regions` 映射 400 唯一通道，索引用 Uint16；没有模型 UV、翻转、显示重复行或插值 |
 | `insole.js` / `insole-layout.js` | 必须明确脚侧；默认 12bit、921600 baud，可选 8bit 及限定速率。12bit 的 raw 是 512 个原始 ADC 字节、pressure 是 256 个 Uint16 ADC（0–4095）；8bit 分别为 256 字节与 256 个 Uint8 ADC。`sensors` 是 A 版 112 真实点，不含显示插值点 |
-| `tactile-foot.js` | `footVideo` / `foot`，921600 baud；130+146 分包，类型 3=左脚、4=右脚且必须同类型配对。16×16 仅为扫描存储形状；保留 256 原 ADC、16 字节原 IMU、含帧尾的 `rawPackets` 两包；不做抽点、插值、归零、镜像或标定 |
+| `tactile-foot.js` / `tactile-foot-layout.js` | `footVideo` / `foot`，921600 baud；130+146 分包，类型 3=左脚、4=右脚且必须同类型配对。按左右脚各自60点表取 ADC 原值，6列×10行；16字节IMU与完整256扫描通道保存在 `rawPackets`。不插值、归零、镜像、滤波或标定 |
 
-人体的 32×32 与鞋垫的 16×16 顶层矩阵都是扫描存储形状，不能当人体/鞋形平面或物理重心。鞋垫保留 IMU 原始字节和 w/x/y/z 四元数，12bit 另提供陀螺仪/加速度的三个原始分量；不猜测单位、不融合姿态、不换算物理压力。来源和协议细节分别见 [HUMAN-BODY.md](docs/HUMAN-BODY.md)、[INSOLE.md](docs/INSOLE.md)。`profile.sensorPoints` 表示扫描通道数，新增可选 `mappedSensorPoints` 表示物理表覆盖的点数。
+人体的 32×32 与鞋垫的 16×16 顶层矩阵都是扫描存储形状，不能当人体/鞋形平面或物理重心。鞋垫保留 IMU 原始字节和 w/x/y/z 四元数，12bit 另提供陀螺仪/加速度的三个原始分量；不猜测单位、不融合姿态、不换算物理压力。来源和协议细节分别见 [HUMAN-BODY.md](docs/HUMAN-BODY.md)、[INSOLE.md](docs/INSOLE.md)。`profile.sensorPoints` 表示产品交付的pressure点数：触觉足底为60个有效点，其他产品可仍为完整扫描通道。可选 `mappedSensorPoints` 表示物理表覆盖的点数。
 
 `src/index.d.ts` 的 `DeviceProductTypes` 登记所有产品，派生 Node/Web 选项与帧类型；分包与整包手套由 product 区分，只有整包帧有 sequence；鞋垫帧按 `protocol` 区分 12bit/8bit、ADC 类型和可用 IMU 字段。`stream-codec.js` 仍只处理基础帧，扩展字段由各适配器验证并复制；人体核对十块固定线序和 ADC 一致性，鞋垫核对精度、原始字节、真实点位及 IMU，避免 Uint8 截断或丢失负数 IMU。`createProductView` 支持分包/整包手套和手垫；人体/鞋垫仍由应用消费 `onData` 展示。
 
 手套分包的 profile.payloadLength 与解析器 frameLength 都表示两包载荷合计 276 字节，不含各自 `AA 55 03 99` 帧尾；包含帧尾的首包/尾包为 134/150 字节。byte[0] 的 1/2 是首包/尾包，byte[1] 的 packetType 在当前固件中 1=左、2=右，两者都不是采样序号；packetType 也不是唯一设备 SN，同侧多设备仍靠 path 区分。自动连接会固定已发现类型，正式读取或重连后出现另一侧有效帧时以 PARSE_FAILED 停止；手动明确 path+side 时仍保留原映射行为。协议没有 CRC、连续帧标识和转义，配对与超时保护不能保证检测所有同类型丢包错配；载荷出现完整尾标记可能丢帧。说明与迁移入口见 [GLOVE.md](docs/GLOVE.md)。
 
-触觉足底复用相同的分包布局，但原始包类型严格规定 3=左脚、4=右脚，手动参数不能覆盖类型中的身份。`rawPackets` 保存两份独立 Uint8Array，分别包括段号、类型、ADC、可选 IMU 与帧尾；WS 校验包头、长度、帧尾及压力/IMU 的逐字节一致性，SQLite、JSONL 与 CSV 完整帧列保留这些字段。`raw/pressure/pressureMatrix` 保持相同的 256 通道扫描顺序，不使用 `jqInsole` 的物理点位表。浏览器只提供解码与显式选侧的直连，不新增专用展示；原始 JSONL 例程见 `examples/node/tactile-foot-raw.js`，协议来源与限制见 [TACTILE-FOOT.md](docs/TACTILE-FOOT.md)。
+触觉足底复用相同的分包布局，但原始包类型严格规定 3=左脚、4=右脚，手动参数不能覆盖类型中的身份。`rawPackets` 保存两份独立 Uint8Array，分别包括段号、类型、ADC、可选 IMU 与帧尾；WS 校验包头、长度、帧尾及压力/IMU 的逐字节一致性，SQLite、JSONL 与 CSV 完整帧列保留这些字段。从0.7.1起，`raw/pressure/pressureMatrix` 为对应脚线序的60点原始ADC，rows=10、cols=6。独立 `tactile-foot-layout.js` 保存来源于既有上位机 `FOOT_L_ADC_ORDER / FOOT_R_ADC_ORDER` 的点位表，不使用 `jqInsole` 的112点表。WS从原包重算对应脚60点以校验一致性，完整256扫描通道只保留在原包中。浏览器只提供解码与显式选侧的直连，不新增专用展示；原始 JSONL 例程见 `examples/node/tactile-foot-raw.js`，协议来源与限制见 [TACTILE-FOOT.md](docs/TACTILE-FOOT.md)。
 
 公开类型新增 ProductPortScanSettings/Options、DetectedProductPort、ProductPortScanEntry/Result；NodeGloveOptions 可省略 side 或传 auto，并接收 scan。整包 Node 选项仍要求 left/right 且禁止 scan，浏览器手侧仍必填，WS 五步参数禁止 scan。连接 info 可提供识别出的 packetType。类型验证由 tests/serial-scan-types.mts 和原五步/产品类型测试覆盖。
 
@@ -366,3 +366,15 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 日期 | 变更类型 | 说明 |
 | --- | --- | --- |
 | 2026-11-13 | 版本发布 | 发布 67 文件、123503 字节的精简 npm 包；SHA-256 为 `21b2c330dcf1957b7b7093d4828c63b633c9adb62555503b4daf22dc14ef0f44`。官网使用同字节制品，五个快速函数保持不变。 |
+
+### 0.7.1 触觉足底原始测点修正
+
+| 完成日期 | 完成的功能/工作 | 简要说明 |
+| --- | --- | --- |
+| 2026-11-17 | 触觉足底60点原始ADC | 按既有左右脚各自点位表输出60点，6列×10行；完整原包和IMU仍保留，类型与自动识别不变，准备发布0.7.1 |
+
+| 日期 | 变更类型 | 说明 |
+| --- | --- | --- |
+| 2026-11-17 | 修复缺陷 | 修正足底顶层raw/pressure/pressureMatrix从扫描256通道到60个有效测点原值，同步WS验证、类型、例程与文档 |
+
+| 2026-11-17 | 0.7.1 本地发布门禁 | 332项JS、25项发布工具、228项Python回归、类型、ZIP解压安装、真实npm客户安装、左右脚60点golden映射和WS/SQLite/导出通过；仍未连接真实硬件 |
