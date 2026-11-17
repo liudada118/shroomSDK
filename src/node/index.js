@@ -9,7 +9,7 @@
  *
  * 无硬件时 Shroom.mock() 提供通用矩阵帧；它共用 onFrame/close，不模拟手套专用字段。
  */
-export { connectSerial, listPorts, scanProductPorts, connectProduct, connectGlove, connectHandPad } from './serial.js';
+export { connectSerial, listPorts, scanProductPorts, connectProduct, connectGlove, connectHandPad, connectTactileFoot } from './serial.js';
 export { listDeviceProducts } from '../core/product.js';
 export { renderAscii } from './ascii.js';
 export { serveDevice } from './quick-server.js';
@@ -23,7 +23,7 @@ export { BackendSdkClient } from './backend.js';
 export { ShroomError, ERROR_CODES, asShroomError } from '../core/errors.js';
 export { activateLicense, getLicenseStatus, clearLicense, SDK_PRODUCT_TYPE } from '../core/license.js';
 
-import { connectSerial, listPorts, scanProductPorts, connectProduct, connectGlove, connectHandPad } from './serial.js';
+import { connectSerial, listPorts, scanProductPorts, connectProduct, connectGlove, connectHandPad, connectTactileFoot } from './serial.js';
 import { listDeviceProducts } from '../core/product.js';
 import { renderAscii } from './ascii.js';
 import { serveDevice } from './quick-server.js';
@@ -45,6 +45,7 @@ export const Shroom = {
   connectProduct,
   connectGlove,
   connectHandPad,
+  connectTactileFoot,
   listDeviceProducts,
   /** 将已有设备广播为 WS 数据源，并提供持久化标签录制与下载。 */
   serveDevice,

@@ -2,6 +2,8 @@
 
 **0.5.0 新增：** Node 分包手套支持手动选口与自动识别。手动传 `path + side`；自动调用 `readProduct({ product: 'glove', onData, onError })`，内部复用基础 `connectProduct()` → `scanProductPorts()`。五个快速函数保持不变；0.4.0 仍需手动配置，自动识别要求升级到 0.5.0。
 
+**0.7.0 新增：** 触觉足底 `footVideo / foot` 使用 `connectTactileFoot()` 或 `readProduct({ product: 'foot', onData })`，支持手动与自动发现，按包类型3=左脚、4=右脚保留256个原扫描ADC、16字节IMU和两份完整 `rawPackets`。详见[触觉足底](TACTILE-FOOT.md)；Python暂未增加此产品。
+
 0.3.0 新增鞋垫和人体全身，仍使用 `readProduct()` 或基础 `connectProduct()`。鞋垫传 `product:'insole', side:'left'/'right', protocol:'12bit'/'8bit'`；人体传 `product:'body'`。详见[鞋垫字段](INSOLE.md)、[人体线序](HUMAN-BODY.md)。使用新产品需安装0.3.0或更高版本，Node与网页使用相同版本。
 
 连接实机前先[安装串口驱动](DRIVERS.md)并确认端口，再[激活 SDK 产品密钥](LICENSE.md)。SDK 授权不限制设备型号，产品接口和通用串口均可使用；驱动缺失与授权失败需要分别排查。
@@ -85,7 +87,7 @@ try {
 
 手部检测垫换为 `Shroom.connectHandPad({ path: 'COM3', onData: console.log, onError: console.error })`。`connectGlove()` 从 0.4.0 起固定分包协议 `handGloveSegmented`；上述 path+side 写法保持手动直连，0.5.0允许省略它们自动发现。整包设备使用 `connectProduct({ product: 'handGloveFullPacket', side: 'left', ...options })`，仍需显式手侧且不接受 scan。`connectHandPad()` 固定 `hand`。也可使用 `Shroom.connectProduct({ product, ...options })`，清单来自 `Shroom.listDeviceProducts()`。这些方法同样具名导出。
 
-0.5.0的分包手套省略 path、side 省略/为 auto 或显式传 scan 时，会验证实际分包；同侧至少 3 个完整配对才匹配。零匹配为 `PORT_NOT_FOUND`、多匹配为 `PORT_AMBIGUOUS`，详情见 `error.details.scan`；全部探测端口释放后才正式连接。传 side=left/right 可筛选，`scan: { paths: ['COM3'], timeoutMs: 1200, signal }` 可限制探测。其他产品仍保持单个串口自动选择、多个串口报歧义的原行为。扫描参数与返回值见[串口扫描](SERIAL.md#node-scan)。
+分包手套从0.5.0起、触觉足底从0.7.0起，省略 path、side 省略/为 auto 或显式传 scan 时，会验证实际分包；同侧至少3个完整配对才匹配。零匹配为 `PORT_NOT_FOUND`、多匹配为 `PORT_AMBIGUOUS`，详情见 `error.details.scan`；全部探测端口释放后才正式连接。传 side=left/right 可筛选，`scan: { paths: ['COM3'], timeoutMs: 1200, signal }` 可限制探测。不支持发现的产品仍保持单个串口自动选择、多个串口报歧义的原行为。扫描参数与返回值见[串口扫描](SERIAL.md#node-scan)。
 
 `onData / onError` 在正式打开前注册，避免漏首帧；探测样本不进入这些业务回调。连接前失败仍拒绝 Promise。产品入口不接受 delimiter、layout 等底层覆盖；只有鞋垫明确支持 protocol 和来源列出的 baudRate，其他产品固定波特率。
 

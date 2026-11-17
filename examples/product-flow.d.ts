@@ -11,5 +11,5 @@ export interface ProductFlowStep {
   note: string;
 }
 
-/** Node 取数/创建服务，浏览器连接一次并控制录制与下载；body/insole 需尚未发布的 SDK 0.3.0。 */
+/** Node 取数/创建服务，浏览器通过 WS 控制录制与下载；foot 需 SDK 0.7.0，默认导出完整 JSONL。 */
 export function createProductFlow(options: Omit<ProductCallOptions, 'env'>): ProductFlowStep[];

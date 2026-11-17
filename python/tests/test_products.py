@@ -476,7 +476,12 @@ class JavaScriptParityTests(unittest.TestCase):
 
         def snake(profile):
             return {"".join("_" + c.lower() if c.isupper() else c for c in key): value for key, value in profile.items()}
-        self.assertEqual(list_device_products(), [snake(profile) for profile in reference["deviceProducts"]])
+        # 触觉足底本次仅接入 Node/Web；Python 已有五种产品仍逐项对照。
+        self.assertEqual([profile["product"] for profile in reference["deviceProducts"]
+                          if profile["product"] not in {item["product"] for item in list_device_products()}],
+                         ["footVideo"])
+        self.assertEqual(list_device_products(), [snake(profile) for profile in reference["deviceProducts"]
+                                                  if profile["product"] != "footVideo"])
 
     def test_colormaps_match_for_every_palette(self):
         values = [index / 2000 for index in range(-20, 2021)] + [0.15, 0.25, 0.5, 0.75, 1 / 3, 0.001, 0.0011]

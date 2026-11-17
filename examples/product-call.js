@@ -4,6 +4,7 @@ const callProducts = {
   pad: { connect: 'connectHandPad', fields: ['pressureMatrix', 'values'] },
   body: { connect: 'connectProduct', nodeExampleOnly: true, minSdkVersion: '0.3.0', fields: ['regions', 'raw'] },
   insole: { connect: 'connectProduct', side: '脚', nodeExampleOnly: true, minSdkVersion: '0.3.0', fields: ['sensors', 'pressure', 'imu'] },
+  foot: { connect: 'connectTactileFoot', side: '脚', nodeExampleOnly: true, minSdkVersion: '0.7.0', fields: ['pressure', 'imu.raw', 'rawPackets'] },
 };
 
 /** 供同一五步流程的 Node / WS 回调共用；仅返回字段名，不解码或绘制数据。 */
@@ -14,10 +15,17 @@ export function productCallDataFields(product) {
 
 /** 生成产品取数调用，运行前由宿主项目完成 SDK 授权；不生成界面或重复解析协议。 */
 export function createProductCall(options) {
-  const { product, side, protocol, env, platform = 'windows', quickFlow = false, importStyle = 'relative' } = options ?? {};
+  const { product, side, protocol, env, platform = 'windows', quickFlow = false, importStyle = 'relative', connectionMode } = options ?? {};
   const fields = productCallDataFields(product);
   const profile = callProducts[product];
-  if (profile.side && !['left', 'right'].includes(side)) throw new TypeError(`请明确实物${profile.side}侧。`);
+  const canDiscover = product === 'glove' || product === 'foot';
+  if (connectionMode !== undefined && !['manual', 'auto'].includes(connectionMode)) throw new TypeError('请选择手动连接或自动识别。');
+  if (connectionMode !== undefined && (!canDiscover || env !== 'node')) throw new TypeError('自动或手动连接方式仅适用于 Node 分包手套与触觉足底。');
+  const automatic = env === 'node' && canDiscover && (connectionMode === 'auto'
+    || connectionMode === undefined && (side === 'auto' || product === 'foot' && side === undefined));
+  if (profile.side && !(automatic ? side === undefined || ['left', 'right', 'auto'].includes(side) : ['left', 'right'].includes(side))) {
+    throw new TypeError(`请明确实物${profile.side}侧。`);
+  }
   if (product === 'insole' && protocol !== undefined && !['12bit', '8bit'].includes(protocol)) throw new TypeError('鞋垫协议请选择 12bit 或 8bit。');
   if (product !== 'insole' && protocol !== undefined) throw new TypeError('当前产品不使用鞋垫 protocol 参数。');
   if (!['web', 'node'].includes(env)) throw new TypeError('请选择浏览器或 Node.js。');
@@ -34,11 +42,16 @@ export function createProductCall(options) {
   return [
     `import { ${name} } from '${entry}';`, '',
     ...(profile.minSdkVersion ? [`// 需要 SDK ${profile.minSdkVersion} 或更高版本；Node 服务端与网页请安装相同版本。`] : []),
-    env === 'web' ? '// SDK 授权完成后，在“连接”按钮的点击事件中调用。' : '// SDK 授权完成后调用；path 替换为系统中的实际串口。',
+    env === 'web' ? '// SDK 授权完成后，在“连接”按钮的点击事件中调用。'
+      : automatic ? '// SDK 授权完成后自动扫描；仅在找到唯一匹配设备时连接。'
+        : '// SDK 授权完成后调用；path 替换为系统中的实际串口。',
+    ...(product === 'foot' ? ['// 包类型 3=左脚、4=右脚；ADC、IMU 字节和带帧尾的两份原包均原样保留。'] : []),
     `const device = await ${name}({`,
     ...(quickFlow || name === 'connectProduct' ? [`  product: '${product}', // 由 SDK 注册表选择对应产品协议`] : []),
-    ...(env === 'node' ? [`  path: '${path}', // 替换为 listPorts() 查询后用户选择的串口`] : []),
-    ...(profile.side ? [`  side: '${side}', // 按实际左${profile.side}或右${profile.side}设置`] : []),
+    ...(env === 'node' && !automatic ? [`  path: '${path}', // 替换为 listPorts() 查询后用户选择的串口`] : []),
+    ...(profile.side ? [`  side: '${automatic ? side ?? 'auto' : side}', // ${automatic ? side === 'left' || side === 'right'
+      ? `只选择匹配的${side === 'left' ? '左' : '右'}${profile.side}；多匹配时请指定 path` : `由分包识别左右${profile.side}；多匹配时请指定 side 或 path`
+      : `按实际左${profile.side}或右${profile.side}设置`}`] : []),
     ...(product === 'insole' ? [`  protocol: '${protocol ?? '12bit'}', // 按设备固件选择 12bit 或 8bit，默认 12bit`] : []),
     '  onData(data) {',
     '    // 每次收到一帧已解析的产品数据，在这里接入你的业务。',

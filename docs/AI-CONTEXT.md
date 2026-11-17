@@ -8,10 +8,11 @@
 
 ## 接入前确认 {#prepare}
 
+- **触觉足底（0.7.0，Node）**：产品 `footVideo` / 别名 `foot`，使用 `readProduct()` 或 `connectTactileFoot()`；`3=左脚、4=右脚`，不能覆盖包内脚侧。`pressure/raw` 为 256 个原扫描 uint8 ADC，`imu.raw` 为 16 个不解读的原字节，`rawPackets` 为包含头尾的完整两包（134/150 字节）。不要套用 `jqInsole` 的 112 点表或手套分区；不插值、抽点、归零或标定。Node 可扫描或手动连接，WS 与录制保留完整原包；Node 与网页均使用 0.7.0，Python 暂不包含此产品。详见 [TACTILE-FOOT.md](TACTILE-FOOT.md)。
 - **驱动**：CH34x 设备需有可用串口驱动，安装在连接 USB 的电脑上。[Windows CH341SER.EXE](https://shroom.jq-industries.com/drive/CH341SER.EXE) · [macOS CH34xVCPDriver.zip](https://shroom.jq-industries.com/drive/CH34xVCPDriver.zip)。安装后重新插拔，确认系统能列出串口；Linux 检查驱动与权限，见[驱动排查](DRIVERS.md)。
 - **安装**：Node.js 18+，在业务项目终端执行 `npm install shroom-sdk`，通过 npm 安装 SDK 及其声明的依赖。真实串口、WS 与 SQLite 分别需要 `serialport / ws / better-sqlite3` 可用。SDK 免登记下载，密钥另行申请；固定版本、下载 `.tgz` 与历史 URL 安装见[npm 安装](NPM.md)。
 - **授权**：在 Node.js 连接实机前，按 [SDK 授权](LICENSE.md)调用 `await Shroom.activateLicense(key, { deviceId })`；`Shroom` 从 `shroom-sdk/node` 导入。应用保存稳定的安装标识，不能每次启动重新生成。仅取数需要 `serial`，完整五步还需 `stream / recording`；浏览器连接此 Node 服务时无需重复激活。不要导入精简安装包未交付的 `node/license-env.js`。
-- **产品**：手套 `glove` 支持自动识别，也可手动传 path+side；鞋垫 `insole` 必须指定实物 `side: 'left' | 'right'`。自动识别仅支持 Node 分包手套。检测垫 `pad`、人体全身 `body` 不传side。规范ID依次为 `handGloveSegmented / jqInsole / hand / humanBody`。从 0.4.0 起，`glove` 与 `connectGlove()` 默认分包；0.3.0 只有整包手套。整包设备必须显式用 `handGloveFullPacket`，不能沿用默认入口。当前安装命令为 `npm install --save-exact shroom-sdk@0.5.0`；鞋垫/人体最低要求 0.3.0。升级时让 Node 和网页安装同版本并重新构建前端。listPorts 端口枚举不能识别产品或侧别。
+- **产品**：手套 `glove` 和触觉足底 `foot` 支持 Node 自动识别，也可手动传 path+side；A版鞋垫 `insole` 必须指定实物 `side: 'left' | 'right'`。检测垫 `pad`、人体全身 `body` 不传side。规范ID为 `handGloveSegmented / handGloveFullPacket / footVideo / jqInsole / hand / humanBody`。从 0.4.0 起，`glove` 与 `connectGlove()` 默认分包；0.3.0 只有整包手套。整包设备必须显式用 `handGloveFullPacket`，不能沿用默认入口。当前安装命令为 `npm install --save-exact shroom-sdk@0.7.0`；A版鞋垫/人体最低要求 0.3.0。升级时让 Node 和网页安装同版本并重新构建前端。listPorts 端口枚举不能识别产品或侧别。
 - **手套连接单位**：一只手一个串口。分包第一字节 1/2 是首包/尾包，第二字节 packetType 在当前固件中 1=左手、2=右手，且两包必须一致；它不是唯一设备 SN 或采样序号。0.5.0自动扫描据此确认手侧，手动 path+side 保持原映射。双手使用两个设备对象；不要生成单串口自动路由代码，也不能用 packetType 区分两只同侧手套。
 - **鞋垫数据**：明确 `protocol: '12bit' | '8bit'`，默认12bit；默认921600波特率。`pressure`保留256通道原始ADC，12bit使用Uint16Array、范围0..4095，`raw`是512个原始ADC字节，不能先压到Uint8；8bit为256字节ADC。`sensors`是A版112个真实点，不是插值后的224点。IMU含原始四元数，12bit另含gyro/accel，未确定单位，不生成欧拉角或标定压力。详见[鞋垫协议](INSOLE.md)。
 - **人体数据**：`raw / pressure`保留1024原扫描ADC，`regions`按十块物理矩阵映射400唯一通道，`sourceIndices`为0基索引；模型显示的14槽/翻转/插值不是采集数据。详见[人体线序](HUMAN-BODY.md)。新增产品没有内置 `createProductView`，由客户处理 `onData` 展示。
@@ -37,7 +38,7 @@ try {
 
 将用户选择的 `path` 传给下方 `readProduct()`；这里的 `COM3` 只是示例值。插拔后可重新查询并更新选择框。
 
-**使用SDK 0.5.0时**，无需把搜索作为强制第六步。直接让 `readProduct({ product: 'glove', onData, onError })` 完成识别与取数；需要列出已识别手套供用户选择时，使用基础 API：
+**使用SDK 0.7.0时**，无需把搜索作为强制第六步。直接让 `readProduct({ product: 'glove', onData, onError })` 完成识别与取数；触觉足底改为 `product: 'foot'`。需要列出已识别设备供用户选择时，使用基础 API：
 
 ```js
 import { scanProductPorts } from 'shroom-sdk/node';

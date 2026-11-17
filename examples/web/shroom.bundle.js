@@ -1,5 +1,5 @@
 /**
- * Shroom SDK 0.6.0 —— 单文件版（自动生成，别手改）
+ * Shroom SDK 0.7.0 —— 单文件版（自动生成，别手改）
  *
  * 由 scripts/build-sdk-bundle.mjs 从 src/core/ + src/web/ 拼出来，内容和模块版完全一致。
  * 它是「经典脚本」而不是模块，所以用普通的 script 标签引进去就行，file:// 下也能加载，
@@ -2136,13 +2136,177 @@
     readStreamFields: readInsoleStreamFields,
   });
 
+  // ---------- core/products/tactile-foot.js ----------
+  /**
+   * 触觉足底：130 字节首包 + 146 字节尾包，各带 AA 55 03 99 帧尾。
+   * byte[0] 是段号 1/2；byte[1] 为 3=左脚、4=右脚，首尾类型必须一致。
+   * 交付全部 256 个原扫描 ADC、16 字节原始 IMU 和含帧尾的两份原包；不抽点或插值。
+   */
+
+  const tactileFootTail = [0xaa, 0x55, 0x03, 0x99];
+  const tactileFootFirstSize = 130;
+  const tactileFootSecondSize = 146;
+  const tactileFootPairTimeoutMs = 1000;
+  const tactileFootSideByType = Object.freeze({ 3: 'left', 4: 'right' });
+  const tactileFootProfile = Object.freeze({
+    product: 'footVideo', label: '触觉足底', family: 'foot',
+    baudRate: 921600, payloadLength: tactileFootFirstSize + tactileFootSecondSize,
+    sensorPoints: 256, rows: 16, cols: 16,
+    firstPacketLength: tactileFootFirstSize, secondPacketLength: tactileFootSecondSize,
+  });
+
+  function validateTactileFootOptions(options, invalid) {
+    if (!options || typeof options !== 'object' || Array.isArray(options)
+      || !['left', 'right', 'auto'].includes(options.side ?? 'auto') || options.side === null) {
+      invalid('side', '触觉足底的 side 可省略，或设置为 left、right、auto；包类型 3/4 始终决定左右脚。');
+    }
+  }
+
+  function createTactileFootFrame(first, second, side) {
+    const pressure = new Uint8Array(256);
+    pressure.set(first.subarray(2, tactileFootFirstSize));
+    pressure.set(second.subarray(2, 130), 128);
+    return {
+      // 16×16 仅为扫描存储形状；归一化值和统计量不代表物理鞋形或标定压力。
+      ...decodeFrame(pressure, { rows: 16, cols: 16 }),
+      product: tactileFootProfile.product, protocol: 'segmented', side, packetType: first[1],
+      pressure, pressureMatrix: pressure.slice(),
+      imu: { raw: second.slice(130, tactileFootSecondSize) },
+      rawPackets: [first, second],
+    };
+  }
+
+  function createTactileFootParser(options = {}) {
+    validateTactileFootOptions(options, (field, message) => {
+      throw new ShroomError('INVALID_CONFIG', message, { stage: 'configure', details: { field } });
+    });
+    const side = options.side ?? 'auto';
+    // 固定上限：即使输入长时间没有分隔符，也不保留整块输入。
+    const buffer = new Uint8Array(tactileFootSecondSize + tactileFootTail.length);
+    let first = null, used = 0, overflow = false, dropped = 0, frameLength = 0;
+
+    function discardFirst() {
+      if (first) { first = null; dropped += 1; }
+    }
+    function expireFirst(now) {
+      if (first && (now < first.receivedAt || now - first.receivedAt > tactileFootPairTimeoutMs)) discardFirst();
+    }
+    function processPacket(length, now) {
+      if (length === 1 && buffer[0] === 3) { discardFirst(); return null; }
+      if (!((length === tactileFootFirstSize && buffer[0] === 1) || (length === tactileFootSecondSize && buffer[0] === 2))) {
+        discardFirst(); dropped += 1; return null;
+      }
+      const packetType = buffer[1];
+      const outputSide = tactileFootSideByType[packetType];
+      // 显式 side 是筛选条件，不能把右脚的原包重新标成左脚。
+      if (!outputSide || (side !== 'auto' && outputSide !== side)) {
+        discardFirst(); dropped += 1; return null;
+      }
+      if (length === tactileFootFirstSize) {
+        discardFirst();
+        first = { raw: buffer.slice(0, tactileFootFirstSize + tactileFootTail.length), packetType, receivedAt: now };
+        return null;
+      }
+      const head = first;
+      first = null; // 尾包消费缓存一次，孤立/重复/跨类型尾包不能发布。
+      if (!head || head.packetType !== packetType) { dropped += 1; return null; }
+      frameLength = tactileFootFirstSize + tactileFootSecondSize;
+      return createTactileFootFrame(head.raw, buffer.slice(0, tactileFootSecondSize + tactileFootTail.length), outputSide);
+    }
+
+    return {
+      push(chunk) {
+        if (!(chunk instanceof Uint8Array)) {
+          throw new ShroomError('PARSE_FAILED', '触觉足底分包输入必须是 Uint8Array 字节。', { stage: 'parse' });
+        }
+        const frames = [];
+        expireFirst(Date.now());
+        for (const byte of chunk) {
+          if (used === buffer.length) {
+            overflow = true;
+            discardFirst();
+            buffer.copyWithin(0, used - (tactileFootTail.length - 1), used);
+            used = tactileFootTail.length - 1;
+          }
+          buffer[used++] = byte;
+          if (used < tactileFootTail.length || !tactileFootTail.every((value, i) => buffer[used - tactileFootTail.length + i] === value)) continue;
+          const now = Date.now();
+          expireFirst(now);
+          if (overflow) dropped += 1;
+          else if (used > tactileFootTail.length) {
+            const frame = processPacket(used - tactileFootTail.length, now);
+            if (frame) frames.push(frame);
+          } else discardFirst();
+          used = 0;
+          overflow = false;
+        }
+        return frames;
+      },
+      reset() { used = 0; overflow = false; first = null; dropped = 0; frameLength = 0; },
+      get droppedCount() { return dropped; },
+      get frameLength() { return frameLength; },
+    };
+  }
+
+  function tactileFootEqualValues(actual, expected, field) {
+    if (actual.length !== expected.length || actual.some((value, i) => value !== expected[i])) streamInvalid(field);
+  }
+
+  function readTactileFootPacket(value, field, length, segment, packetType) {
+    const packet = streamArray(value, field, { max: length + tactileFootTail.length, byte: true });
+    if (packet.length !== length + tactileFootTail.length || packet[0] !== segment || packet[1] !== packetType
+      || !tactileFootTail.every((byte, i) => packet[length + i] === byte)) streamInvalid(field);
+    return packet;
+  }
+
+  function readTactileFootStreamFields(input, output, typed) {
+    streamPressureFields(input, output, typed);
+    if (output.rows !== 16 || output.cols !== 16 || output.raw.length !== 256) streamInvalid('footVideo.shape');
+    if (input.protocol !== 'segmented') streamInvalid('protocol');
+    if (Object.hasOwn(input, 'sequence')) streamInvalid('sequence');
+    const packetType = streamNumber(input.packetType, 'packetType', 3, 4, true);
+    if (input.side !== tactileFootSideByType[packetType]) streamInvalid('side/packetType');
+    tactileFootEqualValues(output.pressureMatrix, output.raw, 'pressureMatrix/raw');
+    tactileFootEqualValues(output.values, Array.from(output.raw, value => Math.fround(value / 255)), 'values/raw');
+    for (const field of ['min', 'max', 'avg']) streamNumber(output[field], field, 0, 1);
+
+    streamObject(input.imu, 'imu');
+    const imu = streamArray(input.imu.raw, 'imu.raw', { max: 16, byte: true });
+    if (imu.length !== 16) streamInvalid('imu.raw.length');
+    if (!Array.isArray(input.rawPackets) || input.rawPackets.length !== 2) streamInvalid('rawPackets');
+    const first = readTactileFootPacket(input.rawPackets[0], 'rawPackets[0]', tactileFootFirstSize, 1, packetType);
+    const second = readTactileFootPacket(input.rawPackets[1], 'rawPackets[1]', tactileFootSecondSize, 2, packetType);
+    tactileFootEqualValues([...first.slice(2, tactileFootFirstSize), ...second.slice(2, 130)], output.raw, 'rawPackets/raw');
+    tactileFootEqualValues(second.slice(130, tactileFootSecondSize), imu, 'rawPackets/imu.raw');
+
+    output.protocol = 'segmented'; output.side = input.side; output.packetType = packetType;
+    output.imu = { raw: streamOutput(imu, typed, Uint8Array) };
+    output.rawPackets = [streamOutput(first, typed, Uint8Array), streamOutput(second, typed, Uint8Array)];
+    return output;
+  }
+
+  const tactileFootProductAdapter = Object.freeze({
+    profile: tactileFootProfile,
+    aliases: Object.freeze(['foot']),
+    optionFields: Object.freeze(['side']),
+    validateOptions: validateTactileFootOptions,
+    connectionInfo: options => ['left', 'right'].includes(options.side)
+      ? { side: options.side, protocol: 'segmented' } : { protocol: 'segmented' },
+    discovery: Object.freeze({
+      createParser: () => createTactileFootParser(),
+      identify: frame => ({ side: frame.side, packetType: frame.packetType }),
+    }),
+    createParser: createTactileFootParser,
+    readStreamFields: readTactileFootStreamFields,
+  });
+
   // ---------- core/products/registry.js ----------
   /**
    * 已支持产品的唯一静态注册表：登记规范 ID、连接别名及适配器。
    * 新产品实现独立适配器后在此登记；不会根据参数、数据长度或设备名猜测产品。
    */
 
-  const deviceProductAdapters = Object.freeze([segmentedGloveProductAdapter, gloveProductAdapter, padProductAdapter, bodyProductAdapter, insoleProductAdapter]);
+  const deviceProductAdapters = Object.freeze([segmentedGloveProductAdapter, gloveProductAdapter, padProductAdapter, bodyProductAdapter, insoleProductAdapter, tactileFootProductAdapter]);
   const deviceProductCanonicalRegistry = new Map();
   const deviceProductConnectionRegistry = new Map();
 
@@ -2197,8 +2361,10 @@
     for (const field of ['onData', 'onError', ...(runtime === 'node' ? ['onStateChange'] : [])]) {
       if (options[field] !== undefined && typeof options[field] !== 'function') invalid(field, `${field} 必须是函数。`);
     }
-    // 自动探测只由 Node 连接层编排；浏览器仍在用户手势中选口，并明确手侧。
-    if (runtime !== 'node' && options.side === 'auto') invalid('side', '浏览器直接连接请明确选择 left 或 right；自动识别请使用 Node 入口。');
+    // 自动探测只由 Node 连接层编排；浏览器仍在用户手势中选口，并明确侧别。
+    if (runtime !== 'node' && adapter.discovery && !['left', 'right'].includes(options.side)) {
+      invalid('side', '浏览器直接连接请明确选择 left 或 right；自动识别请使用 Node 入口。');
+    }
     adapter.validateOptions(options, invalid);
     // 部分产品明确支持多个传输格式/波特率，交由自身适配器解析，公共入口不判断型号。
     const profile = adapter.resolveProfile?.(options) ?? adapter.profile;
@@ -2223,7 +2389,7 @@
   /**
    * 从注册表创建产品自己的解析器；不靠帧长推测型号或手侧。
    * @param {string} product 已注册的规范产品名或连接别名，未知产品一律拒绝。
-   * @param {object} options 产品解析选项；分包手套解析器支持 side: auto，其他有侧别产品使用 left/right。
+   * @param {object} options 产品解析选项；分包手套与触觉足底解析器支持 side: auto。
    * @returns {object} 带 push / reset 和累计诊断计数的解析器；每个连接应各建一个。
    */
   function createProductParser(product, options = {}) {
@@ -2258,19 +2424,20 @@
     if (Object.keys(options).some((field) => !['product', 'side'].includes(field))) {
       throw new ShroomError('INVALID_CONFIG', '产品模拟仅支持 product 和 side。', { stage: 'configure' });
     }
-    if (!['handGloveSegmented', 'handGloveFullPacket', 'hand'].includes(session.info.product)) {
-      throw new ShroomError('INVALID_CONFIG', '产品模拟仅支持分包手套、整包手套和手部检测垫。', { stage: 'configure' });
+    if (!['handGloveSegmented', 'handGloveFullPacket', 'hand', 'footVideo'].includes(session.info.product)) {
+      throw new ShroomError('INVALID_CONFIG', '产品模拟仅支持分包手套、整包手套、手部检测垫和触觉足底。', { stage: 'configure' });
     }
-    const segmented = session.info.product === 'handGloveSegmented';
-    const glove = segmented || session.info.product === 'handGloveFullPacket';
-    const source = createMockDevice({ rows: glove ? 16 : 32, cols: glove ? 16 : 32 });
+    const foot = session.info.product === 'footVideo';
+    const segmented = foot || session.info.product === 'handGloveSegmented';
+    const glove = !foot && (segmented || session.info.product === 'handGloveFullPacket');
+    const source = createMockDevice({ rows: glove || foot ? 16 : 32, cols: glove || foot ? 16 : 32 });
     const hub = createFrameHub();
     let sequence = 0;
     source.onFrame((frame) => {
       const tail = [0xaa, 0x55, 0x03, 0x99];
       if (segmented) {
-        // 分包没有设备帧序号；固定类型 2 同样可用于左/右手，点位表由显式 side 决定。
-        const packetType = 2;
+        // 足底类型 3/4 必须匹配左右脚；手套保留固定类型 2 与显式手侧的兼容行为。
+        const packetType = foot ? (options.side === 'left' ? 3 : 4) : 2;
         const first = Uint8Array.from([1, packetType, ...frame.raw.slice(0, 128), ...tail]);
         const second = Uint8Array.from([2, packetType, ...frame.raw.slice(128), ...new Uint8Array(16), ...tail]);
         for (const packet of [first, second]) {
@@ -3844,6 +4011,11 @@
     return connectProduct(productOptionsFor(options, 'hand'));
   }
 
+  /** 在用户手势中连接触觉足底；side 必须与包类型 3/4 对应的左/右脚一致。 */
+  async function connectTactileFoot(options = {}) {
+    return connectProduct(productOptionsFor(options, 'footVideo'));
+  }
+
   /** 校验便捷入口参数，再固定产品，避免空值被对象展开静默忽略。 */
   function productOptionsFor(options, product) {
     if (!options || typeof options !== 'object' || Array.isArray(options)) {
@@ -4664,6 +4836,7 @@
     connectProduct: connectProduct,
     connectGlove: connectGlove,
     connectHandPad: connectHandPad,
+    connectTactileFoot: connectTactileFoot,
     listDeviceProducts: listDeviceProducts,
     ShroomError: ShroomError,
     ERROR_CODES: ERROR_CODES,
@@ -4678,7 +4851,7 @@
     decodeStreamFrame: decodeStreamFrame,
     STREAM_SCHEMA: STREAM_SCHEMA,
     isSupported: isSerialSupported,
-    version: "0.6.0",
+    version: "0.7.0",
     // 想自己接数据源（WebSocket、蓝牙、录制回放）就用这几个
     createFramer: createFramer,
     decodeFrame: decodeFrame,

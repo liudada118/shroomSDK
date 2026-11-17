@@ -3,7 +3,7 @@
 **一步拿到产品数据。** 在自己项目的终端安装 SDK，无需查找仓库、解压或复制源码：
 
 ```bash
-npm install --save-exact shroom-sdk@0.5.0
+npm install --save-exact shroom-sdk@0.7.0
 ```
 
 ```js
@@ -13,9 +13,11 @@ import { readProduct, createWS, startRecording, stopRecording, downloadRecording
 
 SDK 从 npm 注册表安装到 `node_modules/shroom-sdk`，免登记下载，真实设备密钥单独申请。[官网 SDK 下载区](https://sdk.jq-industries.com/#downloads)继续提供 `.tgz` 下载；历史安装包 URL 仍可使用。安装包只含压缩运行代码、类型与说明；保存项目依赖和锁文件，以便重复安装。入口、升级和本地包安装见[npm 安装说明](docs/NPM.md)。压缩不等于加密，也不能防止有意修改代码。
 
-**0.4.0 起**，手套默认使用 130 + 146 字节分包，五个函数保持不变。`shroom-sdk@0.3.0` 只支持整包手套；升级时让 Node 服务端与网页同时安装 0.5.0，并重新构建前端。整包设备升级时改为显式 `product: 'handGloveFullPacket'`，见[手套协议与迁移](docs/GLOVE.md)。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)。
+**0.4.0 起**，手套默认使用 130 + 146 字节分包，五个函数保持不变。`shroom-sdk@0.3.0` 只支持整包手套；升级时让 Node 服务端与网页同时安装 0.7.0，并重新构建前端。整包设备升级时改为显式 `product: 'handGloveFullPacket'`，见[手套协议与迁移](docs/GLOVE.md)。仓库原有的 `shroom-backend-sdk@0.2.0` 是另一套接口，已由本 SDK 替换；旧代码保留在 `legacy-backend-sdk-0.2.0` 标签与 Git 历史。旧项目升级前先读[迁移说明](MIGRATION.md)。
 
 **0.5.0 新增：** Node 分包手套支持手动选口与自动识别。手动传 `path + side`；自动调用 `readProduct({ product: 'glove', onData, onError })`，内部复用基础 `connectProduct()` → `scanProductPorts()`。五个快速函数保持不变；0.4.0 仍需手动配置，自动识别要求升级到 0.5.0。
+
+**0.7.0 新增触觉足底：** Node 使用 `readProduct({ product: 'foot', path: 'COM3', side: 'left', onData })` 或 `connectTactileFoot()`，按 `packetType: 3=左脚、4=右脚` 接入。`pressure` 保留 256 个原扫描 ADC，`imu.raw` 保留 16 字节，`rawPackets` 保留含包头和帧尾的完整两包；支持手动与自动识别，不抽点、插值或标定。Node 与网页均使用 0.7.0；Python 暂未增加此产品。详见[触觉足底原始数据](docs/TACTILE-FOOT.md)。
 
 **取数 → 创建 WS → 开始采集 → 停止采集 → 下载**：五个函数保持不变。Node.js 连接设备并创建服务，网页连接一次后复用同一 `stream`。直接查看[五步 API 调用](docs/QUICK-START.md#quick-call)，使用上面的包名导入，接入自己的程序与按钮；源码 ZIP 的相对路径示例作为另一种交付方式保留。
 
@@ -27,7 +29,7 @@ SDK 从 npm 注册表安装到 `node_modules/shroom-sdk`，免登记下载，真
 
 驱动、SDK 依赖和 Node.js 授权是运行前提，简要配置见[接入准备](docs/QUICK-START.md#product-guide)。本流程使用 `serial / stream / recording` 功能；只需要产品数据时，可在取数后结束。新设备使用基础串口与自定义协议，已有主项目后端可使用 `BackendSdkClient` 客户端。
 
-Node.js 通过 `readProduct({ product, path, onData })` 读取已注册产品。手套 `glove` 可自动识别或手动填写 path+side；鞋垫 `insole` 需要按实物填写 side。0.5.0 仅分包手套可自动发现串口与手侧。检测垫 pad、人体 body 不传 side，鞋垫显式选择 protocol: '12bit' / '8bit'，默认12bit并保留原始ADC精度。浏览器使用 `readProduct({ url, onData })` 读取 WS；Web Serial 直接连接仍明确 side，使用基础 connectProduct。参见[鞋垫协议与数据](docs/INSOLE.md)、[人体全身协议与线序](docs/HUMAN-BODY.md)。
+Node.js 通过 `readProduct({ product, path, onData })` 读取已注册产品。手套 `glove` 和触觉足底 `foot` 可自动识别或手动填写 path+side；A版鞋垫 `insole` 需要按实物填写 side。手套自动发现从 0.5.0 起提供，足底从 0.7.0 起提供。检测垫 pad、人体 body 不传 side，A版鞋垫显式选择 protocol: '12bit' / '8bit'，默认12bit并保留原始ADC精度。浏览器使用 `readProduct({ url, onData })` 读取 WS；Web Serial 直接连接仍明确 side，使用基础 connectProduct。参见[触觉足底](docs/TACTILE-FOOT.md)、[鞋垫协议与数据](docs/INSOLE.md)、[人体全身协议与线序](docs/HUMAN-BODY.md)。
 
 Node.js 产品连接默认在意外断线后重连原串口，每 3 秒尝试一次、最多 3 次。设备对象和数据订阅继续复用，可用 `onStateChange` 显示状态，或设置 `reconnect: false` 关闭。首次连接失败仍由调用方处理；手动关闭、授权失效和解析错误不触发重连。断线会结束当前录制，恢复数据后需重新开始采集。Web Serial 和浏览器 WS 没有自动重连；Python 产品连接使用相同的重连规则（参数为 `reconnect={"interval": 秒, "max_attempts": 次数}`），详见[重连参数与边界](docs/BACKEND-GUIDE.md#node-reconnect)。
 
@@ -95,7 +97,7 @@ npm run pack:npm
 
 **手动或自动二选一**：手动方式用 Node `listPorts()` 查询系统端口，再由用户选 path；它不打开端口、不识别传感器。自动方式直接调用0.5.0的 `readProduct({ product: 'glove', onData })`。需要展示已识别设备列表时，再单独调用基础 `scanProductPorts()`；它需要 serial 授权，会实际读取分包，返回 devices 与逐口 ports 报告。`listPorts` 和 `scanProductPorts` 从 `shroom-sdk/node` 导入，`readProduct` 仍从 `shroom-sdk/quick-flow` 导入，不增加第六个快速函数，片段见[搜索并选择串口](docs/QUICK-START.md#flow-ports)。
 
-自动扫描只识别固定 921600 波特率的分包手套，packetType 1=左、2=右，不是唯一设备编号。同侧至少 3 个完整配对后才匹配，多个匹配报 PORT_AMBIGUOUS，零匹配报 PORT_NOT_FOUND。双手都在时用 side 筛选；同侧多只手套需要选择 path。默认每口读取 1200ms，可配置 scan 的 paths/timeoutMs/signal；完成探测并释放端口后才正式连接。[完整扫描 API](docs/BACKEND-GUIDE.md#node-scan-product-ports)同时说明活跃连接保护与错误报告。
+自动扫描按所选产品的固定 921600 波特率读取分包：手套 packetType 1=左手、2=右手，触觉足底 3=左脚、4=右脚；类型不是唯一设备编号。同侧至少 3 个完整配对后才匹配，多个匹配报 PORT_AMBIGUOUS，零匹配报 PORT_NOT_FOUND。左右设备都在时用 side 筛选；同侧多只设备需要选择 path。默认每口读取 1200ms，可配置 scan 的 paths/timeoutMs/signal；完成探测并释放端口后才正式连接。[完整扫描 API](docs/BACKEND-GUIDE.md#node-scan-product-ports)同时说明活跃连接保护与错误报告。
 
 | 步骤 | 运行位置 | API |
 | --- | --- | --- |
@@ -179,7 +181,7 @@ const device = await Shroom.connectHandPad({
 process.once('SIGINT', () => { void device.close().catch(console.error); });
 ```
 
-手套手动方式为 `Shroom.connectGlove({ path: 'COM3', side: 'left', onData: console.log })`；0.5.0自动方式为 `Shroom.connectGlove({ onData: console.log })`。省略 path、side 省略/为 auto 或显式传 scan 会先识别；明确 path+left/right 且无 scan 保持手动直连。非分包手套产品仍只在恰好一个串口时自动选择，多个口报歧义。产品入口不接受 baudRate/delimiter/layout 等协议覆盖，进阶配置使用原 Shroom.connect。完整参数见[产品接入 API](docs/BACKEND-GUIDE.md#node-connect-product)。
+手套手动方式为 `Shroom.connectGlove({ path: 'COM3', side: 'left', onData: console.log })`；0.5.0起自动方式为 `Shroom.connectGlove({ onData: console.log })`。省略 path、side 省略/为 auto 或显式传 scan 会先识别；明确 path+left/right 且无 scan 保持手动直连。0.7.0 的触觉足底使用 `Shroom.connectTactileFoot()`，按包内3/4识别脚侧；没有发现钩子的产品仍只在恰好一个串口时自动选择，多个口报歧义。产品入口不接受 baudRate/delimiter/layout 等协议覆盖，进阶配置使用原 Shroom.connect。完整参数见[产品接入 API](docs/BACKEND-GUIDE.md#node-connect-product)。
 
 ---
 
@@ -383,7 +385,8 @@ await Shroom.connect({ layout: p.layout });   // 下拉里的 value 是产品名
 | `Shroom.connectProduct(options)` / `listDeviceProducts()` | 统一产品连接与产品清单 |
 | `Shroom.connect(options?)` | 连接串口，`options.path` 不填就自动挑第一个 |
 | `Shroom.listPorts()` | 列出可用串口 |
-| `Shroom.scanProductPorts(options?)` | 0.5.0 新增；实际探测分包手套与左右手，返回 devices/ports，需 serial 授权 |
+| `Shroom.connectTactileFoot(options?)` | 0.7.0 新增；触觉足底手动或自动取数，保留 ADC、IMU 和完整 rawPackets |
+| `Shroom.scanProductPorts(options?)` | 手套从 0.5.0、触觉足底从 0.7.0 支持；返回 devices/ports，需 serial 授权 |
 | `Shroom.mock(options?)` | 模拟设备 |
 | `Shroom.renderAscii(frame, options?)` | 把一帧画成终端里的彩色方块 |
 
@@ -459,7 +462,7 @@ await Shroom.connect({
 });
 ```
 
-串口、拆帧与解码选项会在打开端口前校验。波特率和矩阵尺寸必须有效，`rows / cols` 成对提供；分隔符不能为空，长度范围、`fullScale`、`threshold` 与 `layout` 也需符合约束。这里的通用 `connect()` 以及非分包手套产品仍需明确配置产品、波特率和线序，不会自动推断。0.5.0 新增的 Node 分包手套自动模式会在固定 921600 波特率下识别左右手，并选择对应线序；它不扫描波特率，也不识别其他产品。
+串口、拆帧与解码选项会在打开端口前校验。波特率和矩阵尺寸必须有效，`rows / cols` 成对提供；分隔符不能为空，长度范围、`fullScale`、`threshold` 与 `layout` 也需符合约束。通用 `connect()` 仍由应用配置协议，产品入口不根据帧长猜测型号。Node 分包手套从0.5.0起、触觉足底从0.7.0起，可在所选产品固定的921600波特率下识别左右侧；手套采用对应线序，足底保持原扫描顺序，不扫描波特率或自动匹配未选定的其他协议。
 
 **关于 `lockLength`。** 分隔符只有 4 个字节，数据里迟早会撞出一模一样的一串
 `AA 55 03 99`，于是切出一个长度不对的短帧。这种长度多半不是完全平方数，

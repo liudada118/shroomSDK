@@ -5,6 +5,11 @@
     "forAi": false, "area": "guides", "group": "guides"
   },
   {
+    "slug": "tactile-foot", "file": "docs/TACTILE-FOOT.md", "label": "触觉足底原始数据", "navLabel": "触觉足底协议",
+    "summary": "0.7.0 触觉足底分包协议、3/4 左右脚识别，以及原始 ADC、IMU 和完整两包保留。",
+    "forAi": false, "area": "guides", "group": "guides"
+  },
+  {
     "slug": "insole", "file": "docs/INSOLE.md", "label": "鞋垫协议与数据", "navLabel": "鞋垫协议",
     "summary": "A版鞋垫12bit/8bit协议、112真实点映射、原始ADC与IMU，以及解析边界。",
     "forAi": false, "area": "guides", "group": "guides"
@@ -76,6 +81,7 @@
     "tocDescriptions": {
       "node-connect-glove": "连接分包手套：手动或自动识别",
       "node-connect-hand-pad": "连接手部检测垫",
+      "node-connect-tactile-foot": "连接触觉足底并保留完整原包",
       "node-connect-product": "按产品类型连接设备",
       "node-serve-device": "创建独立 WS 与下载服务",
       "node-server": "控制采集、获取下载地址与关闭服务",
@@ -83,7 +89,7 @@
       "node-on-data": "订阅高层产品数据",
       "node-product-data": "读取产品压力矩阵与手套分包/整包字段",
       "node-list-ports": "列出可用串口",
-      "node-scan-product-ports": "扫描分包手套并识别左右手",
+      "node-scan-product-ports": "扫描分包手套或触觉足底并识别左右侧",
       "node-connect": "连接串口设备",
       "node-mock": "生成模拟传感器数据",
       "node-on-frame": "订阅每一帧数据",
@@ -176,6 +182,7 @@
       "web-serial": "浏览器串口通讯",
       "connect-glove": "连接分包手套并指定实物左右手",
       "connect-hand-pad": "连接手部检测垫",
+      "connect-tactile-foot": "连接触觉足底并指定左右脚",
       "connect-product": "按产品连接与查询支持清单",
       "product-data": "读取产品数据与订阅数据回调",
       "supported": "检测浏览器串口支持",

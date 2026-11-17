@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createProductCall } from '../examples/product-call.js';
+import { createProductCall, productCallDataFields } from '../examples/product-call.js';
 import * as NodeSdk from '../src/node/index.js';
 import * as WebSdk from '../src/web/index.js';
 
@@ -77,4 +77,64 @@ test('new products reject ambiguous protocol and side choices and do not generat
   }
   assert.throws(() => createProductCall({ ...base, product: 'body', protocol: '12bit' }), /不使用/);
   assert.throws(() => createProductCall({ ...base, product: 'body', env: 'web' }), /Node.js/);
+});
+
+test('tactile-foot call snippets preserve raw field access for manual and automatic Node connections', async () => {
+  assert.deepEqual(productCallDataFields('foot'), ['pressure', 'imu.raw', 'rawPackets']);
+  const fields = productCallDataFields('foot');
+  fields.push('fingers');
+  assert.deepEqual(productCallDataFields('foot'), ['pressure', 'imu.raw', 'rawPackets']);
+  const modes = [
+    { side: 'left' }, { side: 'right' },
+    { side: 'left', connectionMode: 'manual' }, { side: 'right', connectionMode: 'manual' },
+    {}, { side: 'auto' }, { connectionMode: 'auto' },
+    { side: 'left', connectionMode: 'auto' }, { side: 'right', connectionMode: 'auto' },
+  ];
+  const data = { pressure: Uint8Array.from([0, 1, 255]), imu: { raw: Uint8Array.from([255, 0]) },
+    rawPackets: [Uint8Array.from([1, 3]), Uint8Array.from([2, 3])] };
+  for (const configuration of modes) for (const platform of ['windows', 'macos', 'linux'])
+    for (const importStyle of ['relative', 'package']) for (const quickFlow of [false, true]) {
+      const source = createProductCall({ product: 'foot', ...configuration, env: 'node', platform, importStyle, quickFlow });
+      const name = quickFlow ? 'readProduct' : 'connectTactileFoot';
+      assert.equal(typeof NodeSdk.connectTactileFoot, 'function');
+      const entry = importStyle === 'package' ? `shroom-sdk/${quickFlow ? 'quick-flow' : 'node'}`
+        : quickFlow ? './quick-flow.js' : './node/index.js';
+      assert.ok(source.includes(`from '${entry}'`));
+      assert.match(source, /0\.7\.0 或更高版本/);
+      assert.match(source, /3=左脚、4=右脚/);
+      assert.doesNotMatch(source, /fingers|palm|sensors|createProductView|createFramer|baudRate|protocol:/);
+      const calls = [], output = [], device = { close: async () => {} };
+      const run = new AsyncFunction(name, 'console', source.replace(/^import[^\n]+\n/, '') + '\nreturn device;');
+      const actual = await run(async options => { calls.push(options); options.onData(data); return device; },
+        { log: (...args) => output.push(args), error() {} });
+      assert.equal(actual, device);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].product, quickFlow ? 'foot' : undefined);
+      const automatic = configuration.connectionMode === 'auto' || configuration.side === 'auto' || configuration.side === undefined;
+      const expectedPath = platform === 'windows' ? 'COM3' : platform === 'macos' ? '/dev/cu.usbserial-实际端口' : '/dev/ttyUSB0';
+      assert.equal(calls[0].path, automatic ? undefined : expectedPath);
+      assert.equal(calls[0].side, configuration.side ?? 'auto');
+      assert.deepEqual(output, [[data.pressure, data.imu.raw, data.rawPackets]]);
+    }
+});
+
+test('explicit automatic mode supports a glove-side filter without changing existing manual defaults', async () => {
+  const source = createProductCall({ product: 'glove', side: 'left', env: 'node', connectionMode: 'auto' });
+  const calls = [];
+  const run = new AsyncFunction('connectGlove', 'console', source.replace(/^import[^\n]+\n/, ''));
+  await run(async options => { calls.push(options); return {}; }, { log() {}, error() {} });
+  assert.equal(calls[0].side, 'left');
+  assert.equal(calls[0].path, undefined);
+  assert.throws(() => createProductCall({ product: 'glove', env: 'node' }), TypeError);
+  assert.match(createProductCall({ product: 'glove', side: 'left', env: 'node' }), /path: 'COM3'/);
+});
+
+test('foot snippets reject unsupported protocols, direct browser generation and invalid discovery options', () => {
+  const base = { product: 'foot', side: 'left', env: 'node' };
+  for (const override of [{ protocol: '12bit' }, { protocol: '8bit' }, { protocol: null }, { env: 'web' },
+    { side: 'both' }, { side: null }, { connectionMode: 'unknown' }, { side: 'auto', connectionMode: 'manual' },
+    { side: undefined, connectionMode: 'manual' }, { product: 'pad', connectionMode: 'auto' },
+    { product: 'insole', connectionMode: 'auto' }, { product: 'glove', env: 'web', connectionMode: 'auto' }]) {
+    assert.throws(() => createProductCall({ ...base, ...override }), TypeError);
+  }
 });

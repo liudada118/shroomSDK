@@ -13,7 +13,7 @@
  *
  * 没有硬件时可用 Shroom.mock() 调试通用矩阵视图；模拟帧不等于真实产品帧。
  */
-export { connectSerial, isSerialSupported, connectProduct, connectGlove, connectHandPad } from './serial.js';
+export { connectSerial, isSerialSupported, connectProduct, connectGlove, connectHandPad, connectTactileFoot } from './serial.js';
 export { listDeviceProducts } from '../core/product.js';
 export { createHeatmap } from './heatmap.js';
 export { connectStream } from './stream.js';
@@ -28,7 +28,7 @@ export { BackendSdkClient } from '../backend/client.js';
 export { ShroomError, ERROR_CODES, asShroomError } from '../core/errors.js';
 export { activateLicense, getLicenseStatus, clearLicense, SDK_PRODUCT_TYPE } from '../core/license.js';
 
-import { connectSerial, isSerialSupported, connectProduct, connectGlove, connectHandPad } from './serial.js';
+import { connectSerial, isSerialSupported, connectProduct, connectGlove, connectHandPad, connectTactileFoot } from './serial.js';
 import { listDeviceProducts } from '../core/product.js';
 import { createHeatmap } from './heatmap.js';
 import { connectStream } from './stream.js';
@@ -51,6 +51,7 @@ export const Shroom = {
   connectProduct,
   connectGlove,
   connectHandPad,
+  connectTactileFoot,
   listDeviceProducts,
   /** 连接独立产品数据服务；录制保存在服务端。 */
   connectStream,

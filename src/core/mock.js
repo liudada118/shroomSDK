@@ -27,19 +27,20 @@ export function createProductMockDevice(options = {}) {
   if (Object.keys(options).some((field) => !['product', 'side'].includes(field))) {
     throw new ShroomError('INVALID_CONFIG', '产品模拟仅支持 product 和 side。', { stage: 'configure' });
   }
-  if (!['handGloveSegmented', 'handGloveFullPacket', 'hand'].includes(session.info.product)) {
-    throw new ShroomError('INVALID_CONFIG', '产品模拟仅支持分包手套、整包手套和手部检测垫。', { stage: 'configure' });
+  if (!['handGloveSegmented', 'handGloveFullPacket', 'hand', 'footVideo'].includes(session.info.product)) {
+    throw new ShroomError('INVALID_CONFIG', '产品模拟仅支持分包手套、整包手套、手部检测垫和触觉足底。', { stage: 'configure' });
   }
-  const segmented = session.info.product === 'handGloveSegmented';
-  const glove = segmented || session.info.product === 'handGloveFullPacket';
-  const source = createMockDevice({ rows: glove ? 16 : 32, cols: glove ? 16 : 32 });
+  const foot = session.info.product === 'footVideo';
+  const segmented = foot || session.info.product === 'handGloveSegmented';
+  const glove = !foot && (segmented || session.info.product === 'handGloveFullPacket');
+  const source = createMockDevice({ rows: glove || foot ? 16 : 32, cols: glove || foot ? 16 : 32 });
   const hub = createFrameHub();
   let sequence = 0;
   source.onFrame((frame) => {
     const tail = [0xaa, 0x55, 0x03, 0x99];
     if (segmented) {
-      // 分包没有设备帧序号；固定类型 2 同样可用于左/右手，点位表由显式 side 决定。
-      const packetType = 2;
+      // 足底类型 3/4 必须匹配左右脚；手套保留固定类型 2 与显式手侧的兼容行为。
+      const packetType = foot ? (options.side === 'left' ? 3 : 4) : 2;
       const first = Uint8Array.from([1, packetType, ...frame.raw.slice(0, 128), ...tail]);
       const second = Uint8Array.from([2, packetType, ...frame.raw.slice(128), ...new Uint8Array(16), ...tail]);
       for (const packet of [first, second]) {

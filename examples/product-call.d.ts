@@ -1,13 +1,15 @@
-export type ProductCallProduct = 'glove' | 'pad' | 'body' | 'insole';
+export type ProductCallProduct = 'glove' | 'pad' | 'body' | 'insole' | 'foot';
 
 /** 精简调用独立于旧完整 HTML 生成器；新增产品只提供 Node 取数与五步 WS 流程。 */
 export interface ProductCallOptions {
   product: ProductCallProduct;
-  /** glove 为实物手侧，insole 为实物脚侧，二者必须明确填写；pad/body 不使用。 */
-  side?: 'left' | 'right';
+  /** glove/insole 手动连接需明确实物侧别；foot 省略时自动发现。auto 仅适用于 Node 分包手套/足底。 */
+  side?: 'left' | 'right' | 'auto';
+  /** Node glove/foot 可显式自动扫描并用 side 筛选；其余产品与浏览器不接收。现有产品默认保持手动。 */
+  connectionMode?: 'manual' | 'auto';
   /** 仅 insole 使用；与设备固件匹配，默认 12bit。 */
   protocol?: '12bit' | '8bit';
-  /** body/insole 的直接取数示例仅使用 node。 */
+  /** body/insole/foot 的直接取数示例仅使用 node；网页通过五步 WS 流程接收。 */
   env: 'web' | 'node';
   platform: 'windows' | 'macos' | 'linux';
   /** 保留原调用生成选项兼容，不改变精简片段的文件位置。 */

@@ -71,6 +71,11 @@ export async function connectHandPad(options = {}) {
   return connectProduct(productOptionsFor(options, 'hand'));
 }
 
+/** 在用户手势中连接触觉足底；side 必须与包类型 3/4 对应的左/右脚一致。 */
+export async function connectTactileFoot(options = {}) {
+  return connectProduct(productOptionsFor(options, 'footVideo'));
+}
+
 /** 校验便捷入口参数，再固定产品，避免空值被对象展开静默忽略。 */
 function productOptionsFor(options, product) {
   if (!options || typeof options !== 'object' || Array.isArray(options)) {

@@ -241,6 +241,7 @@ export interface DeviceProductTypes {
   hand: { names: 'hand' | 'pad'; frame: HandPadFrame; node: NodeHandPadOptions; web: WebHandPadOptions };
   humanBody: { names: 'humanBody' | 'body'; frame: HumanBodyFrame; node: NodeHumanBodyOptions; web: WebHumanBodyOptions };
   jqInsole: { names: 'jqInsole' | 'insole'; frame: InsoleFrame; node: NodeInsoleOptions; web: WebInsoleOptions };
+  footVideo: { names: 'footVideo' | 'foot'; frame: TactileFootFrame; node: NodeTactileFootOptions; web: WebTactileFootOptions };
 }
 export type DeviceProductId = keyof DeviceProductTypes;
 export type DeviceProductName = DeviceProductTypes[DeviceProductId]['names'];
@@ -325,6 +326,24 @@ export interface SegmentedGloveFrame extends Omit<GloveFrame, 'product' | 'seque
   /** 首尾包配对类型；已核实固件中 1=左手、2=右手，不是唯一设备编号或采样序号。 */
   packetType: number;
   sequence?: never;
+}
+
+/** 触觉足底分包原始数据；16×16 仅为扫描存储形状，不代表物理鞋形。 */
+export interface TactileFootFrame extends ProductFrame<Uint8Array> {
+  product: 'footVideo';
+  protocol: 'segmented';
+  side: 'left' | 'right';
+  /** 包内身份：3=左脚、4=右脚；显式 side 只用于筛选，不能改变身份。 */
+  packetType: 3 | 4;
+  sequence?: never;
+  rows: 16;
+  cols: 16;
+  /** 与 raw / pressure 相同的 256 个扫描 ADC，未抽点、插值、镜像或标定。 */
+  pressureMatrix: Uint8Array;
+  /** 原样保留全部 16 字节，不解释四元数、轴序或单位。 */
+  imu: { raw: Uint8Array };
+  /** 两份完整串口原包，含各自 AA550399 帧尾，长度依次为 134、150。 */
+  rawPackets: [Uint8Array, Uint8Array];
 }
 
 /** 来源物理矩阵标识；不按模型朝向交换左右，也不加入显示翻转或插值。 */
@@ -516,7 +535,7 @@ export interface WebHandPadOptions extends ProductCallbacks<HandPadFrame> {
   port?: unknown;
   filters?: WebConnectOptions['filters'];
 }
-/** Node 探测限制；每个串口只按手套协议的 921600 波特率读取，不扫描速率。 */
+/** Node 探测限制；每个串口只按所选产品的 921600 波特率读取，不扫描速率。 */
 export interface ProductPortScanSettings {
   /** 仅探测这些端口；省略时枚举本机串口，空数组无效。 */
   paths?: string[];
@@ -525,15 +544,18 @@ export interface ProductPortScanSettings {
   /** 取消后清理已打开的探测端口。 */
   signal?: AbortSignal;
 }
-/** 当前只支持分包手套；side 是筛选条件，省略时接受任一已确认手侧。 */
-export interface ProductPortScanOptions extends ProductPortScanSettings {
-  product?: 'glove' | 'handGloveSegmented';
+/** 分包手套或触觉足底；side 是筛选条件，省略时接受任一已确认侧别。 */
+export type ProductPortScanName = 'glove' | 'handGloveSegmented' | 'foot' | 'footVideo';
+export type ProductPortScanId<Name extends ProductPortScanName = ProductPortScanName> =
+  Name extends 'foot' | 'footVideo' ? 'footVideo' : 'handGloveSegmented';
+export interface ProductPortScanOptions<Name extends ProductPortScanName = ProductPortScanName> extends ProductPortScanSettings {
+  product?: Name;
   side?: 'left' | 'right';
 }
 /** 至少三个同侧完整首尾配对确认的设备；packetType 不具有唯一 SN 语义。 */
-export interface DetectedProductPort {
+export interface DetectedProductPort<Id extends ProductPortScanId = 'handGloveSegmented'> {
   path: string;
-  product: 'handGloveSegmented';
+  product: Id;
   label: string;
   baudRate: number;
   side: 'left' | 'right';
@@ -542,15 +564,15 @@ export interface DetectedProductPort {
   serialNumber?: string;
 }
 /** 每个尝试端口的独立结果；无匹配不等于端口打开失败。 */
-export interface ProductPortScanEntry {
+export interface ProductPortScanEntry<Id extends ProductPortScanId = 'handGloveSegmented'> {
   path: string;
   status: 'matched' | 'unrecognized' | 'error';
-  device?: DetectedProductPort;
+  device?: DetectedProductPort<Id>;
   error?: ShroomError;
 }
-export interface ProductPortScanResult {
-  devices: DetectedProductPort[];
-  ports: ProductPortScanEntry[];
+export interface ProductPortScanResult<Id extends ProductPortScanId = 'handGloveSegmented'> {
+  devices: DetectedProductPort<Id>[];
+  ports: ProductPortScanEntry<Id>[];
 }
 export interface NodeGloveOptions extends ProductCallbacks<SegmentedGloveFrame>, NodeSerialLifecycleOptions {
   /** 省略或 auto 时从有效分包识别左右手；显式侧别用于扫描筛选或手动映射。 */
@@ -558,6 +580,18 @@ export interface NodeGloveOptions extends ProductCallbacks<SegmentedGloveFrame>,
   /** 无 path 时自动扫描；显式 path + left/right 且无 scan 时保持手动直连。 */
   path?: string;
   /** 显式要求验证串口数据，并可限制候选端口、窗口和取消信号。 */
+  scan?: ProductPortScanSettings;
+}
+/** 浏览器直接连接触觉足底时明确选择侧别，包内 3/4 必须与该侧别一致。 */
+export interface WebTactileFootOptions extends ProductCallbacks<TactileFootFrame> {
+  side: 'left' | 'right';
+  port?: unknown;
+  filters?: WebConnectOptions['filters'];
+}
+export interface NodeTactileFootOptions extends ProductCallbacks<TactileFootFrame>, NodeSerialLifecycleOptions {
+  /** 省略或 auto 时按包类型识别：3=左脚、4=右脚；left/right 只筛选，不重新标记原包。 */
+  side?: 'left' | 'right' | 'auto';
+  path?: string;
   scan?: ProductPortScanSettings;
 }
 /** 兼容整包设备：通过显式 product: handGloveFullPacket 使用。 */
@@ -609,6 +643,8 @@ export function listDeviceProducts(): DeviceProductInfo[];
 export function connectGlove(options: WebGloveOptions): Promise<ProductDevice<SegmentedGloveFrame>>;
 /** 浏览器手部检测垫入口：内置 32×32 协议与映射，不需要 side。 */
 export function connectHandPad(options?: WebHandPadOptions): Promise<ProductDevice<HandPadFrame>>;
+/** 浏览器触觉足底入口：在用户点击中选择串口，保留完整分包与扫描 ADC。 */
+export function connectTactileFoot(options: WebTactileFootOptions): Promise<ProductDevice<TactileFootFrame>>;
 /** 按 product 选择已适配协议；产品配置决定波特率和解析器，回调接收产品帧。 */
 export function connectProduct<Name extends DeviceProductName>(options: { product: Name } & ProductOptionsFor<Name, 'web'>): Promise<ProductDevice<ProductFrameFor<Name>>>;
 
@@ -795,6 +831,7 @@ export const Shroom: {
   connectProduct: typeof connectProduct;
   connectGlove: typeof connectGlove;
   connectHandPad: typeof connectHandPad;
+  connectTactileFoot: typeof connectTactileFoot;
   listDeviceProducts: typeof listDeviceProducts;
   connectStream: typeof connectStream;
   createProductView: typeof createProductView;

@@ -84,7 +84,7 @@ async function discoverRuntime(root, pkg, temporary) {
 function browserNodeShim(root, entryExports) {
   const nodeNames = entryExports.get(resolve(root, 'src/node/index.js')) ?? [];
   const webNames = new Set(entryExports.get(resolve(root, 'src/web/index.js')) ?? []);
-  const browserUnsafe = new Set(['connectSerial', 'connectProduct', 'connectGlove', 'connectHandPad']);
+  const browserUnsafe = new Set(['connectSerial', 'connectProduct', 'connectGlove', 'connectHandPad', 'connectTactileFoot']);
   const shared = nodeNames.filter(name => webNames.has(name) && !browserUnsafe.has(name) && !['default', 'Shroom'].includes(name));
   const unsupported = nodeNames.filter(name => !shared.includes(name) && !['default', 'Shroom'].includes(name));
   const source = JSON.stringify(resolve(root, 'src/web/index.js').split(sep).join('/'));
@@ -93,7 +93,7 @@ export { ${shared.join(', ')} };
 function unsupported() { throw new ShroomError('UNSUPPORTED_ENVIRONMENT', '本机串口取数和创建 WS 服务须在 Node.js 中调用；网页请传入 WS url。', { stage: 'configure' }); }
 ${unsupported.map(name => `export const ${name} = unsupported;`).join('\n')}
 export const Shroom = { ...WebShroom, connect: unsupported, connectProduct: unsupported,
-  connectGlove: unsupported, connectHandPad: unsupported, listPorts: unsupported,
+  connectGlove: unsupported, connectHandPad: unsupported, connectTactileFoot: unsupported, listPorts: unsupported,
   serveDevice: unsupported, renderAscii: unsupported };
 export default Shroom;
 `;

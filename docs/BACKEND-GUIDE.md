@@ -129,17 +129,29 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 
 **注意事项**：输出已映射，无需应用传波特率、矩阵尺寸或 layout；不接受这些参数覆盖。相对 ADC 不等于 kPa / N，产品入口不执行压力标定。
 
+### Shroom.connectTactileFoot(options?) {#node-connect-tactile-foot}
+
+**用途**：0.7.0 新增的触觉足底入口，规范产品 ID 为 `footVideo`，连接别名为 `foot`；具名 `connectTactileFoot()` 是相同入口。
+
+**参数**：可选 `{ path, side, scan, onData, onError, reconnect, onStateChange }`。Node 可省略 `path/side` 或设置 `side: 'auto'` 自动识别，也可明确指定 `path + side: 'left' / 'right'` 直连；显式 `scan` 会先验证串口。固定 921600 波特率，不接受协议或布局覆盖。
+
+**返回值**：`Promise<NodeProductDevice<TactileFootFrame>>`。包类型 `3=左脚、4=右脚` 始终决定侧别，显式参数只作筛选；不匹配的包不会被重新标记后交付。`pressure` 保留 256 个原扫描 ADC，`imu.raw` 保留 16 字节，`rawPackets` 为含头尾的两包（134/150 字节）。16×16 仅为扫描存储形状。
+
+**示例**：`const device = await Shroom.connectTactileFoot({ path: 'COM3', side: 'left', onData: data => console.log(data.pressure, data.rawPackets) })`；结束时 `await device.close()`。
+
+该协议与 `jqInsole` 独立，详见[触觉足底](TACTILE-FOOT.md)。Python 暂未接入此产品。
+
 ### Shroom.connectProduct(options) {#node-connect-product}
 
 **用途**：按明确的产品标识连接，统一实现产品选择菜单。
 
-**参数**：必填 product，支持分包手套 glove/handGloveSegmented、兼容整包手套 handGloveFullPacket、检测垫 pad/hand、人体 body/humanBody、鞋垫 insole/jqInsole。0.5.0 仅 Node 分包手套支持可省略 side、side: auto 和 scan，规则与 connectGlove 相同；整包手套、鞋垫仍必须 left/right，检测垫和人体不传 side，其他产品均不接受 scan。鞋垫另有 protocol: '12bit' / '8bit'（默认12bit）、baudRate（默认921600，限来源列举值）。所有产品支持 path/onData/onError，Node另支持reconnect/onStateChange。鞋垫与人体要求0.3.0，格式详见[鞋垫](INSOLE.md)、[人体](HUMAN-BODY.md)。
+**参数**：必填 product，支持分包手套 glove/handGloveSegmented、兼容整包手套 handGloveFullPacket、检测垫 pad/hand、人体 body/humanBody、A版鞋垫 insole/jqInsole，以及 0.7.0 新增的触觉足底 foot/footVideo。Node 分包手套和触觉足底支持省略 side、side: auto 和 scan；整包手套、A版鞋垫仍必须 left/right，检测垫和人体不传 side，其余产品不接受 scan。A版鞋垫另有 protocol: '12bit' / '8bit'（默认12bit）、baudRate（默认921600，限来源列举值）。所有产品支持 path/onData/onError，Node另支持reconnect/onStateChange。鞋垫与人体要求0.3.0，格式详见[鞋垫](INSOLE.md)、[人体](HUMAN-BODY.md)。
 
 **返回值**：对应产品设备的 Promise，设备提供 `onData / onFrame / onError / close` 与诊断方法；回调数据类型由产品决定。具名 `connectProduct()` 是相同入口。
 
 **示例**：`await Shroom.connectProduct({ product: 'handGloveSegmented', path: 'COM3', side: 'right', onData: console.log })`。
 
-**注意事项**：快速 readProduct 在 Node 调用本接口，本接口在自动模式复用公开 scanProductPorts，扫描完成后继续原解析与重连链路。别名只用于连接，device.info.product 与 frame.product 使用正式 ID。product 和鞋垫 protocol 仍由调用方选择；只有支持发现的分包手套可自动确认 side。通用协议继续用 Shroom.connect；Python 的对应方法为 `connect_product / connect_glove / scan_product_ports`，见 [Python SDK](../python/README.md)。
+**注意事项**：快速 readProduct 在 Node 调用本接口，本接口在自动模式复用公开 scanProductPorts，扫描完成后继续原解析与重连链路。别名只用于连接，device.info.product 与 frame.product 使用正式 ID。product 和A版鞋垫 protocol 仍由调用方选择；Node 分包手套和触觉足底可自动确认 side。通用协议继续用 Shroom.connect；Python 的对应方法为 `connect_product / connect_glove / scan_product_ports`，不含触觉足底，见 [Python SDK](../python/README.md)。
 
 ### Shroom.listDeviceProducts() {#node-device-products}
 
@@ -153,6 +165,7 @@ process.once('SIGINT', () => { void device.close().catch(console.error); });
 | `handGloveFullPacket` | 触觉手套（整包）/ glove | 921600 / 274 | 256 / 五指、独立指腹与手掌分区 |
 | `humanBody` | 人体全身 / body | 1000000 / 1024 | 1024扫描通道 / 10区400真实映射点 |
 | `jqInsole` | 鞋垫A版 / insole | 默认921600 / 默认552（8bit为272） | 256扫描通道 / 112真实点；payload不包含魔术头和分包type/index |
+| `footVideo` | 触觉足底 / foot（0.7.0） | 921600 / 130+146=276 | 256原扫描 ADC、16字节原始 IMU、含帧尾的完整两包；不映射/抽点 |
 | `hand` | 手部检测垫 / mat | 1000000 / 1024 | 1024 / 32×32 |
 
 **示例**：`console.log(Shroom.listDeviceProducts())`。
@@ -228,12 +241,12 @@ console.log(await Shroom.listPorts());
 
 ### Shroom.scanProductPorts(options?) {#node-scan-product-ports}
 
-**用途**：0.5.0 新增的 Node 基础 API。实际读取串口分包，发现手套及左右手；具名 scanProductPorts 是相同入口。需 serialport 和有效 SDK serial 授权，不代替无需授权的 listPorts。
+**用途**：0.5.0 新增、0.7.0 扩展至触觉足底的 Node 基础 API。实际读取所选产品的串口分包，识别左右手或左右脚；具名 scanProductPorts 是相同入口。需 serialport 和有效 SDK serial 授权，不代替无需授权的 listPorts。
 
 | 参数 | 类型 | 默认值 / 说明 |
 | --- | --- | --- |
-| product | 'glove' 或 'handGloveSegmented' | 默认glove；当前只支持分包手套 |
-| side | 'left' 或 'right' | 可选筛选；省略时接受任一已确认手侧 |
+| product | 'glove' / 'handGloveSegmented' / 'foot' / 'footVideo' | 默认glove；触觉足底从0.7.0起支持 |
+| side | 'left' 或 'right' | 可选筛选；省略时接受任一已确认侧别 |
 | paths | string[] | 可选候选口；省略时枚举，空数组非法 |
 | timeoutMs | number | 每个口的读取窗口，默认1200，范围50–10000ms，不是全部搜索总时长 |
 | signal | AbortSignal | 可选取消信号，取消后清理已打开的探测口 |

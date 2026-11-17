@@ -1,14 +1,14 @@
 # Shroom SDK 架构
 
-最后更新于：2026-11-13
+最后更新于：2026-11-17
 
 ## 1. 项目概述
 
 本仓库维护独立的 `shroom-sdk`：读取传感器数据、按需创建 WebSocket 服务、采集到 SQLite、停止采集并导出 CSV / JSONL。快速入口只导出五个函数，产品协议和点位映射由内部适配器管理。Node.js、浏览器和 Python 共享版本号，使用同一套产品协议、WS 数据格式和录制数据库；浏览器专属能力（Web Serial、Canvas 展示）只在 JavaScript 中，各语言的具体接口按各自文档定义。
 
-当前版本为 **0.6.0**：Python 包获得与 JavaScript 相同的产品协议、自动发现、五步流程和数据服务（见 4.1），并首次以 `shroom-sdk` 为名发布到 PyPI。JavaScript 运行代码与 0.5.0 相同，只有版本常量变化；npm 上的最新版本仍是 0.5.0（已发布，latest 指向 0.5.0），是否发布 npm 0.6.0 另行决定。0.5.0 为 Node 分包手套新增自动扫描与左右手识别，同时保留手动 path+side 和五个快速函数；JavaScript 客户安装命令仍为 `npm install --save-exact shroom-sdk@0.5.0`，Node 与网页使用同一版本。0.4.0 首次提供 130+146 字节分包协议；整包仍显式使用 handGloveFullPacket。0.5.0 及更早的 Python 包只有通用串口与矩阵能力，且未发布到 PyPI；合成帧测试不代替实物验收。0.5.0 的完整发布门禁与官方注册表独立安装验收通过，结果见下方发布记录；0.6.0 的 PyPI 发布结果另行追加。
+当前源码与发布准备版本为 **0.7.0**：Node 新增触觉足底 `footVideo / foot`，按包类型 3=左脚、4=右脚支持手动或自动发现，原扫描 ADC、原始 IMU 和含头尾的完整分包贯通 WS 与录制导出。Node 与网页依赖使用同一版本，目标安装命令为 `npm install --save-exact shroom-sdk@0.7.0`；正式 npm 发布与注册表独立安装结果另行记录。Python 的版本元数据按全仓规则同步至 0.7.0，运行功能仍为 0.6.0 的五种产品，本次不发布新的 PyPI 版本，也不新增足底入口。0.6.0 扩展了 Python 的产品协议与五步能力，0.5.0 首次提供 Node 分包手套自动识别，0.4.0 首次提供 130+146 字节分包协议；整包仍显式使用 handGloveFullPacket。历史发布与未发布记录保留在下方，合成帧和安装包验证不代替实物验收。
 
-0.5.0 扫描逐口读取固定 921600 波特率分包数据，按类型 1/2 确认左/右手；明确 path+side 且无 scan 保持手动直连。只读探测样本与正式取数隔离，全部探测连接释放后才正式连接；重连保持原路径，不跨口迁移。
+扫描逐口读取所选产品固定的 921600 波特率分包数据：手套从 0.5.0 起按类型 1/2 确认左/右手，触觉足底从 0.7.0 起按类型 3/4 确认左/右脚；明确 path+side 且无 scan 保持手动直连。只读探测样本与正式取数隔离，全部探测连接释放后才正式连接；重连保持原路径，不跨口迁移。
 
 官网与文档展示位于独立的 `shroomSDKWEB` 仓库，通过 `sdk/` Git 子模块固定本仓库的具体提交。SDK 的安装、测试、构建和发布均不依赖官网。官网构建使用固定提交中的文档、示例生成函数及下载包，不自动跟随 SDK 主分支。
 
@@ -92,13 +92,13 @@ flowchart LR
 
 五函数复用基础 API：`readProduct` 调用 Node `connectProduct` 或浏览器 `connectStream`；`createWS` 调用 `serveDevice`；采集和下载委托已有连接或服务方法。返回对象与 `stream` 保存当前会话，成功开始新采集时清除旧下载 ID。
 
-`listPorts()` 仍只枚举系统串口，不打开设备、不识别型号或左右手，也不要求授权。需要手动选择时将列表交给应用。Node 基础 API 新增 `scanProductPorts()`，由 `src/node/serial-scan.js` 在有效 serial 授权下逐口只读采样，通过 `adapter.discovery.createParser / identify` 识别协议身份；只有注册了 discovery 钩子的产品才支持扫描，目前为分包手套。默认每口读取 1200 ms，允许 50–10000 ms，支持 paths 限定及 AbortSignal 取消，只按产品固定 921600 波特率探测。
+`listPorts()` 仍只枚举系统串口，不打开设备、不识别型号或左右侧，也不要求授权。需要手动选择时将列表交给应用。Node 基础 API `scanProductPorts()` 由 `src/node/serial-scan.js` 在有效 serial 授权下逐口只读采样，通过 `adapter.discovery.createParser / identify` 识别协议身份；只有注册了 discovery 钩子的产品才支持扫描，目前为分包手套与触觉足底。默认每口读取 1200 ms，允许 50–10000 ms，支持 paths 限定及 AbortSignal 取消，只按产品固定 921600 波特率探测。
 
 扫描至少观察 3 个同侧完整配对，未知/混合侧别不作为有效设备；返回 devices 与逐口 ports 报告，side 只筛选 devices。样本不进入业务 onData 或采集；确认所有临时端口释放后才正式连接。无法确认关闭时停止扫描并保持路径占用保护，防止晚到打开与下一次连接重叠。
 
 `src/node/serial-path.js` 由 serial-scan 与 serial-reconnect 共用，统一预约串口路径；托管连接在重连等待期间仍保留预约。扫描跳过当前 SDK 已有的活跃、重连或清理未完成连接，以逐口 PORT_BUSY 结果报告，不抢占原设备。逻辑连接终止且所有物理连接确认释放后才解锁，迟到的 open/close 仍需完成清理；其他进程的端口互斥由驱动处理。
 
-Node `connectProduct()` 在分包手套缺少 path、side 省略/auto 或显式 scan 时内部调用公开 `scanProductPorts()`；唯一匹配才连接，零/多匹配分别报 PORT_NOT_FOUND/PORT_AMBIGUOUS，details.scan 保留完整报告。显式 path+left/right 且无 scan 保持手动直连。`readProduct()` 继续复用 connectProduct，快速入口仍只导出五函数。Web Serial、WS 客户端、整包手套和其他产品没有本次自动扫描入口。
+Node `connectProduct()` 在分包手套或触觉足底缺少 path、side 省略/auto 或显式 scan 时内部调用公开 `scanProductPorts()`；唯一匹配才连接，零/多匹配分别报 PORT_NOT_FOUND/PORT_AMBIGUOUS，details.scan 保留完整报告。显式 path+left/right 且无 scan 保持手动直连。`readProduct()` 继续复用 connectProduct，快速入口仍只导出五函数。Web Serial、WS 客户端、整包手套和其他产品没有本次自动扫描入口。
 
 Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产品连接默认启用，通用 `connectSerial` 默认关闭。意外断线后先清理旧端口，再按原 `path` 每 3 秒尝试、最多 3 次；只有收到有效帧才重置尝试次数。首次打开失败、主动关闭、授权或解析错误、端口清理失败不进入重试。恢复保持设备对象和数据订阅，通过 `onStateChange` 暴露 `open / reconnecting / error / closed`；诊断保留累计计数，同时按本次连接判断是否真正收到数据。Web Serial 与浏览器 WS 没有自动重连；Python 的产品连接采用相同的重连规则（见 4.1）。
 
@@ -111,12 +111,15 @@ Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产�
 | `glove-segmented.js` / `glove.js` / `../glove.js` | 默认分包在单连接内按相同原始包类型配对 130/146 字节包，最大间隔 1 秒；重置/非法包清缓存，孤立尾包不交付。一只手一个串口；手动 side 决定线序，自动模式识别 packetType 1=左/2=右，未知/混合类型不作设备匹配；不路由单串口双手，不构造假序号。整包适配器保留 274 字节与原 sequence |
 | `body.js` / `body-layout.js` | 无 side；1000000 baud，1024 字节 uint8 载荷与尾分隔。保留 1024 原扫描 ADC，十个 `regions` 映射 400 唯一通道，索引用 Uint16；没有模型 UV、翻转、显示重复行或插值 |
 | `insole.js` / `insole-layout.js` | 必须明确脚侧；默认 12bit、921600 baud，可选 8bit 及限定速率。12bit 的 raw 是 512 个原始 ADC 字节、pressure 是 256 个 Uint16 ADC（0–4095）；8bit 分别为 256 字节与 256 个 Uint8 ADC。`sensors` 是 A 版 112 真实点，不含显示插值点 |
+| `tactile-foot.js` | `footVideo` / `foot`，921600 baud；130+146 分包，类型 3=左脚、4=右脚且必须同类型配对。16×16 仅为扫描存储形状；保留 256 原 ADC、16 字节原 IMU、含帧尾的 `rawPackets` 两包；不做抽点、插值、归零、镜像或标定 |
 
 人体的 32×32 与鞋垫的 16×16 顶层矩阵都是扫描存储形状，不能当人体/鞋形平面或物理重心。鞋垫保留 IMU 原始字节和 w/x/y/z 四元数，12bit 另提供陀螺仪/加速度的三个原始分量；不猜测单位、不融合姿态、不换算物理压力。来源和协议细节分别见 [HUMAN-BODY.md](docs/HUMAN-BODY.md)、[INSOLE.md](docs/INSOLE.md)。`profile.sensorPoints` 表示扫描通道数，新增可选 `mappedSensorPoints` 表示物理表覆盖的点数。
 
 `src/index.d.ts` 的 `DeviceProductTypes` 登记所有产品，派生 Node/Web 选项与帧类型；分包与整包手套由 product 区分，只有整包帧有 sequence；鞋垫帧按 `protocol` 区分 12bit/8bit、ADC 类型和可用 IMU 字段。`stream-codec.js` 仍只处理基础帧，扩展字段由各适配器验证并复制；人体核对十块固定线序和 ADC 一致性，鞋垫核对精度、原始字节、真实点位及 IMU，避免 Uint8 截断或丢失负数 IMU。`createProductView` 支持分包/整包手套和手垫；人体/鞋垫仍由应用消费 `onData` 展示。
 
 手套分包的 profile.payloadLength 与解析器 frameLength 都表示两包载荷合计 276 字节，不含各自 `AA 55 03 99` 帧尾；包含帧尾的首包/尾包为 134/150 字节。byte[0] 的 1/2 是首包/尾包，byte[1] 的 packetType 在当前固件中 1=左、2=右，两者都不是采样序号；packetType 也不是唯一设备 SN，同侧多设备仍靠 path 区分。自动连接会固定已发现类型，正式读取或重连后出现另一侧有效帧时以 PARSE_FAILED 停止；手动明确 path+side 时仍保留原映射行为。协议没有 CRC、连续帧标识和转义，配对与超时保护不能保证检测所有同类型丢包错配；载荷出现完整尾标记可能丢帧。说明与迁移入口见 [GLOVE.md](docs/GLOVE.md)。
+
+触觉足底复用相同的分包布局，但原始包类型严格规定 3=左脚、4=右脚，手动参数不能覆盖类型中的身份。`rawPackets` 保存两份独立 Uint8Array，分别包括段号、类型、ADC、可选 IMU 与帧尾；WS 校验包头、长度、帧尾及压力/IMU 的逐字节一致性，SQLite、JSONL 与 CSV 完整帧列保留这些字段。`raw/pressure/pressureMatrix` 保持相同的 256 通道扫描顺序，不使用 `jqInsole` 的物理点位表。浏览器只提供解码与显式选侧的直连，不新增专用展示；原始 JSONL 例程见 `examples/node/tactile-foot-raw.js`，协议来源与限制见 [TACTILE-FOOT.md](docs/TACTILE-FOOT.md)。
 
 公开类型新增 ProductPortScanSettings/Options、DetectedProductPort、ProductPortScanEntry/Result；NodeGloveOptions 可省略 side 或传 auto，并接收 scan。整包 Node 选项仍要求 left/right 且禁止 scan，浏览器手侧仍必填，WS 五步参数禁止 scan。连接 info 可提供识别出的 packetType。类型验证由 tests/serial-scan-types.mts 和原五步/产品类型测试覆盖。
 
@@ -127,6 +130,8 @@ Node 串口通过 `src/node/serial-reconnect.js` 管理恢复生命周期，产�
 授权区分 SDK 与上位机产品密钥，检查有效期、电脑名额和功能权限，不按传感器型号限制。JS/Python 均提供结构化错误；连接阶段的拒绝由调用方捕获，连接后的运行错误通过订阅反馈。模拟数据源用于无硬件验证。
 
 ### 4.1 Python 实现
+
+2026-11-17 新增的触觉足底仅接入 Node/Web 共享协议层，Python 注册表仍保留原五种产品；跨语言协议对照只比较共同支持的产品，并明确断言 Node 新增 `footVideo`。Python 运行实现和既有产品协议没有随此次改动扩展。
 
 Python 包在 `python/src/shroom_sdk/` 内按 JavaScript 的模块划分实现同一套能力，JavaScript 是协议与数据格式的基准；两边不共享运行代码。
 
@@ -229,11 +234,19 @@ GitHub Actions 使用锁定工具版本与固定 Action 提交。普通提交运
 | 2026-11-13 | 分包手套串口自动发现与两种连接方式 | 新增 Node scanProductPorts 基础 API，识别 packetType 1=左/2=右；readProduct 内部复用扫描，保留手动 path+side 和原五函数。补充逐口报告、取消与清理、歧义处理、类型及接入文档；源码新增尚未发布 npm 或完成真机验收 |
 | 2026-11-13 | Python 版产品与五步能力 | Python 包实现五种产品协议与分区、分包手套自动发现与手动直连、回调与有限重连、五个快速函数、同端口 WS/HTTP 服务、SQLite 录制与导出、流客户端、后端客户端、全部线序与调色板；仅用标准库，授权模块未改动。与 JS 的解析对照、双向 WS 互通和录制目录互读均通过；未发布、未做真机验收 |
 | 2026-11-13 | Python 审查修复与 0.6.0 PyPI 发布准备 | 修复审查发现的 1 项高危、4 项中等和 10 项低风险问题并补回归测试；版本升至 0.6.0，完成 PyPI 元数据、安装文档与发布流程。上传 TestPyPI / PyPI 由维护者手动执行，结果另行记录；仍未做真机验收 |
+| 2026-11-17 | Node 触觉足底原始数据接入 | `footVideo/foot` 支持左右脚 3/4 识别、手动与自动取数、原始 ADC/IMU/完整分包保留及 WS/SQLite/导出；新增原始 JSONL 示例与类型回归，Python 产品实现不变，尚未发布或真机验收 |
+| 2026-11-17 | 触觉足底本地验证与交付 | 326 项 JS（含 19 项足底）、228 项 Python 回归、25 项发布工具测试及 TypeScript 通过；68 文件 npm 本地构建在独立项目验证左右脚原包、WS/SQLite/CSV/JSONL 与 NodeNext/Bundler 类型。未连接真实硬件，未发布 npm |
+| 2026-11-17 | SDK 0.7.0 发布准备 | 统一版本元数据、npm 安装说明、足底协议与 API 文档，并登记官网文档目录；准备生成和验证新版本制品。Python 只同步元数据，不新增足底或发布 PyPI；npm 远端结果另行记录 |
+| 2026-11-17 | SDK 0.7.0 完整门禁 | 330项JavaScript、25项发布工具、228项Python回归、TypeScript以及ZIP/npm独立客户安装验证通过；制品仍为本地待发布版本，npm发布和官方注册表消费结果另行记录，尚未连接真实硬件 |
 
 ## 9. 更新日志
 
 | 日期 | 变更类型 | 描述 |
 | --- | --- | --- |
+| 2026-11-17 | 新增功能 | Node 新增触觉足底 `footVideo/foot`、便捷连接与发现类型；保留原 ADC、IMU、完整分包，经 WS 与录制导出不改原值，补原始 JSONL 示例与协议文档。未发布或真机验收 |
+| 2026-11-17 | 配置变更 | npm 浏览器条件入口为新增 Node 便捷函数保留运行环境拒绝；客户安装验证按实际导出检测足底能力，兼容既有注册表版本并覆盖完整原包及安装后的类型推导 |
+| 2026-11-17 | 文档更新 | 准备0.7.0 npm版本，当前安装指引统一至0.7.0，补足底Node/Web API参考与独立目录页；保留0.4/0.5/0.6历史事实和原未发布记录，Python仅同步版本元数据，尚无本次远端发布结果 |
+| 2026-11-17 | 文档更新 | 完整门禁通过后补齐串口、Node及基础文档的足底自动发现说明和Python能力边界；记录330/25/228项回归及ZIP/npm消费验证结果，文档变动后重新生成交付ZIP，不将本地通过记作远端发布 |
 | 2026-10-30 | 优化重构 | 按决定直接替换原主线 SDK，保留旧标签与历史；建立五步 SDK 和官网的独立仓库边界 |
 | 2026-10-30 | 文档更新 | 更新根目录安装与发布说明，明确包身份、旧接口和数据库的迁移边界 |
 | 2026-10-30 | 优化重构 | 增加 npm 精简安装包、受控打包与发布附件；文档区分客户安装和源码维护，说明注册表尚未发布及压缩的保护边界 |

@@ -7,8 +7,9 @@ import { segmentedGloveProductAdapter } from './glove-segmented.js';
 import { padProductAdapter } from './pad.js';
 import { bodyProductAdapter } from './body.js';
 import { insoleProductAdapter } from './insole.js';
+import { tactileFootProductAdapter } from './tactile-foot.js';
 
-export const deviceProductAdapters = Object.freeze([segmentedGloveProductAdapter, gloveProductAdapter, padProductAdapter, bodyProductAdapter, insoleProductAdapter]);
+export const deviceProductAdapters = Object.freeze([segmentedGloveProductAdapter, gloveProductAdapter, padProductAdapter, bodyProductAdapter, insoleProductAdapter, tactileFootProductAdapter]);
 const deviceProductCanonicalRegistry = new Map();
 const deviceProductConnectionRegistry = new Map();
 

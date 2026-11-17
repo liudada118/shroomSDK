@@ -9,7 +9,8 @@ export function createProductFlow(options) {
     {
       id: 'flow-read', title: '取数',
       blocks: [{ runtime: 'node', code: readCode }],
-      note: 'onData 持续返回产品帧；这一步已开始读取设备，还没有保存采集记录。',
+      note: options.product === 'foot' ? 'onData 持续返回 256 个原始 ADC、16 个 IMU 字节和两份完整串口原包；尚未保存采集记录。'
+        : 'onData 持续返回产品帧；这一步已开始读取设备，还没有保存采集记录。',
     },
     {
       id: 'flow-ws', title: '创建 WS',
@@ -55,8 +56,9 @@ export function createProductFlow(options) {
       id: 'flow-download', title: '下载',
       blocks: [{ runtime: 'web', code: [
         '// 放在“下载”按钮的点击处理中。',
-        "downloadRecording(stream, { format: 'csv' });",
-        "// 保留完整帧结构时，将 format 改为 'jsonl'。",
+        `downloadRecording(stream, { format: '${options.product === 'foot' ? 'jsonl' : 'csv'}' });`,
+        options.product === 'foot' ? '// 每行 frame.rawPackets 保存带帧尾的两份原包；表格导出可改用 csv。'
+          : "// 保留完整帧结构时，将 format 改为 'jsonl'。",
       ].join('\n') }],
       note: '按本次记录 ID 触发浏览器下载，不默认选择最近记录；触发下载不等于文件已保存完成。',
     },

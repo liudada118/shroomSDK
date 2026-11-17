@@ -49,6 +49,37 @@ test('new product flows retain five steps and browser callbacks consume the sele
   }
 });
 
+test('tactile-foot flows use Node manual or automatic reads and a raw-data-only browser WS callback', async () => {
+  for (const configuration of [{ side: 'left' }, { side: 'right' }, { side: 'auto' },
+    { side: 'left', connectionMode: 'auto' }, { connectionMode: 'auto' }]) {
+    const steps = createProductFlow({ product: 'foot', ...configuration, platform: 'macos', importStyle: 'package' });
+    assert.deepEqual(steps.map(step => step.id), ['flow-read', 'flow-ws', 'flow-start', 'flow-stop', 'flow-download']);
+    assert.equal(steps.flatMap(step => step.blocks).length, 6);
+    assert.match(steps[0].blocks[0].code, /product: 'foot'/);
+    assert.match(steps[0].blocks[0].code, /0\.7\.0 或更高版本/);
+    const source = steps.flatMap(step => step.blocks.map(block => block.code)).join('\n');
+    assert.doesNotMatch(source, /fingers|palm|sensors|createProductView|<!doctype|protocol:/);
+    const data = { pressure: new Uint8Array([0, 255]), imu: { raw: new Uint8Array([128, 255]) },
+      rawPackets: [new Uint8Array([1, 3]), new Uint8Array([2, 3])] };
+    const output = [], stream = {};
+    const setup = new AsyncFunction('readProduct', 'console', body(steps[1].blocks[1].code) + '\nreturn stream;');
+    assert.equal(await setup(async options => {
+      assert.equal(options.url, 'ws://127.0.0.1:19999');
+      assert.equal(options.side, undefined);
+      assert.equal(options.path, undefined);
+      assert.equal(options.product, undefined);
+      options.onData(data);
+      return stream;
+    }, { log: (...args) => output.push(args), error() {} }), stream);
+    assert.deepEqual(output, [[data.pressure, data.imu.raw, data.rawPackets]]);
+    assert.match(steps[4].blocks[0].code, /format: 'jsonl'/);
+    const downloads = [];
+    const download = new AsyncFunction('downloadRecording', 'stream', steps[4].blocks[0].code);
+    await download((target, options) => downloads.push([target, options]), stream);
+    assert.deepEqual(downloads, [[stream, { format: 'jsonl' }]]);
+  }
+});
+
 test('displayed flow snippets share a real WS connection and download the recording stopped by this client', async t => {
   await activateTestLicense();
   const directory = await mkdtemp(join(tmpdir(), 'shroom-doc-flow-'));

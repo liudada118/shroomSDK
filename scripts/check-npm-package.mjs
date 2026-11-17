@@ -100,7 +100,7 @@ export * as core from 'shroom-sdk/core';
 // 单独子进程加载原生 SQLite，退出之后再清理临时目录，避免 Windows DLL 锁定。
 const NODE_SMOKE = String.raw`
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { generateKeyPairSync, sign, webcrypto } from 'node:crypto';
@@ -117,6 +117,9 @@ ${supportsNewProducts.toString()}
 ${supportsSegmentedGlove.toString()}
 const checkExpandedProducts = supportsNewProducts(expectedVersion);
 const checkSegmentedGlove = supportsSegmentedGlove(expectedVersion);
+// 同版本的本地候选包可能增加能力；注册表旧包不能按版本号被要求具备新足底入口。
+const checkTactileFoot = typeof node.connectTactileFoot === 'function';
+await writeFile('capabilities.json', JSON.stringify({ tactileFoot: checkTactileFoot }));
 const names = ['createWS', 'downloadRecording', 'readProduct', 'startRecording', 'stopRecording'];
 assert.deepEqual(Object.keys(flow).sort(), names);
 for (const name of names) assert.equal(typeof flow[name], 'function');
@@ -180,7 +183,8 @@ assert.equal(closedUnsupported, true);
 // 安装包的真实公开基础入口解析合成串口字节，随后跨 Node/浏览器 WS 编解码。
 // 不导入 runtime 内部适配器、不访问硬件或授权后台；同时覆盖 browser 条件产物。
 if (checkExpandedProducts) {
-  const products = ['hand', 'handGloveFullPacket', 'humanBody', 'jqInsole', ...(checkSegmentedGlove ? ['handGloveSegmented'] : [])].sort();
+  const products = ['hand', 'handGloveFullPacket', 'humanBody', 'jqInsole',
+    ...(checkSegmentedGlove ? ['handGloveSegmented'] : []), ...(checkTactileFoot ? ['footVideo'] : [])].sort();
   for (const entry of [root, web, node, consumer.root, consumer.web]) {
     assert.deepEqual(Array.from(entry.listDeviceProducts(), profile => profile.product).sort(), products);
     assert.deepEqual(Array.from(entry.Shroom.listDeviceProducts(), profile => profile.product).sort(), products);
@@ -211,6 +215,15 @@ if (checkExpandedProducts) {
       wire: Uint8Array.from([1, packetType, ...adc.slice(0, 128), ...header,
         2, packetType, ...adc.slice(128), ...imu, ...header]) };
   }
+  function footSample(side) {
+    const packetType = side === 'left' ? 3 : 4;
+    const adc = Array.from({ length: 256 }, (_, i) => (i * 19 + 7) % 256);
+    // IMU 是不透明字节；包含 NaN/Infinity 位型也不能在数据交付前被过滤或改写。
+    const imu = Uint8Array.of(0, 0, 192, 127, 0, 0, 128, 127, 0, 0, 128, 255, 255, 0, 128, 1);
+    const rawPackets = [[1, packetType, ...adc.slice(0, 128), ...header],
+      [2, packetType, ...adc.slice(128), ...imu, ...header]];
+    return { adc, imu, packetType, rawPackets, wire: Uint8Array.from(rawPackets.flat()) };
+  }
   const browserBytes = runInNewContext('Uint8Array', browser);
   const typed = (value, name) => assert.equal(Object.prototype.toString.call(value), '[object ' + name + ']');
   browser.navigator = { serial: { async requestPort() { throw new Error('验收必须使用显式模拟端口'); } } };
@@ -218,14 +231,16 @@ if (checkExpandedProducts) {
   try {
     for (const config of [
       ...(checkSegmentedGlove ? [{ product: 'glove', side: 'left' }, { product: 'handGloveSegmented', side: 'right' }] : []),
+      ...(checkTactileFoot ? [{ product: 'foot', side: 'left' }, { product: 'footVideo', side: 'right' }] : []),
       { product: 'body' },
       { product: 'insole', side: 'left', protocol: '12bit', baudRate: 1500000 },
       { product: 'jqInsole', side: 'right', protocol: '8bit' },
     ]) {
       const isBody = config.product === 'body';
       const isGlove = ['glove', 'handGloveSegmented'].includes(config.product);
+      const isFoot = ['foot', 'footVideo'].includes(config.product);
       const sample = isBody ? { adc: Array.from(bodyAdc), wire: Uint8Array.from([...bodyAdc, ...header]) }
-        : isGlove ? gloveSample(config.side) : insoleSample(config.protocol);
+        : isGlove ? gloveSample(config.side) : isFoot ? footSample(config.side) : insoleSample(config.protocol);
       const chunks = [];
       for (let i = 0; i < sample.wire.length; i += 13) chunks.push(new browserBytes(sample.wire.subarray(i, i + 13)));
       let chunkIndex = 0, finishRead, closed = 0, baudRate;
@@ -246,7 +261,8 @@ if (checkExpandedProducts) {
       const errors = [];
       const received = new Promise((resolve, reject) => { resolveFrame = resolve; rejectFrame = reject; });
       try {
-        const connect = config.product === 'glove' ? consumer.web.connectGlove : consumer.web.connectProduct;
+        const connect = config.product === 'glove' ? consumer.web.connectGlove
+          : config.product === 'foot' ? consumer.web.connectTactileFoot : consumer.web.connectProduct;
         productDevice = await connect({ ...config, port,
           onData: resolveFrame, onError(error) { errors.push(error); rejectFrame(error); } });
         timer = setTimeout(() => rejectFrame(new Error('安装包新产品合成帧超时')), 5000);
@@ -272,6 +288,22 @@ if (checkExpandedProducts) {
             assert.equal(Object.keys(copy.fingers).length, 5);
             assert.deepEqual(Array.from(copy.imu.raw), Array.from(sample.imu));
             typed(copy.pressure, 'Uint8Array'); typed(copy.pressureMatrix, 'Uint8Array');
+          } else if (isFoot) {
+            assert.equal(copy.product, 'footVideo');
+            assert.equal(copy.protocol, 'segmented');
+            assert.equal(copy.side, config.side);
+            assert.equal(copy.packetType, sample.packetType);
+            assert.equal('sequence' in copy, false);
+            assert.equal(copy.rows, 16); assert.equal(copy.cols, 16);
+            typed(copy.pressure, 'Uint8Array'); typed(copy.pressureMatrix, 'Uint8Array');
+            typed(copy.imu.raw, 'Uint8Array');
+            assert.deepEqual(Array.from(copy.raw), sample.adc);
+            assert.deepEqual(Array.from(copy.pressureMatrix), sample.adc);
+            assert.deepEqual(Array.from(copy.imu.raw), Array.from(sample.imu));
+            assert.deepEqual(Array.from(copy.rawPackets, packet => packet.length), [134, 150]);
+            for (const packet of copy.rawPackets) typed(packet, 'Uint8Array');
+            assert.deepEqual(Array.from(copy.rawPackets, packet => Array.from(packet)), sample.rawPackets);
+            assert.equal(copy.fingers, undefined); assert.equal(copy.sensors, undefined);
           } else if (isBody) {
             assert.equal(copy.product, 'humanBody');
             typed(copy.pressure, 'Uint8Array'); typed(copy.pressureMatrix, 'Uint8Array');
@@ -319,7 +351,8 @@ if (checkExpandedProducts) {
       }
       assert.equal(closed, 1, '每个合成串口都必须完整释放');
     }
-    console.log('npm 产品注册、' + (checkSegmentedGlove ? '分包手套左右手、' : '') + '人体400通道、鞋垫双协议精度与 Node/浏览器 WS 编解码通过。');
+    console.log('npm 产品注册、' + (checkSegmentedGlove ? '分包手套左右手、' : '')
+      + (checkTactileFoot ? '触觉足底左右脚原包、' : '') + '人体400通道、鞋垫双协议精度与 Node/浏览器 WS 编解码通过。');
   } finally {
     consumer.web.clearLicense();
     delete browser.navigator;
@@ -494,6 +527,37 @@ const legacy = await readProduct({ product: 'handGloveFullPacket', side: 'left',
 await legacy.close();
 `;
 
+// 仅对实际导出触觉足底能力的安装包追加，旧注册表版本继续按原有契约验证。
+const TACTILE_FOOT_TYPES_CONSUMER = `
+import type { TactileFootFrame } from 'shroom-sdk';
+import { connectTactileFoot as connectNodeTactileFoot, scanProductPorts as scanFootPorts } from 'shroom-sdk/node';
+const tactileFoot = await readProduct({ product: 'foot', onData(frame) {
+  const typed: TactileFootFrame = frame;
+  const product: 'footVideo' = typed.product;
+  const protocol: 'segmented' = typed.protocol;
+  const packetType: 3 | 4 = typed.packetType;
+  const rawPackets: [Uint8Array, Uint8Array] = typed.rawPackets;
+  const pressure: Uint8Array = typed.pressure;
+  const imu: Uint8Array = typed.imu.raw;
+  console.log(product, protocol, packetType, rawPackets, pressure, imu);
+  // @ts-expect-error 分包段号不能作为采样序号交付。
+  const sequence: number = typed.sequence;
+  console.log(sequence);
+} });
+const directFoot = await connectNodeTactileFoot({ path: 'COM_TEST', side: 'right' });
+directFoot.onData(frame => { const typed: TactileFootFrame = frame; console.log(typed.rawPackets); });
+const browserFoot = await WebShroom.connectTactileFoot({ side: 'left' });
+browserFoot.onData(frame => { const typed: TactileFootFrame = frame; console.log(typed.imu.raw); });
+const footScan = await scanFootPorts({ product: 'footVideo' });
+const canonicalFoot: 'footVideo' | undefined = footScan.devices[0]?.product;
+console.log(canonicalFoot);
+await tactileFoot.close(); await directFoot.close(); await browserFoot.close();
+// @ts-expect-error 触觉足底的固定串口协议不能覆盖波特率。
+await readProduct({ product: 'foot', baudRate: 115200 });
+// @ts-expect-error 浏览器直连需要显式指定脚侧。
+await WebShroom.connectTactileFoot({ side: 'auto' });
+`;
+
 export async function checkNpmPackage({ projectRoot = ROOT, packagePath, fromRegistry = false } = {}) {
   const { version } = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8'));
   const archive = resolve(packagePath ?? join(projectRoot, 'dist', `shroom-sdk-${version}.tgz`));
@@ -539,10 +603,12 @@ export async function checkNpmPackage({ projectRoot = ROOT, packagePath, fromReg
     await writeFile(join(consumer, 'smoke.mjs'), NODE_SMOKE);
     await execute(['smoke.mjs', join(temporary, 'recordings'), version, browserBundle],
       { cwd: consumer, env, label: 'npm 消费者五步流程', timeout: 30000 });
+    const capabilities = JSON.parse(await readFile(join(consumer, 'capabilities.json'), 'utf8'));
 
     await writeFile(join(consumer, 'types.mts'), TYPES_CONSUMER
       + (supportsNewProducts(version) ? NEW_PRODUCT_TYPES_CONSUMER : '')
-      + (supportsSegmentedGlove(version) ? SEGMENTED_GLOVE_TYPES_CONSUMER : ''));
+      + (supportsSegmentedGlove(version) ? SEGMENTED_GLOVE_TYPES_CONSUMER : '')
+      + (capabilities.tactileFoot ? TACTILE_FOOT_TYPES_CONSUMER : ''));
     for (const [module, moduleResolution, types] of [['NodeNext', 'NodeNext', ['node']], ['ESNext', 'Bundler', []]]) {
       const config = { compilerOptions: { target: 'ES2022', lib: ['ES2022', 'DOM', 'DOM.Iterable'],
         module, moduleResolution, strict: true, noEmit: true, skipLibCheck: false, types,

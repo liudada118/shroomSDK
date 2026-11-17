@@ -138,6 +138,7 @@ ${body
     connectProduct: connectProduct,
     connectGlove: connectGlove,
     connectHandPad: connectHandPad,
+    connectTactileFoot: connectTactileFoot,
     listDeviceProducts: listDeviceProducts,
     ShroomError: ShroomError,
     ERROR_CODES: ERROR_CODES,

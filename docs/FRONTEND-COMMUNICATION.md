@@ -107,11 +107,21 @@ document.querySelector('#connect').onclick = async () => {
 
 **注意事项**：产品矩阵已映射，不要再次解码或重排；输入协议参数会报 `INVALID_CONFIG`，不会覆盖内置配置。
 
+### Shroom.connectTactileFoot(options) {#connect-tactile-foot}
+
+**用途**：0.7.0 新增的触觉足底 Web Serial 入口；在用户点击中选择串口，固定 921600 波特率并配对首尾包。Node 服务与网页需使用同一版本。
+
+**参数**：必填 `side: 'left' | 'right'`，可选 `port / filters / onData / onError`。浏览器不提供 Node 的串口扫描；包类型 3=左脚、4=右脚，必须与 side 一致，参数不能覆盖包内脚侧。
+
+**返回值**：`Promise<ProductDevice<TactileFootFrame>>`，提供 `onData / onFrame / onError / close`。`raw / pressure` 为原扫描 256 字节，`imu.raw` 为原始 16 字节，`rawPackets` 保留两份含头尾的完整包。16×16 仅为存储形状，不提供鞋形映射或专用产品视图。
+
+**示例**：在点击回调中执行 `const device = await Shroom.connectTactileFoot({ side: 'left', onData: data => console.log(data.pressure, data.rawPackets), onError: console.error })`，结束时 `await device.close()`；首次调用失败仍需捕获 Promise。完整格式见[触觉足底](TACTILE-FOOT.md)。
+
 ### Shroom.connectProduct(options) / listDeviceProducts() {#connect-product}
 
 **用途**：按产品标识连接，或同步获取可直连产品清单。
 
-**参数**：`connectProduct()` 必填 `product`：分包手套接受 `handGloveSegmented / glove`；兼容整包手套只接受 `handGloveFullPacket`，检测垫接受 `hand / pad`；其余与对应产品入口相同。手套必须提供 `side`，检测垫不传；`listDeviceProducts()` 无参数。
+**参数**：`connectProduct()` 必填 `product`：分包手套接受 `handGloveSegmented / glove`；兼容整包手套只接受 `handGloveFullPacket`，检测垫接受 `hand / pad`；触觉足底接受 `footVideo / foot`，其余与对应产品入口相同。手套、触觉足底和A版鞋垫必须提供 `side`，检测垫和人体不传；`listDeviceProducts()` 无参数。
 
 **返回值**：connectProduct 返回对应的产品设备 Promise；listDeviceProducts 返回 `{ product, label, family, baudRate, payloadLength, sensorPoints, rows, cols }[]`。
 
@@ -128,6 +138,7 @@ document.querySelector('#connect').onclick = async () => {
 | `hand` | `raw / pressure`，1024 个原扫描 ADC | `pressureMatrix`，1024 个 ADC；`values`，归一化 32×32 | 基础 Frame 统计与时间戳 |
 | `handGloveSegmented` | `raw / pressure`，两包合并的 256 个 ADC | 旧 `pressureMatrix / values` 保留兼容，业务读取命名分区 | `fingers / palm / side / protocol / packetType / imu.raw`（16 字节），无 sequence |
 | `handGloveFullPacket` | `raw / pressure`，256 个 ADC | 旧 `pressureMatrix / values`，195 点、13×15 展示映射 | `fingers / palm / side / sequence / packetType / imu.raw`（16 字节） |
+| `footVideo`（0.7.0） | `raw / pressure`，256 个原扫描 ADC | `pressureMatrix` 仍为原扫描，`values` 为 ADC/255；16×16 不是鞋形 | `side / protocol / packetType / imu.raw`（16字节）、`rawPackets`（134/150字节），无 sequence |
 
 **示例**：`const off = device.onData((data) => heatmap.render(data))`；优先把首个回调作为连接选项 `onData` 提供，以避免连接期间漏掉首帧。
 

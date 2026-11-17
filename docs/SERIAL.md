@@ -37,13 +37,13 @@ const device = await Shroom.connectGlove({
 process.once('SIGINT', () => { void device.close().catch(console.error); });
 ```
 
-手部检测垫用 `Shroom.connectHandPad({ path: 'COM3', onData: console.log, onError: console.error })`。统一入口示例为 `Shroom.connectProduct({ product: 'hand', path: 'COM3', onData: console.log })`。默认分包手套选 `handGloveSegmented`（或 `glove`）；0.5.0中省略 path 或手侧会扫描有效分包，明确 path+left/right 且无 scan 则保持上述手动直连。整包设备显式选 `handGloveFullPacket` 并提供 side。`Shroom.listDeviceProducts()` 返回产品清单；非分包手套仍保持单个串口自动选择、多个串口报 `PORT_AMBIGUOUS` 的行为。协议与线序参数不可覆盖。
+手部检测垫用 `Shroom.connectHandPad({ path: 'COM3', onData: console.log, onError: console.error })`。统一入口示例为 `Shroom.connectProduct({ product: 'hand', path: 'COM3', onData: console.log })`。默认分包手套选 `handGloveSegmented`（或 `glove`）；0.5.0中省略 path 或手侧会扫描有效分包，明确 path+left/right 且无 scan 则保持上述手动直连。触觉足底从0.7.0起使用 `footVideo / foot` 或 `connectTactileFoot()`，同样支持发现，详见[足底原始数据](TACTILE-FOOT.md)。整包设备显式选 `handGloveFullPacket` 并提供 side。`Shroom.listDeviceProducts()` 返回产品清单；不支持发现的产品仍保持单个串口自动选择、多个串口报 `PORT_AMBIGUOUS` 的行为。协议与线序参数不可覆盖。
 
 产品 `onData / onError` 在打开前注册，连接前失败仍需 `try / catch`。可直接运行包内示例：`node node/product-demo.js glove left COM3` 或 `node node/product-demo.js hand-pad COM5`。
 
-## Node 自动扫描分包手套 {#node-scan}
+## Node 自动扫描分包手套或触觉足底 {#node-scan}
 
-此节要求 SDK 0.5.0 或更高版本。`listPorts()` 只查询系统端口，不要求授权；`scanProductPorts()` 实际打开并读取串口，调用前需完成 SDK `serial` 授权并关闭占用设备的上位机。
+分包手套扫描要求 SDK 0.5.0 或更高版本，触觉足底扫描要求0.7.0。`listPorts()` 只查询系统端口，不要求授权；`scanProductPorts()` 实际打开并读取串口，调用前需完成 SDK `serial` 授权并关闭占用设备的上位机。
 
 ```js
 import { scanProductPorts } from 'shroom-sdk/node';
@@ -51,7 +51,7 @@ import { scanProductPorts } from 'shroom-sdk/node';
 const controller = new AbortController(); // 用户取消搜索时调用 controller.abort()。
 try {
   const result = await scanProductPorts({
-    product: 'glove', // 可省略；仅支持 glove / handGloveSegmented。
+    product: 'glove', // 可省略；足底改为 foot，也接受规范 ID handGloveSegmented / footVideo。
     timeoutMs: 1200, // 每个串口的读取窗口，不是整个搜索的总时长。
     signal: controller.signal,
   });
@@ -64,17 +64,17 @@ try {
 
 | 参数 | 含义 |
 | --- | --- |
-| `product` | 默认 `glove`；也接受规范 ID `handGloveSegmented` |
-| `side` | 可选 `left / right` 筛选；省略时接受任一已确认手侧 |
+| `product` | 默认 `glove`；接受 `glove / handGloveSegmented`，0.7.0起另支持 `foot / footVideo` |
+| `side` | 可选 `left / right` 筛选；省略时接受任一已确认侧别 |
 | `paths` | 可选串口路径数组；省略时枚举本机串口，空数组无效 |
 | `timeoutMs` | 每个端口读取窗口；默认 1200，范围 50–10000 ms |
 | `signal` | 可选 `AbortSignal`，取消时清理已打开的探测端口 |
 
 结果的 `devices` 包含 `path / product / label / baudRate / side / packetType`，驱动有序列号时附加 `serialNumber`。`ports` 每项含 `path / status`：`matched` 可读取 `device`，`unrecognized` 表示未确认目标协议，`error` 可读取结构化 `error`。side 只筛选 devices，ports 保留所有已识别侧别的报告。空 devices 也是有效扫描结果，可先展示逐口原因再让用户处理。
 
-扫描固定使用 921600 波特率，不发送设备命令、不自动更换波特率。至少 3 个同侧完整配对才确认：首包 130 字节、尾包 146 字节，各有 `AA 55 03 99` 帧尾；第二字节 1=左手、2=右手。未知类型、混合侧别或不完整包不识别为设备。`packetType` 不是唯一 SN，同侧多只设备必须靠串口区分。
+扫描固定使用所选产品的921600波特率，不发送设备命令、不自动更换波特率。至少3个同侧完整配对才确认：首包130字节、尾包146字节，各有 `AA 55 03 99` 帧尾；手套第二字节1=左手、2=右手，触觉足底3=左脚、4=右脚。未知类型、混合侧别或不完整包不识别为设备。`packetType` 不是唯一SN，同侧多只设备必须靠串口区分。
 
-自动连接仍是原五步中的 `readProduct({ product: 'glove', onData })`，基础调用是 `connectProduct()` 内部复用 `scanProductPorts()`。可以传 `side: 'left'` 筛选，或 `scan: { paths, timeoutMs, signal }` 限定范围；省略 side 或填 `auto` 会识别手侧。显式 path+left/right 且无 scan 不探测，显式 scan 则会先验证该口。多个匹配报 `PORT_AMBIGUOUS`，零匹配报 `PORT_NOT_FOUND`，两者的 `details.scan` 都含完整报告。探测口全部释放后才正式连接，样本不进入 onData 或采集。
+自动连接仍是原五步中的 `readProduct({ product: 'glove', onData })`，触觉足底改为 `product: 'foot'`；基础调用是 `connectProduct()` 内部复用 `scanProductPorts()`。可以传 `side: 'left'` 筛选，或 `scan: { paths, timeoutMs, signal }` 限定范围；省略 side 或填 `auto` 会识别侧别。显式 path+left/right 且无 scan 不探测，显式 scan 则会先验证该口。多个匹配报 `PORT_AMBIGUOUS`，零匹配报 `PORT_NOT_FOUND`，两者的 `details.scan` 都含完整报告。探测口全部释放后才正式连接，样本不进入 onData 或采集。
 
 自动连接后会固定发现的手侧类型；正式读取或原口重连时出现另一手侧的有效帧，会报 PARSE_FAILED 并停止，不把它映射成原设备数据。串口号改变时需重新扫描并创建连接。
 

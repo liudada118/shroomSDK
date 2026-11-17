@@ -2,7 +2,7 @@
 
 快速接入的五个函数调用的就是本篇列出的基础 API。先用[五步调用](QUICK-START.md)完成接入；需要查看参数、控制资源或选择历史记录时，从下表进入对应说明。
 
-接入前使用基础 API `listPorts()` 搜索串口，让用户选择 `path`；它从 `shroom-sdk/node` 导入，不增加快速入口的函数数量。Node 产品连接默认自动重连，配置与状态订阅同样由基础串口 API 提供，见[搜索串口](QUICK-START.md#flow-ports)和[自动重连](BACKEND-GUIDE.md#node-reconnect)。
+手动选口时，使用基础 API `listPorts()` 搜索串口，让用户选择 `path`；它从 `shroom-sdk/node` 导入，不增加快速入口的函数数量。分包手套和0.7.0触觉足底可由 `readProduct()` 自动识别，无需先枚举串口。Node 产品连接默认自动重连，配置与状态订阅同样由基础串口 API 提供，见[搜索串口](QUICK-START.md#flow-ports)和[自动重连](BACKEND-GUIDE.md#node-reconnect)。
 
 ## 五个函数对应哪些基础 API {#quick-to-base}
 
@@ -40,7 +40,7 @@
 
 Node.js 快速服务可接收已有 `onFrame()` 设备源；自定义源需要提供兼容的帧和订阅生命周期。不要把任意对象直接发到 WS 后假定渲染器能理解。
 
-Python 提供同一套产品连接、WS 服务与快速录制 API，名称为 snake_case、调用为同步方式；浏览器专属的 Web Serial 与 Canvas 展示不在 Python 中提供，具体以 [Python SDK](../python/README.md) 为准。
+Python 提供既有五种产品的连接、WS服务与快速录制API，名称为snake_case、调用为同步方式；暂不包含0.7.0新增的触觉足底产品。浏览器专属的Web Serial与Canvas展示也不在Python中提供，具体以 [Python SDK](../python/README.md) 为准。
 
 ## 前端：接收数据与自定义显示 {#frontend}
 

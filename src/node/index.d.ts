@@ -10,10 +10,10 @@ export {
 } from '../index.js';
 export { BackendSdkClient } from './backend.js';
 import type { NodeConnectOptions, Device, NodeSerialDevice, MockOptions, Frame, AsciiOptions, PortInfo, ShroomError, ERROR_CODES, asShroomError } from '../index.js';
-import type { NodeProductOptions, NodeGloveOptions, NodeHandPadOptions, NodeProductDevice, SegmentedGloveFrame, HandPadFrame, ProductFrameFor, DeviceProductName, ProductOptionsFor, listDeviceProducts } from '../index.js';
+import type { NodeProductOptions, NodeGloveOptions, NodeHandPadOptions, NodeTactileFootOptions, NodeProductDevice, SegmentedGloveFrame, HandPadFrame, TactileFootFrame, ProductFrameFor, DeviceProductName, ProductOptionsFor, listDeviceProducts } from '../index.js';
 import type { FrameSource, RecordingSession, encodeStreamFrame, decodeStreamFrame, STREAM_SCHEMA } from '../index.js';
 import type { activateLicense, getLicenseStatus, clearLicense } from '../index.js';
-import type { ProductPortScanOptions, ProductPortScanResult } from '../index.js';
+import type { ProductPortScanOptions, ProductPortScanResult, ProductPortScanName, ProductPortScanId } from '../index.js';
 
 /** 创建独立产品流服务的配置；不会自动打开或关闭传入设备。 */
 export interface DeviceServerOptions {
@@ -60,11 +60,13 @@ export function connectSerial(options?: NodeConnectOptions): Promise<NodeSerialD
 /** 查询本机串口及元信息，不打开设备，也不要求激活 SDK 授权。 */
 export function listPorts(): Promise<PortInfo[]>;
 /** 探测分包手套及左右手；需要 serial 授权，所有探测端口释放后才返回结果。 */
-export function scanProductPorts(options?: ProductPortScanOptions): Promise<ProductPortScanResult>;
+export function scanProductPorts<Name extends ProductPortScanName = 'glove'>(options?: ProductPortScanOptions<Name>): Promise<ProductPortScanResult<ProductPortScanId<Name>>>;
 /** 连接分包手套；省略路径或手侧时先扫描，唯一匹配才连接并输出产品数据。 */
 export function connectGlove(options?: NodeGloveOptions): Promise<NodeProductDevice<SegmentedGloveFrame>>;
 /** 连接手部检测垫，使用内置 32×32 矩阵协议，无需填写 side。 */
 export function connectHandPad(options?: NodeHandPadOptions): Promise<NodeProductDevice<HandPadFrame>>;
+/** 连接触觉足底；类型 3=左脚、4=右脚，省略 path/side 时先自动识别。 */
+export function connectTactileFoot(options?: NodeTactileFootOptions): Promise<NodeProductDevice<TactileFootFrame>>;
 /** 产品类型由统一类型注册表推导；分包手套可自动扫描，多个有效匹配拒绝猜测。 */
 export function connectProduct<Name extends DeviceProductName>(options: { product: Name } & ProductOptionsFor<Name, 'node'>): Promise<NodeProductDevice<ProductFrameFor<Name>>>;
 /** 具名导出的便捷集合；connect 为通用串口入口，mock 为通用矩阵模拟源。 */
@@ -78,6 +80,7 @@ export const Shroom: {
   connectProduct: typeof connectProduct;
   connectGlove: typeof connectGlove;
   connectHandPad: typeof connectHandPad;
+  connectTactileFoot: typeof connectTactileFoot;
   listDeviceProducts: typeof listDeviceProducts;
   serveDevice: typeof serveDevice;
   encodeStreamFrame: typeof encodeStreamFrame;

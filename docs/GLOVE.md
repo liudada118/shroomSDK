@@ -1,12 +1,12 @@
 # 手套分包协议与数据
 
-从 **0.4.0** 起，`product: 'glove'` 和 `connectGlove()` 使用分包手套入口，规范 ID 为 `handGloveSegmented`。安装命令为 `npm install --save-exact shroom-sdk@0.5.0`；Node 与浏览器项目需使用同一版本，并重新构建前端。0.3.0 只提供整包手套；整包设备升级后必须显式使用 `handGloveFullPacket`。
+从 **0.4.0** 起，`product: 'glove'` 和 `connectGlove()` 使用分包手套入口，规范 ID 为 `handGloveSegmented`。当前安装命令为 `npm install --save-exact shroom-sdk@0.7.0`；Node 与浏览器项目需使用同一版本，并重新构建前端。0.3.0 只提供整包手套；整包设备升级后必须显式使用 `handGloveFullPacket`。
 
 **0.5.0 新增：** Node 分包手套支持手动选口与自动识别。手动传 `path + side`；自动调用 `readProduct({ product: 'glove', onData, onError })`，内部复用基础 `connectProduct()` → `scanProductPorts()`。五个快速函数保持不变；0.4.0 仍需手动配置，自动识别要求升级到 0.5.0。
 
 ## 一步取数
 
-使用SDK 0.5.0，安装驱动、连接手套并完成 SDK 授权后，只需：
+使用SDK 0.7.0，安装驱动、连接手套并完成 SDK 授权后，只需：
 
 ```js
 import { readProduct } from 'shroom-sdk/quick-flow';

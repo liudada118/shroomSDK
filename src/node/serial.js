@@ -30,7 +30,7 @@ export async function listPorts() {
   }
 }
 
-/** 自动识别会临时打开串口读取完整协议帧；全部关闭后返回左右手候选与各口诊断。 */
+/** 自动识别会临时打开串口读取完整协议帧；全部关闭后返回左右侧候选与各口诊断。 */
 export async function scanProductPorts(options = {}) {
   const { adapter, signal } = prepareProductScan(options);
   assertLicense({ product: adapter.profile.product, feature: 'serial' });
@@ -70,25 +70,25 @@ export async function connectProduct(options = {}) {
     if (result.devices.length !== 1) {
       const multiple = result.devices.length > 1;
       throw new ShroomError(multiple ? 'PORT_AMBIGUOUS' : 'PORT_NOT_FOUND',
-        multiple ? '识别到多个符合条件的手套，请按候选列表指定串口。' : '没有识别到符合条件的手套。', {
+        multiple ? '识别到多个符合条件的设备，请按候选列表指定串口。' : '没有识别到符合条件的设备。', {
           stage: 'query', details: { scan: result },
-          suggestion: multiple ? '指定 side 筛选左/右手；同侧有多只手套时指定 path。' : '检查驱动、供电、端口占用与手侧；可查看 details.scan 的逐口结果。',
+          suggestion: multiple ? '指定 side 筛选左/右侧；同侧有多个设备时指定 path。' : '检查驱动、供电、端口占用与侧别；可查看 details.scan 的逐口结果。',
         });
     }
     const selected = result.devices[0];
     session.serialOptions.path = selected.path;
     Object.assign(session.info, { side: selected.side, packetType: selected.packetType });
     const parser = adapter.discovery.createParser();
-    // 正式连接与后续重连仍校验发现的身份，不能把换接的另一只手映射成原手侧。
+    // 正式连接与后续重连仍校验发现的身份，不能把换接的另一侧设备当成原设备。
     session.parser = {
       push(chunk) {
         const frames = parser.push(chunk);
         for (const frame of frames) {
           const identity = adapter.discovery.identify(frame);
           if (identity.side !== selected.side || identity.packetType !== selected.packetType) {
-            throw new ShroomError('PARSE_FAILED', '串口中的手套手侧与自动识别结果不一致。', {
+            throw new ShroomError('PARSE_FAILED', '串口中的设备侧别与自动识别结果不一致。', {
               stage: 'parse', details: { path: selected.path, expectedSide: selected.side, actualSide: identity.side },
-              suggestion: '关闭连接后重新扫描；一只手套应独占一个串口。',
+              suggestion: '关闭连接后重新扫描；每个设备应独占一个串口。',
             });
           }
         }
@@ -107,6 +107,9 @@ export async function connectGlove(options = {}) { return connectProduct(product
 
 /** 连接手部检测垫；无需 side，onData 返回映射后的 32×32 矩阵。 */
 export async function connectHandPad(options = {}) { return connectProduct(productOptionsFor(options, 'hand')); }
+
+/** 连接触觉足底；类型 3/4 识别左/右脚，原始压力、IMU 和完整两包均保留。 */
+export async function connectTactileFoot(options = {}) { return connectProduct(productOptionsFor(options, 'footVideo')); }
 
 /** 校验便捷入口参数，再固定产品，避免空值被对象展开静默忽略。 */
 function productOptionsFor(options, product) {
